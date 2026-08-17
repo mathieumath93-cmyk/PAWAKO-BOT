@@ -1,11 +1,19 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { store } from './src/services/store';
+import { pawakoBot } from './src/bot/discordBot';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Initialize Discord Bot if token is present
+  if (process.env.DISCORD_BOT_TOKEN) {
+    console.log('[PAWAKO BOT] Initialisation avec le token configure...');
+    pawakoBot.connectWithToken(process.env.DISCORD_BOT_TOKEN);
+  }
 
   app.use(express.json());
 
@@ -305,6 +313,25 @@ async function startServer() {
 
   app.post('/api/health/diagnose', (req: Request, res: Response) => {
     res.json(store.triggerDiagnostic());
+  });
+
+  // Bot Status & Connect
+  app.get('/api/bot/status', (req: Request, res: Response) => {
+    res.json({
+      connected: pawakoBot.getIsConnected(),
+      tag: pawakoBot.getUserTag(),
+      tokenSet: Boolean(process.env.DISCORD_BOT_TOKEN)
+    });
+  });
+
+  app.post('/api/bot/connect', (req: Request, res: Response) => {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'Token requis' });
+    }
+    process.env.DISCORD_BOT_TOKEN = token;
+    pawakoBot.connectWithToken(token);
+    res.json({ success: true, message: 'Connexion du bot Discord initiée.' });
   });
 
   // Backups

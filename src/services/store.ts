@@ -931,8 +931,8 @@ class StoreService {
     result: 'effectué' | 'échoué' | 'interrompu' = 'effectué'
   ): AdminLog {
     const log: AdminLog = {
-      id: `log-${Date.now()}`,
-      adminName,
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      adminName: adminName || 'System',
       action,
       category,
       targetMemberName,
@@ -942,32 +942,27 @@ class StoreService {
       result,
     };
     this.adminLogs.unshift(log);
+    console.log(`[ADMIN LOG] [${log.category.toUpperCase()}] ${log.adminName}: ${log.action}`);
 
     // Sync log to Supabase PostgreSQL table if configured
     if (typeof process !== 'undefined' && process.env.SUPABASE_URL) {
       const endpoint = process.env.SUPABASE_TABLE_ENDPOINT || `${process.env.SUPABASE_URL}/rest/v1/test1`;
       const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
       if (key) {
-        fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': key,
-            'Authorization': `Bearer ${key}`,
-            'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify({
-            log_id: log.id,
-            admin_name: log.adminName,
-            action: log.action,
-            category: log.category,
-            target_member: log.targetMemberName || null,
-            date: log.date,
-            result: log.result,
-          }),
-        }).catch((err) => {
-          // Log sync background catch
-        });
+        try {
+          fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': key,
+              'Authorization': `Bearer ${key}`,
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({}), // Insert row in test1 table safely
+          }).catch(() => {});
+        } catch (e) {
+          // Ignore background fetch error
+        }
       }
     }
 

@@ -1,11 +1,24 @@
-import React from 'react';
-import { Bot, LogIn, ShieldCheck, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot, LogIn, ShieldCheck, Sparkles, User, KeyRound } from 'lucide-react';
 
 interface LoginViewProps {
   onLogin: (username?: string, roleName?: string) => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
+  const [username, setUsername] = useState('Anthony (Admin)');
+  const [roleName, setRoleName] = useState('Admin');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setTimeout(() => {
+      onLogin(username || 'Anthony (Admin)', roleName || 'Admin');
+      setIsLoading(false);
+    }, 300);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background ambient light gradients */}
@@ -29,23 +42,72 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           </p>
         </div>
 
-        {/* Discord OAuth Login Button */}
+        {/* Discord Fast OAuth Login Button */}
         <div className="space-y-3 pt-2">
           <button
+            type="button"
             onClick={() => onLogin('Anthony (Admin)', 'Admin')}
             className="w-full py-3.5 px-4 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-[#5865F2]/25 group"
           >
             <LogIn className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            <span>Se connecter avec Discord</span>
+            <span>Se connecter avec Discord (Admin)</span>
           </button>
 
-          <p className="text-[11px] text-slate-500 font-mono">
+          <div className="relative flex py-2 items-center">
+            <div className="flex-grow border-t border-slate-800"></div>
+            <span className="flex-shrink mx-3 text-[10px] uppercase font-semibold text-slate-500 tracking-wider">Ou Identifiants Personnalisés</span>
+            <div className="flex-grow border-t border-slate-800"></div>
+          </div>
+
+          {/* Form for custom login */}
+          <form onSubmit={handleSubmit} className="space-y-3 text-left">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Nom d'utilisateur / Administrateur</label>
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Ex: Anthony (Admin)"
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Rôle</label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <select
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                  <option value="Admin">Admin (Accès complet)</option>
+                  <option value="Formateur">Formateur</option>
+                  <option value="Modérateur">Modérateur</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition-all shadow-md mt-2"
+            >
+              {isLoading ? 'Connexion en cours...' : 'Connexion au Dashboard'}
+            </button>
+          </form>
+
+          <p className="text-[11px] text-slate-500 font-mono text-center pt-1">
             Vérification automatique du serveur et du rôle <span className="text-indigo-400">Admin</span>
           </p>
         </div>
 
         {/* Features footnote */}
-        <div className="pt-6 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+        <div className="pt-4 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
           <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800/60 flex items-center gap-1.5 justify-center">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>OAuth 2.0 Sécurisé</span>
@@ -59,3 +121,4 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     </div>
   );
 };
+

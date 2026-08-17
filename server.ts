@@ -334,6 +334,18 @@ async function startServer() {
     res.json({ success: true, message: 'Connexion du bot Discord initiée.' });
   });
 
+  // Supabase API Status
+  app.get('/api/supabase/status', (req: Request, res: Response) => {
+    res.json({
+      url: process.env.SUPABASE_URL || 'https://qozrmsyhfxhvnudxfuhu.supabase.co',
+      endpoint: process.env.SUPABASE_TABLE_ENDPOINT || 'https://qozrmsyhfxhvnudxfuhu.supabase.co/rest/v1/test1',
+      hasPublishableKey: Boolean(process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY),
+      hasSecretKey: Boolean(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY),
+      jwksUrl: process.env.SUPABASE_JWKS_URL || 'https://qozrmsyhfxhvnudxfuhu.supabase.co/auth/v1/.well-known/jwks.json',
+      configured: true
+    });
+  });
+
   // Backups
   app.get('/api/backups', (req: Request, res: Response) => {
     res.json(store.getBackups());

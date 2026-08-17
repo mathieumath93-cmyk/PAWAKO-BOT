@@ -628,6 +628,12 @@ class StoreService {
     return newMod;
   }
 
+  public addModule(mod: TrainingModule): TrainingModule {
+    this.modules.push(mod);
+    this.addLog('Anthony (Admin)', `Création du module "${mod.title}"`, 'module');
+    return mod;
+  }
+
   public updateModule(id: string, data: Partial<TrainingModule>): TrainingModule {
     const idx = this.modules.findIndex((m) => m.id === id);
     if (idx === -1) throw new Error('Module non trouvé');
@@ -659,6 +665,12 @@ class StoreService {
     this.quizzes.push(newQuiz);
     this.addLog('Anthony (Admin)', `Création du quiz "${newQuiz.title}"`, 'quiz');
     return newQuiz;
+  }
+
+  public addQuiz(quiz: Quiz): Quiz {
+    this.quizzes.push(quiz);
+    this.addLog('Anthony (Admin)', `Création du quiz "${quiz.title}"`, 'quiz');
+    return quiz;
   }
 
   public updateQuiz(id: string, data: Partial<Quiz>): Quiz {

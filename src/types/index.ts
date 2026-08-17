@@ -4,6 +4,24 @@ export type TicketStatus = 'ouvert' | 'ferme';
 export type AttemptResult = 'succes' | 'echec';
 export type MaintenanceType = 'quiz' | 'attempts' | 'progress' | 'tickets' | 'onboarding';
 
+export interface ToastNotification {
+  id: string;
+  type: 'success' | 'warning' | 'error' | 'info';
+  title: string;
+  message?: string;
+}
+
+export interface DiscordServer {
+  id: string;
+  name: string;
+  iconUrl?: string;
+  memberCount: number;
+  isBotPresent: boolean;
+  channelsCount: number;
+  rolesCount: number;
+  activeModulesCount: number;
+}
+
 export interface DiscordRole {
   id: string;
   name: string;
@@ -12,11 +30,23 @@ export interface DiscordRole {
   isManaged?: boolean;
 }
 
+export interface DiscordChannelConfig {
+  id: string;
+  name: string;
+  type: 'text' | 'voice' | 'category' | 'forum';
+  categoryName?: string;
+  isConfiguredFor: 'training' | 'quiz' | 'results' | 'logs' | 'general' | 'tickets' | 'none';
+}
+
+export type QuestionType = 'multiple_choice' | 'single_choice' | 'true_false' | 'text';
+
 export interface QuizQuestion {
   id: string;
   text: string;
+  type?: QuestionType;
   options: string[];
-  correctAnswer: number; // 0-indexed option index
+  correctAnswer: number; // 0-indexed option index or 0 for true/1 for false
+  points?: number;
   explanation?: string;
 }
 
@@ -25,11 +55,14 @@ export interface Quiz {
   moduleId: string;
   title: string;
   description: string;
-  minScore: number; // percentage, e.g. 80
+  minScore: number; // e.g. 16 or percentage 80
+  maxScore?: number; // e.g. 20
+  timeLimitMinutes?: number; // e.g. 15
   maxAttempts: number; // e.g. 3
   questions: QuizQuestion[];
   successMessage?: string;
   failureMessage?: string;
+  isActive?: boolean;
 }
 
 export interface QuizAttempt {
@@ -38,7 +71,7 @@ export interface QuizAttempt {
   quizTitle: string;
   memberId: string;
   memberName: string;
-  score: number; // percentage
+  score: number; // percentage or points
   passed: boolean;
   answers: number[]; // user choices index array
   date: string; // "17/08/2026 14:35"
@@ -59,14 +92,26 @@ export interface ModuleActionButton {
   url?: string;
 }
 
+export type ModuleBlockType = 'text' | 'heading' | 'image' | 'video' | 'link' | 'button' | 'divider' | 'quiz' | 'alert' | 'embed';
+
+export interface ModuleBlock {
+  id: string;
+  type: ModuleBlockType;
+  title?: string;
+  content: string;
+  url?: string;
+  alertType?: 'info' | 'warning' | 'success' | 'danger';
+}
+
 export interface TrainingModule {
   id: string;
   order: number;
   title: string;
   description: string;
   content: string; // Markdown or structured rich text
+  blocks?: ModuleBlock[];
   channelId: string;
-  channelName: string; // e.g. "#module-1"
+  channelName: string; // e.g. "#formation"
   roleValidatedId: string;
   roleValidatedName: string; // e.g. "Module 1 Validé"
   roleEnCoursId: string;
@@ -75,6 +120,7 @@ export interface TrainingModule {
   resources: ModuleResource[];
   buttons: ModuleActionButton[];
   isActive: boolean;
+  completionRate?: number; // e.g. 82
 }
 
 export interface MemberProgress {
@@ -99,6 +145,8 @@ export interface Member {
   extraAttemptsGranted: Record<string, number>; // key is quizId
   isActive: boolean;
   lastActiveAt: string; // "17/08/2026 14:35"
+  modulesCompletedCount?: number;
+  averageScore?: number;
 }
 
 export interface TicketMessage {
@@ -151,6 +199,36 @@ export interface AdminNotification {
   mentionAdmin: boolean;
   resolvedAt?: string;
   resolvedBy?: string;
+}
+
+export interface BotMessageTemplate {
+  id: string;
+  key: 'welcome' | 'module' | 'quiz' | 'success' | 'failure' | 'completion';
+  name: string;
+  channelId: string;
+  channelName: string;
+  embedTitle: string;
+  embedDescription: string;
+  embedColor: string;
+  buttonLabel?: string;
+  enabled: boolean;
+}
+
+export interface AutomationAction {
+  type: 'add_role' | 'remove_role' | 'send_message' | 'create_thread' | 'unlock_module' | 'lock_module' | 'log_event' | 'send_dm';
+  target?: string;
+  payload?: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  trigger: 'quiz_completed' | 'module_completed' | 'member_joined' | 'ticket_opened';
+  condition: 'score_gte' | 'score_lt' | 'has_role' | 'always';
+  conditionValue?: string | number;
+  actions: AutomationAction[];
 }
 
 export interface UsefulLink {
@@ -225,3 +303,4 @@ export interface UserSession {
   roleName: string;
   loginAt: string;
 }
+

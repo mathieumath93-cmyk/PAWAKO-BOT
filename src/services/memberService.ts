@@ -1,0 +1,67 @@
+import { Member } from '../types';
+import { store } from './store';
+
+class MemberService {
+  public getMembers(): Member[] {
+    return store.getMembers().map((m) => {
+      const progressVals = Object.values(m.progress || {});
+      const completed = progressVals.filter((p) => p.status === 'valide').length;
+      const scores = progressVals.map((p) => p.score).filter((s): s is number => typeof s === 'number');
+      const avgScore = scores.length > 0 ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)) : 17.4;
+
+      return {
+        ...m,
+        modulesCompletedCount: completed,
+        averageScore: avgScore,
+      };
+    });
+  }
+
+  public filterMembers(
+    filterStatus: string,
+    searchQuery: string
+  ): Member[] {
+    let members = this.getMembers();
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      members = members.filter(
+        (m) =>
+          m.username.toLowerCase().includes(q) ||
+          m.discordId.toLowerCase().includes(q)
+      );
+    }
+
+    if (filterStatus && filterStatus !== 'all') {
+      if (filterStatus === 'active') {
+        members = members.filter((m) => m.isActive);
+      } else if (filterStatus === 'inactive') {
+        members = members.filter((m) => !m.isActive);
+      } else if (filterStatus === 'completed') {
+        members = members.filter((m) => (m.modulesCompletedCount || 0) >= 4);
+      } else if (filterStatus === 'failed') {
+        members = members.filter((m) =>
+          Object.values(m.progress || {}).some((p) => p.status === 'en_cours' && p.attemptsCount > 2)
+        );
+      } else if (filterStatus === 'in_progress') {
+        members = members.filter((m) => (m.modulesCompletedCount || 0) < 4);
+      }
+    }
+
+    return members;
+  }
+
+  public resetProgress(memberId: string): Member {
+    return store.resetMemberProgress(memberId);
+  }
+
+  public grantExtraAttempt(memberId: string, quizId: string): Member {
+    return store.grantExtraAttempt(memberId, quizId);
+  }
+
+  public updateRoles(memberId: string, roles: string[]): Member {
+    return store.updateMemberRoles(memberId, roles);
+  }
+}
+
+export const memberService = new MemberService();

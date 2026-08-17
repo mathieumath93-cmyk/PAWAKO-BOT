@@ -312,53 +312,15 @@ const defaultQuizzes: Quiz[] = [
 
 const defaultMembers: Member[] = [
   {
-    id: 'mem-1',
-    discordId: '123456789012345678',
-    username: 'Anthony (Admin)',
+    id: 'mem-admin',
+    discordId: '1538874226415501462',
+    username: 'Administrateur (Vous)',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-    roles: ['Admin', 'Module 1 Validé', 'Module 2 Validé', 'Module 3 En cours'],
-    joinedAt: '10/08/2026 09:15',
-    currentModuleId: 'mod-3',
-    progress: {
-      'mod-1': { moduleId: 'mod-1', status: 'valide', validatedAt: '10/08/2026 10:00', quizPassed: true, score: 100, attemptsCount: 1 },
-      'mod-2': { moduleId: 'mod-2', status: 'valide', validatedAt: '12/08/2026 14:20', quizPassed: true, score: 100, attemptsCount: 1 },
-      'mod-3': { moduleId: 'mod-3', status: 'en_cours', attemptsCount: 0 },
-      'mod-4': { moduleId: 'mod-4', status: 'verrouille', attemptsCount: 0 },
-      'mod-5': { moduleId: 'mod-5', status: 'verrouille', attemptsCount: 0 },
-    },
-    extraAttemptsGranted: {},
-    isActive: true,
-    lastActiveAt: '17/08/2026 14:10',
-  },
-  {
-    id: 'mem-2',
-    discordId: '987654321098765432',
-    username: 'Sophie_Dev',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
-    roles: ['Module 1 Validé', 'Module 2 Validé', 'Module 3 Validé', 'Module 4 En cours'],
-    joinedAt: '05/08/2026 11:30',
-    currentModuleId: 'mod-4',
-    progress: {
-      'mod-1': { moduleId: 'mod-1', status: 'valide', validatedAt: '05/08/2026 12:00', quizPassed: true, score: 100, attemptsCount: 1 },
-      'mod-2': { moduleId: 'mod-2', status: 'valide', validatedAt: '06/08/2026 09:45', quizPassed: true, score: 100, attemptsCount: 1 },
-      'mod-3': { moduleId: 'mod-3', status: 'valide', validatedAt: '08/08/2026 16:15', quizPassed: true, score: 100, attemptsCount: 1 },
-      'mod-4': { moduleId: 'mod-4', status: 'en_cours', attemptsCount: 1 },
-      'mod-5': { moduleId: 'mod-5', status: 'verrouille', attemptsCount: 0 },
-    },
-    extraAttemptsGranted: {},
-    isActive: true,
-    lastActiveAt: '17/08/2026 13:50',
-  },
-  {
-    id: 'mem-3',
-    discordId: '555444333222111000',
-    username: 'Lucas_Newbie',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
-    roles: ['Nouveau membre', 'Module 1 En cours'],
-    joinedAt: '16/08/2026 18:00',
+    roles: ['Admin', 'Fondateur'],
+    joinedAt: '17/08/2026 05:00',
     currentModuleId: 'mod-1',
     progress: {
-      'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 1 },
+      'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
       'mod-2': { moduleId: 'mod-2', status: 'verrouille', attemptsCount: 0 },
       'mod-3': { moduleId: 'mod-3', status: 'verrouille', attemptsCount: 0 },
       'mod-4': { moduleId: 'mod-4', status: 'verrouille', attemptsCount: 0 },
@@ -366,7 +328,7 @@ const defaultMembers: Member[] = [
     },
     extraAttemptsGranted: {},
     isActive: true,
-    lastActiveAt: '17/08/2026 11:00',
+    lastActiveAt: '17/08/2026 05:30',
   },
 ];
 
@@ -376,73 +338,15 @@ const defaultUsefulLinks: UsefulLink[] = [
   { id: 'link-3', name: 'Assistance & Support', url: 'https://pawako.io/support', icon: 'LifeBuoy', order: 3, isActive: true },
 ];
 
-const defaultTickets: Ticket[] = [
-  {
-    id: 't-1',
-    ticketNumber: 101,
-    memberId: 'mem-3',
-    memberName: 'Lucas_Newbie',
-    memberAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
-    subject: 'Question sur l\'accès au salon #module-1',
-    category: 'Accès / Rôles',
-    status: 'ferme',
-    createdAt: '16/08/2026 18:15',
-    closedAt: '16/08/2026 18:30',
-    closedBy: 'Anthony (Admin)',
-    messages: [
-      { id: 'm-1', senderId: '555444333222111000', senderName: 'Lucas_Newbie', content: 'Bonjour, je ne vois pas les ressources du module 1.', timestamp: '16/08/2026 18:15', isAdmin: false },
-      { id: 'm-2', senderId: '123456789012345678', senderName: 'Anthony (Admin)', content: 'Bonjour Lucas ! As-tu cliqué sur "Commencer la formation" dans #🤖-jarvis ?', timestamp: '16/08/2026 18:22', isAdmin: true },
-      { id: 'm-3', senderId: '555444333222111000', senderName: 'Lucas_Newbie', content: 'C\'est fait ! Merci beaucoup, je vois le salon maintenant.', timestamp: '16/08/2026 18:28', isAdmin: false },
-    ],
-    transcriptJson: JSON.stringify([
-      { sender: 'Lucas_Newbie', content: 'Bonjour, je ne vois pas les ressources du module 1.', time: '16/08/2026 18:15' },
-      { sender: 'Anthony (Admin)', content: 'Bonjour Lucas ! As-tu cliqué sur "Commencer la formation" dans #🤖-jarvis ?', time: '16/08/2026 18:22' },
-      { sender: 'Lucas_Newbie', content: 'C\'est fait ! Merci beaucoup, je vois le salon maintenant.', time: '16/08/2026 18:28' }
-    ]),
-  },
-  {
-    id: 't-2',
-    ticketNumber: 102,
-    memberId: 'mem-2',
-    memberName: 'Sophie_Dev',
-    memberAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
-    subject: 'Demande de tentative supplémentaire pour le Quiz 4',
-    category: 'Quiz & Tentatives',
-    status: 'ouvert',
-    createdAt: '17/08/2026 12:40',
-    messages: [
-      { id: 'm-4', senderId: '987654321098765432', senderName: 'Sophie_Dev', content: 'Bonjour, j\'ai eu un souci réseau lors de mon premier essai du Quiz 4. Est-il possible d\'obtenir une tentative extra ?', timestamp: '17/08/2026 12:40', isAdmin: false },
-    ],
-  },
-];
+const defaultTickets: Ticket[] = [];
 
 const defaultAdminLogs: AdminLog[] = [
   {
     id: 'log-1',
-    adminName: 'Anthony (Admin)',
-    action: 'Validation manuelle du Module 2',
-    category: 'module',
-    targetMemberName: 'Sophie_Dev',
-    moduleTitle: 'Module 2 : Outils & Processus Internes',
-    date: '12/08/2026 14:20',
-    result: 'effectué',
-  },
-  {
-    id: 'log-2',
-    adminName: 'Anthony (Admin)',
-    action: 'Fermeture de ticket #101 avec transcript',
-    category: 'ticket',
-    targetMemberName: 'Lucas_Newbie',
-    date: '16/08/2026 18:30',
-    result: 'effectué',
-  },
-  {
-    id: 'log-3',
-    adminName: 'System Bot',
-    action: 'Attribution automatique rôle Module 1 Validé',
-    category: 'role',
-    targetMemberName: 'Sophie_Dev',
-    date: '05/08/2026 12:00',
+    adminName: 'Système Discord',
+    action: 'Initialisation Application & Connexion Bot ID 1538874226415501462',
+    category: 'system',
+    date: '17/08/2026 05:00',
     result: 'effectué',
   },
 ];
@@ -451,32 +355,12 @@ const defaultNotifications: AdminNotification[] = [
   {
     id: 'notif-1',
     level: 'information',
-    title: 'Nouveau membre rejoint',
-    message: 'Lucas_Newbie a rejoint le serveur Discord et s\'est vu attribuer le rôle Nouveau membre.',
-    event: 'member_join',
-    status: 'lue',
-    date: '16/08/2026 18:00',
-    mentionAdmin: false,
-  },
-  {
-    id: 'notif-2',
-    level: 'important',
-    title: 'Nouveau ticket ouvert',
-    message: 'Ticket #102 créé par Sophie_Dev (Sujet : Demande de tentative supplémentaire).',
-    event: 'ticket_created',
-    status: 'non_lue',
-    date: '17/08/2026 12:40',
-    mentionAdmin: false,
-  },
-  {
-    id: 'notif-3',
-    level: 'critique',
-    title: 'Rétablissement de connexion Gateway Discord',
-    message: 'Le bot Discord s\'est reconnecté au serveur avec un délai d\'attente de 1.2s.',
+    title: 'Bot Discord Connecté',
+    message: 'L\'application est synchronisée avec le Bot App ID 1538874226415501462.',
     event: 'bot_reconnect',
     status: 'non_lue',
-    date: '17/08/2026 13:00',
-    mentionAdmin: true,
+    date: '17/08/2026 05:00',
+    mentionAdmin: false,
   },
 ];
 
@@ -542,12 +426,12 @@ class StoreService {
   };
 
   private currentSession: UserSession = {
-    discordId: '123456789012345678',
-    username: 'Anthony (Admin)',
+    discordId: '1538874226415501462',
+    username: 'Administrateur (Vous)',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
     isAdmin: true,
     roleName: 'Admin',
-    loginAt: '17/08/2026 14:00',
+    loginAt: '17/08/2026 05:00',
   };
 
   // Helper date format

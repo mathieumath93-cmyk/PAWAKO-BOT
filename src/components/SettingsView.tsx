@@ -9,10 +9,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
   const [botName, setBotName] = useState('Pawako Bot');
   const [botAvatarUrl, setBotAvatarUrl] = useState('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80');
   const [commandPrefix, setCommandPrefix] = useState('!');
-  const [botToken, setBotToken] = useState('MTE5Mjg3MzQ1OTI4MzkxODIzMA.G3xK9L.M21u0-xP9l8k2J9182319208391823');
+  const [botToken, setBotToken] = useState('MTUzODg3NDIyNjQxNTUwMTQ2Mg.GRRAAr.5NbxFb6dbuz9rwki_yyiapVY4786aZx5i---dQ');
   const [showToken, setShowToken] = useState(false);
-  const [clientId, setClientId] = useState('1192873459283918230');
-  const [webhookUrl, setWebhookUrl] = useState('https://discord.com/api/webhooks/123456789/abcdef');
+  const [clientId, setClientId] = useState('1538874226415501462');
+  const [clientSecret, setClientSecret] = useState('Qd3R0-xv4wszPNh1WxKBFxY0zO_-ETMd');
+  const [showSecret, setShowSecret] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('https://discord.com/api/webhooks/1538892353849532527/8KQxKy9_LOgoL11MAGbYzNeKVyn4lmYr6dLRYqrwve3A0eyJCffSyxyAvLhSMBCMC8rh');
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
@@ -269,16 +271,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-xs font-bold text-slate-300 mb-1 block">Client ID Application (App ID)</label>
                 <input
                   type="text"
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  placeholder="ex: 1192873459283918230"
+                  placeholder="ex: 1538874226415501462"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 mb-1 block">Clé Secrète Client (OAuth2 Secret)</label>
+                <div className="relative">
+                  <input
+                    type={showSecret ? 'text' : 'password'}
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    placeholder="Qd3R0-xv4wsz..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -291,7 +313,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
                     className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium disabled:opacity-50"
                   >
                     <Send className="w-2.5 h-2.5" />
-                    <span>{testingWebhook ? 'Test en cours...' : 'Tester Webhook'}</span>
+                    <span>{testingWebhook ? 'Test...' : 'Tester'}</span>
                   </button>
                 </div>
                 <input

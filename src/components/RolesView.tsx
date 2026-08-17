@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { DiscordRole } from '../types';
 import { roleService } from '../services/roleService';
+import { discordService } from '../services/discordService';
 
 interface RolesViewProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
@@ -19,12 +20,16 @@ export const RolesView: React.FC<RolesViewProps> = ({ onShowToast }) => {
   const [mappings, setMappings] = useState(roleService.getMappings());
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const handleSyncDiscord = () => {
+  const handleSyncDiscord = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      onShowToast('Rôles Discord Synchronisés', '8 rôles synchronisés depuis la Gateway Discord', 'success');
-    }, 600);
+    const res = await discordService.fetchAndSyncRealDiscordData();
+    setIsSyncing(false);
+    setRoles([...roleService.getRoles()]);
+    if (res.success) {
+      onShowToast('Rôles Discord Synchronisés', `${roleService.getRoles().length} rôles répertoriés depuis votre serveur Discord`, 'success');
+    } else {
+      onShowToast('Erreur Sync', res.message || 'Impossible de synchroniser', 'info');
+    }
   };
 
   const handleUpdateRole = (moduleId: string, roleId: string) => {

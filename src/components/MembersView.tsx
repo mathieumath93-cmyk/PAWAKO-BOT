@@ -9,9 +9,11 @@ import {
   Shield,
   MoreVertical,
   Plus,
+  RefreshCw,
 } from 'lucide-react';
 import { Member } from '../types';
 import { memberService } from '../services/memberService';
+import { discordService } from '../services/discordService';
 
 interface MembersViewProps {
   members: Member[];
@@ -26,8 +28,21 @@ export const MembersView: React.FC<MembersViewProps> = ({
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const filteredMembers = memberService.filterMembers(filterStatus, searchQuery);
+
+  const handleSyncMembers = async () => {
+    setIsSyncing(true);
+    const res = await discordService.fetchAndSyncRealDiscordData();
+    setIsSyncing(false);
+    onRefresh();
+    if (res.success) {
+      onShowToast('Membres Discord Synchronisés', `${memberService.getMembers().length} membres synchronisés avec succès`, 'success');
+    } else {
+      onShowToast('Info Synchronisation', res.message || 'Mise à jour effectuée', 'info');
+    }
+  };
 
   const handleResetProgress = (memberId: string, username: string) => {
     if (confirm(`Réinitialiser la progression de ${username} ?`)) {
@@ -50,6 +65,15 @@ export const MembersView: React.FC<MembersViewProps> = ({
             Consultez le statut, la progression et les résultats des apprenants en temps réel.
           </p>
         </div>
+
+        <button
+          onClick={handleSyncMembers}
+          disabled={isSyncing}
+          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all w-fit shrink-0"
+        >
+          <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+          <span>Synchroniser les Membres</span>
+        </button>
       </div>
 
       {/* Filters and Search Bar */}

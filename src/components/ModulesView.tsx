@@ -10,9 +10,11 @@ import {
   Sparkles,
   Shield,
   Award,
+  Send,
 } from 'lucide-react';
 import { TrainingModule } from '../types';
 import { moduleService } from '../services/moduleService';
+import { discordService } from '../services/discordService';
 
 interface ModulesViewProps {
   modules: TrainingModule[];
@@ -27,6 +29,8 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   onRefresh,
   onShowToast,
 }) => {
+  const [sendingId, setSendingId] = useState<string | null>(null);
+
   const handleDuplicate = (id: string) => {
     const dup = moduleService.duplicateModule(id);
     onRefresh();
@@ -38,6 +42,17 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       moduleService.deleteModule(id);
       onRefresh();
       onShowToast(`Module supprimé`, title, 'info');
+    }
+  };
+
+  const handleSendEmbed = async (mod: TrainingModule) => {
+    setSendingId(mod.id);
+    const res = await discordService.sendModuleEmbed(mod);
+    setSendingId(null);
+    if (res.success) {
+      onShowToast('Embed Envoyé 🚀', res.message, 'success');
+    } else {
+      onShowToast('Échec Envoi Embed', res.message, 'info');
     }
   };
 
@@ -129,13 +144,25 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
 
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
-                <button
-                  onClick={() => onOpenBuilder(mod)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Edit className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Edit</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => onOpenBuilder(mod)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Éditer</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSendEmbed(mod)}
+                    disabled={sendingId === mod.id}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20"
+                    title="Envoyer ou publier l'embed directement sur Discord"
+                  >
+                    <Send className={`w-3.5 h-3.5 ${sendingId === mod.id ? 'animate-bounce' : ''}`} />
+                    <span>{sendingId === mod.id ? 'Envoi...' : 'Publier Embed'}</span>
+                  </button>
+                </div>
 
                 <div className="flex items-center gap-1">
                   <button

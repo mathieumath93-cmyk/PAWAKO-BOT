@@ -1,20 +1,23 @@
 import React, { useState } from 'react';
 import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send } from 'lucide-react';
+import { discordService } from '../services/discordService';
 
 interface SettingsViewProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
-  const [botName, setBotName] = useState('Pawako Bot');
-  const [botAvatarUrl, setBotAvatarUrl] = useState('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80');
-  const [commandPrefix, setCommandPrefix] = useState('!');
-  const [botToken, setBotToken] = useState('MTUzODg3NDIyNjQxNTUwMTQ2Mg.GRRAAr.5NbxFb6dbuz9rwki_yyiapVY4786aZx5i---dQ');
+  const currentConfig = discordService.getConfig();
+
+  const [botName, setBotName] = useState(currentConfig.botName);
+  const [botAvatarUrl, setBotAvatarUrl] = useState(currentConfig.botAvatarUrl);
+  const [commandPrefix, setCommandPrefix] = useState(currentConfig.commandPrefix);
+  const [botToken, setBotToken] = useState(currentConfig.botToken);
   const [showToken, setShowToken] = useState(false);
-  const [clientId, setClientId] = useState('1538874226415501462');
-  const [clientSecret, setClientSecret] = useState('Qd3R0-xv4wszPNh1WxKBFxY0zO_-ETMd');
+  const [clientId, setClientId] = useState(currentConfig.clientId);
+  const [clientSecret, setClientSecret] = useState(currentConfig.clientSecret);
   const [showSecret, setShowSecret] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState('https://discord.com/api/webhooks/1538892353849532527/8KQxKy9_LOgoL11MAGbYzNeKVyn4lmYr6dLRYqrwve3A0eyJCffSyxyAvLhSMBCMC8rh');
+  const [webhookUrl, setWebhookUrl] = useState(currentConfig.webhookUrl);
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
@@ -36,22 +39,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
     onShowToast('Lien copié !', 'Lien d\'invitation OAuth2 copié dans le presse-papier.', 'success');
   };
 
-  const handleTestWebhook = () => {
+  const handleTestWebhook = async () => {
     if (!webhookUrl.trim() || !webhookUrl.startsWith('http')) {
       onShowToast('Webhook Invalide', 'Veuillez saisir une URL de webhook Discord valide', 'info');
       return;
     }
 
     setTestingWebhook(true);
-    setTimeout(() => {
-      setTestingWebhook(false);
-      onShowToast('Test Webhook Envoyé', 'Un message de test a été transmis à la boîte de réception Discord.', 'success');
-    }, 1200);
+    const result = await discordService.sendWebhookTestMessage(webhookUrl);
+    setTestingWebhook(false);
+
+    if (result.success) {
+      onShowToast('Test Webhook Réussi !', 'Un message de confirmation a été posté sur votre salon Discord.', 'success');
+    } else {
+      onShowToast('Erreur Webhook', result.message, 'info');
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    onShowToast('Paramètres Enregistrés', 'La configuration du bot a été synchronisée avec succès.', 'success');
+    discordService.updateConfig({
+      botName,
+      botAvatarUrl,
+      commandPrefix,
+      botToken,
+      clientId,
+      clientSecret,
+      webhookUrl,
+    });
+    onShowToast('Paramètres Enregistrés', 'La configuration du bot a été enregistrée et synchronisée.', 'success');
   };
 
   return (

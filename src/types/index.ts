@@ -63,6 +63,9 @@ export interface Quiz {
   successMessage?: string;
   failureMessage?: string;
   isActive?: boolean;
+  resultsChannelName?: string; // e.g. "#results" or "#quiz"
+  resultsChannelId?: string;
+  createPrivateThread?: boolean; // default true
 }
 
 export interface QuizAttempt {
@@ -293,6 +296,36 @@ export interface BackupRecord {
     tickets: number;
     logs: number;
   };
+}
+
+export interface ModuleStepConfig {
+  moduleId: string;
+  moduleTitle: string;
+  roleOnStartId?: string;
+  roleOnStartName?: string;
+  roleOnPassId?: string;
+  roleOnPassName?: string;
+  nextModuleId?: string;
+  nextModuleTitle?: string;
+  directivesText?: string;
+  externalLinkUrl?: string;
+  successMessage?: string; // e.g. "Félicitations tu as réussi avec : {score}/20 ! Tu as accès au module 2 en cliquant ci-dessous."
+  failureMessage?: string; // e.g. "Vous n'avez pas réussi (score : {score}/20), vous pouvez réessayer après 15 minutes."
+}
+
+export interface OnboardingFlowConfig {
+  welcomeChannelName: string; // e.g. "#bienvenue"
+  welcomeChannelId?: string;
+  welcomeButtonLabel: string; // "Commencer la formation"
+  personalChannelPrefix: string; // "formation-" -> "🔒-formation-[pseudo]"
+  welcomeRulesMessage: string; // Message + règles
+  startTrainingButtonLabel: string; // "Lancer la formation"
+  initialRoleId?: string;
+  initialRoleName?: string; // e.g. "Trainee"
+  cooldownMinutes: number; // default 15
+  randomizeQuestions: boolean; // default true
+  hideQuizSolutions: boolean; // default true
+  stepConfigs: ModuleStepConfig[];
 }
 
 export interface UserSession {

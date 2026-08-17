@@ -17,6 +17,7 @@ import {
   UsefulLink,
   UserSession,
 } from '../types';
+import { discordService } from './discordService';
 
 const defaultBranding: BrandingSettings = {
   trainingName: 'PAWAKO FORMATION 🤖',
@@ -677,6 +678,12 @@ class StoreService {
     return this.members;
   }
 
+  public setMembers(newMembers: Member[]): void {
+    if (newMembers && newMembers.length > 0) {
+      this.members = newMembers;
+    }
+  }
+
   public getMember(id: string): Member | undefined {
     return this.members.find((m) => m.id === id || m.discordId === id);
   }
@@ -839,6 +846,18 @@ class StoreService {
     };
     this.adminLogs.unshift(log);
     console.log(`[ADMIN LOG] [${log.category.toUpperCase()}] ${log.adminName}: ${log.action}`);
+
+    // Real-time dispatch to Discord Webhook
+    try {
+      discordService.sendWebhookLog(
+        log.action,
+        log.category,
+        `Exécuté par **${log.adminName}** (${log.date})${log.moduleTitle ? ` • Module: ${log.moduleTitle}` : ''}${log.quizTitle ? ` • Quiz: ${log.quizTitle}` : ''}`,
+        log.targetMemberName
+      );
+    } catch {
+      // Ignore background dispatch errors
+    }
 
     // Sync log to Supabase PostgreSQL table if configured
     if (typeof process !== 'undefined' && process.env.SUPABASE_URL) {

@@ -19,6 +19,7 @@ import { serverService } from './services/serverService';
 import { moduleService } from './services/moduleService';
 import { quizService } from './services/quizService';
 import { memberService } from './services/memberService';
+import { discordService } from './services/discordService';
 import {
   DiscordServer,
   UserSession,
@@ -117,7 +118,16 @@ export function App() {
     setModules([...moduleService.getModules()]);
     setQuizzes([...quizService.getQuizzes()]);
     setMembers([...memberService.getMembers()]);
+    setActiveServer({ ...serverService.getActiveServer() });
   };
+
+  useEffect(() => {
+    discordService.fetchAndSyncRealDiscordData().then((res) => {
+      if (res && res.success) {
+        refreshData();
+      }
+    });
+  }, []);
 
   const showToast = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {
     const newToast: ToastNotification = {
@@ -138,15 +148,24 @@ export function App() {
     setIsModuleBuilderOpen(true);
   };
 
-  const handleSaveModule = (data: Partial<TrainingModule>) => {
+  const handleSaveModule = async (data: Partial<TrainingModule>) => {
+    let savedModule: TrainingModule;
     if (editingModule) {
-      moduleService.updateModule(editingModule.id, data);
+      savedModule = moduleService.updateModule(editingModule.id, data);
       showToast('Module mis à jour', data.title, 'success');
     } else {
-      moduleService.addModule(data as any);
+      savedModule = moduleService.addModule(data as any);
       showToast('Nouveau module créé', data.title, 'success');
     }
     refreshData();
+
+    // Send Embed message directly to selected Discord channel!
+    const res = await discordService.sendModuleEmbed(savedModule);
+    if (res.success) {
+      showToast('Embed Discord Publié 🚀', res.message, 'success');
+    } else {
+      showToast('Info Publication Embed', res.message, 'info');
+    }
   };
 
   // Quiz actions
@@ -240,7 +259,13 @@ export function App() {
 
           {activeTab === 'messages' && <MessagesView onShowToast={showToast} />}
 
-          {activeTab === 'automations' && <AutomationsView onShowToast={showToast} />}
+          {activeTab === 'automations' && (
+            <AutomationsView
+              modules={modules}
+              quizzes={quizzes}
+              onShowToast={showToast}
+            />
+          )}
 
           {activeTab === 'logs' && (
             <LogsView

@@ -29,23 +29,34 @@ export const initialAutomations: AutomationRule[] = [
       { type: 'unlock_module', target: 'Module 1 — Onboarding', payload: 'mod-1' },
     ],
   },
-  {
-    id: 'auto-3',
-    name: 'Gestion Échec Quiz',
-    description: 'Envoie un message de soutien et réinitialise les tentatives si le score est inférieur à 16.',
-    enabled: true,
-    trigger: 'quiz_completed',
-    condition: 'score_lt',
-    conditionValue: 16,
-    actions: [
-      { type: 'send_message', target: '#quiz-onboarding', payload: '⚠️ Tu as obtenu {score}/20. Revois le cours et retente ta chance !' },
-      { type: 'log_event', target: 'System Logs', payload: 'Échec Quiz - Tentative enregistrée' },
-    ],
-  },
 ];
 
 class AutomationService {
-  private rules: AutomationRule[] = [...initialAutomations];
+  private rules: AutomationRule[] = [];
+
+  constructor() {
+    this.rules = this.loadRules();
+  }
+
+  private loadRules(): AutomationRule[] {
+    try {
+      const stored = localStorage.getItem('pawako_automation_rules');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      // Fallback
+    }
+    return [...initialAutomations];
+  }
+
+  private saveRules(): void {
+    try {
+      localStorage.setItem('pawako_automation_rules', JSON.stringify(this.rules));
+    } catch {
+      // Ignore
+    }
+  }
 
   public getRules(): AutomationRule[] {
     return this.rules;
@@ -55,6 +66,7 @@ class AutomationService {
     const r = this.rules.find((rule) => rule.id === id);
     if (r) {
       r.enabled = !r.enabled;
+      this.saveRules();
       return r;
     }
     throw new Error('Règle non trouvée');
@@ -66,12 +78,20 @@ class AutomationService {
       id: `auto-${Date.now()}`,
     };
     this.rules.push(newRule);
+    this.saveRules();
     return newRule;
   }
 
   public deleteRule(id: string): void {
     this.rules = this.rules.filter((r) => r.id !== id);
+    this.saveRules();
+  }
+
+  public clearAllRules(): void {
+    this.rules = [];
+    this.saveRules();
   }
 }
 
 export const automationService = new AutomationService();
+

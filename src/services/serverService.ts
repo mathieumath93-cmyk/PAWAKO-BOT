@@ -17,6 +17,13 @@ class ServerService {
   private servers: DiscordServer[] = [...mockServers];
   private activeServerId: string = '1538874226415501462';
 
+  public updateServerDetails(serverData: Partial<DiscordServer>) {
+    const s = this.getActiveServer();
+    if (s && serverData) {
+      Object.assign(s, serverData);
+    }
+  }
+
   public getServers(): DiscordServer[] {
     return this.servers;
   }

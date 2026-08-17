@@ -22,7 +22,6 @@ interface DashboardViewProps {
   tickets: Ticket[];
   logs: AdminLog[];
   onNavigate: (tab: string) => void;
-  onOpenSimulator: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -31,7 +30,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   tickets,
   logs,
   onNavigate,
-  onOpenSimulator,
 }) => {
   const [logFilter, setLogFilter] = useState<string>('all');
 
@@ -78,11 +76,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={onOpenSimulator}
+              onClick={() => onNavigate('logs')}
               className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 flex items-center gap-2 transition-all"
             >
               <Activity className="w-4 h-4" />
-              <span>Tester en direct sur Discord</span>
+              <span>Voir les Logs</span>
             </button>
             <button
               onClick={() => onNavigate('health')}

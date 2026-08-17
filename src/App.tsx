@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ConfigView } from './components/ConfigView';
 import { DashboardView } from './components/DashboardView';
-import { DiscordSimulatorModal } from './components/DiscordSimulatorModal';
 import { ExternalLinkModal } from './components/ExternalLinkModal';
 import { LoginView } from './components/LoginView';
 import { LogsView } from './components/LogsView';
@@ -48,7 +47,6 @@ export default function App() {
   const [backups, setBackups] = useState<BackupRecord[]>([]);
 
   // Modals state
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [externalModalData, setExternalModalData] = useState<{ url: string; name: string } | null>(null);
   const [sensitiveModalData, setSensitiveModalData] = useState<{
     title: string;
@@ -57,7 +55,7 @@ export default function App() {
     onConfirm: () => void;
   } | null>(null);
 
-  // Fetch initial state from API
+  // Fetch state from API with automatic real-time sync
   const fetchAllData = async () => {
     try {
       const [
@@ -107,6 +105,11 @@ export default function App() {
 
   useEffect(() => {
     fetchAllData();
+    // Real-time synchronization every 2.5 seconds
+    const interval = setInterval(() => {
+      fetchAllData();
+    }, 2500);
+    return () => clearInterval(interval);
   }, []);
 
   // Handlers
@@ -342,7 +345,6 @@ export default function App() {
         branding={branding}
         usefulLinks={usefulLinks}
         session={session}
-        onOpenSimulator={() => setIsSimulatorOpen(true)}
         onOpenUsefulLink={(url, name) => setExternalModalData({ url, name })}
         onLogout={handleLogout}
       />
@@ -356,7 +358,6 @@ export default function App() {
             tickets={tickets}
             logs={logs}
             onNavigate={setActiveTab}
-            onOpenSimulator={() => setIsSimulatorOpen(true)}
           />
         )}
 
@@ -458,18 +459,6 @@ export default function App() {
             sensitiveModalData.onConfirm();
           }
         }}
-      />
-
-      {/* Discord Interactive Client Simulator */}
-      <DiscordSimulatorModal
-        isOpen={isSimulatorOpen}
-        onClose={() => setIsSimulatorOpen(false)}
-        members={members}
-        modules={modules}
-        quizzes={quizzes}
-        tickets={tickets}
-        onQuizSubmit={handleQuizSubmit}
-        onCreateTicket={handleCreateTicket}
       />
     </div>
   );

@@ -26,7 +26,6 @@ interface NavbarProps {
   branding: BrandingSettings;
   usefulLinks: UsefulLink[];
   session: UserSession;
-  onOpenSimulator: () => void;
   onOpenUsefulLink: (url: string, name: string) => void;
   onLogout: () => void;
 }
@@ -37,7 +36,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   branding,
   usefulLinks,
   session,
-  onOpenSimulator,
   onOpenUsefulLink,
   onLogout,
 }) => {
@@ -114,15 +112,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
-
-            {/* Discord Interactive Simulator Trigger */}
-            <button
-              onClick={onOpenSimulator}
-              className="px-3.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold flex items-center gap-2 transition-all shadow-sm shadow-indigo-500/10"
-            >
-              <Bot className="w-4 h-4 text-indigo-400" />
-              <span>Tester Bot Discord</span>
-            </button>
 
             {/* Admin User Info */}
             <div className="hidden md:flex items-center gap-2 pl-2 border-l border-slate-800">

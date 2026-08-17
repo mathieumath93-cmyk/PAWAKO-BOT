@@ -942,6 +942,35 @@ class StoreService {
       result,
     };
     this.adminLogs.unshift(log);
+
+    // Sync log to Supabase PostgreSQL table if configured
+    if (typeof process !== 'undefined' && process.env.SUPABASE_URL) {
+      const endpoint = process.env.SUPABASE_TABLE_ENDPOINT || `${process.env.SUPABASE_URL}/rest/v1/test1`;
+      const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+      if (key) {
+        fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': key,
+            'Authorization': `Bearer ${key}`,
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({
+            log_id: log.id,
+            admin_name: log.adminName,
+            action: log.action,
+            category: log.category,
+            target_member: log.targetMemberName || null,
+            date: log.date,
+            result: log.result,
+          }),
+        }).catch((err) => {
+          // Log sync background catch
+        });
+      }
+    }
+
     return log;
   }
 

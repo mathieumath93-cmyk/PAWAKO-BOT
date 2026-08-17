@@ -1,0 +1,6 @@
+{
+  "name": "PAWAKO FORMATION 🤖",
+  "description": "Plateforme complète de formation interne connectée à Discord avec bot, dashboard admin, modules, quiz, tickets et statistiques.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

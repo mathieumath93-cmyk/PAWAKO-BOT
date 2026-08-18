@@ -12,6 +12,7 @@ import { RolesView } from './components/RolesView';
 import { ChannelsView } from './components/ChannelsView';
 import { MessagesView } from './components/MessagesView';
 import { AutomationsView } from './components/AutomationsView';
+import { DiscordSyncView } from './components/DiscordSyncView';
 import { LogsView } from './components/LogsView';
 import { SettingsView } from './components/SettingsView';
 
@@ -33,7 +34,7 @@ import {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('overview');
-  const [activeServer, setActiveServer] = useState<DiscordServer>(serverService.getActiveServer());
+  const [activeServer, setActiveServer] = useState<DiscordServer | null>(serverService.getActiveServer());
   const [isOpenMobileSidebar, setIsOpenMobileSidebar] = useState<boolean>(false);
 
   // User session
@@ -211,6 +212,7 @@ export function App() {
           activeTab={activeTab}
           session={session}
           notifications={notifications}
+          activeServer={activeServer}
           onOpenMobileMenu={() => setIsOpenMobileSidebar(true)}
           onLogout={() => showToast('Déconnexion simulée', 'Session terminée', 'info')}
           onNavigate={setActiveTab}
@@ -225,6 +227,8 @@ export function App() {
               onCreateModuleClick={() => handleOpenModuleBuilder(null)}
             />
           )}
+
+          {activeTab === 'discord-sync' && <DiscordSyncView />}
 
           {activeTab === 'modules' && (
             <ModulesView

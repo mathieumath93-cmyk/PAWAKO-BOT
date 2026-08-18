@@ -14,8 +14,6 @@ import {
   Settings,
   Shield,
   Trash2,
-  Wand2,
-  X,
 } from 'lucide-react';
 import {
   AdminNotification,
@@ -56,7 +54,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onCreateBackup,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'branding' | 'links' | 'wizard' | 'notifications' | 'maintenance' | 'backups'
+    'branding' | 'links' | 'notifications' | 'maintenance' | 'backups'
   >('branding');
 
   // Branding local state
@@ -66,10 +64,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [newLinkName, setNewLinkName] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [newLinkIcon, setNewLinkIcon] = useState('ExternalLink');
-
-  // Setup Wizard State
-  const [wizardStep, setWizardStep] = useState(1);
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   const handleSaveBranding = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,20 +97,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <span>Configuration du Système PAWAKO</span>
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Personnalisez le branding, les liens utiles HTTPS, les notifications admin, le mode maintenance et l'assistant d'installation.
+            Personnalisez le branding, les liens utiles HTTPS, les notifications admin, le mode maintenance et les sauvegardes.
           </p>
         </div>
-
-        <button
-          onClick={() => {
-            setWizardStep(1);
-            setIsWizardOpen(true);
-          }}
-          className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-all"
-        >
-          <Wand2 className="w-4 h-4 text-cyan-300" />
-          <span>Lancer l'Assistant de Configuration (10 étapes)</span>
-        </button>
       </div>
 
       {/* Configuration Tabs */}
@@ -445,125 +428,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* 10-Step Assistant Setup Wizard Modal */}
-      {isWizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-xl bg-slate-900 border border-indigo-500/40 rounded-2xl shadow-2xl p-6 text-slate-100 relative">
-            <button
-              onClick={() => setIsWizardOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-indigo-400 mb-2">
-              <Wand2 className="w-5 h-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">
-                Assistant d'Installation PAWAKO — Étape {wizardStep} / 10
-              </span>
-            </div>
-
-            <div className="w-full bg-slate-950 h-2 rounded-full mb-6 overflow-hidden border border-slate-800">
-              <div
-                className="bg-indigo-500 h-full transition-all duration-300"
-                style={{ width: `${(wizardStep / 10) * 100}%` }}
-              ></div>
-            </div>
-
-            {/* Step Content */}
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 mb-6 min-h-[160px] flex flex-col justify-center">
-              {wizardStep === 1 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">1. Détection du serveur Discord</h4>
-                  <p className="text-xs text-slate-300">Serveur connecté : PAWAKO HQ (ID: 123456789012345678)</p>
-                </div>
-              )}
-              {wizardStep === 2 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">2. Détection du rôle Admin</h4>
-                  <p className="text-xs text-slate-300">Rôle Admin détecté : "Admin". Accès restreint configuré.</p>
-                </div>
-              )}
-              {wizardStep === 3 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">3. Configuration du salon principal</h4>
-                  <p className="text-xs text-slate-300">Salon #🤖-jarvis vérifié pour les interfaces interactives par boutons.</p>
-                </div>
-              )}
-              {wizardStep === 4 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">4. Configuration du salon de logs</h4>
-                  <p className="text-xs text-slate-300">Salon #logs prêt à enregistrer l'activité administrateur.</p>
-                </div>
-              )}
-              {wizardStep === 5 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">5. Salon Notifications Admin</h4>
-                  <p className="text-xs text-slate-300">Salon #🚨-notifications-admin prêt à diffuser les alertes critiques.</p>
-                </div>
-              )}
-              {wizardStep === 6 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">6. Configuration des tickets</h4>
-                  <p className="text-xs text-slate-300">Catégorie des tickets initialisée et stockage PostgreSQL de transcript activé.</p>
-                </div>
-              )}
-              {wizardStep === 7 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">7. Structure des modules</h4>
-                  <p className="text-xs text-slate-300">5 modules de formation internes détectés avec leurs salons et rôles dédiés.</p>
-                </div>
-              )}
-              {wizardStep === 8 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">8. Vérification des permissions Discord</h4>
-                  <p className="text-xs text-emerald-400 font-mono">✅ Voir les salons, Envoyer des messages, Intégrer des liens, Gérer les rôles...</p>
-                </div>
-              )}
-              {wizardStep === 9 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-white text-sm">9. Résumé de l'installation</h4>
-                  <p className="text-xs text-slate-300">Tous les composants sont prêts et synchronisés avec Supabase PostgreSQL.</p>
-                </div>
-              )}
-              {wizardStep === 10 && (
-                <div className="space-y-2 text-center py-2">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-                  <h4 className="font-bold text-white text-base">10. Installation Terminée !</h4>
-                  <p className="text-xs text-slate-300">PAWAKO FORMATION 🤖 est 100% prêt à l'emploi.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center">
-              <button
-                disabled={wizardStep === 1}
-                onClick={() => setWizardStep(wizardStep - 1)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs disabled:opacity-50"
-              >
-                Précédent
-              </button>
-
-              {wizardStep < 10 ? (
-                <button
-                  onClick={() => setWizardStep(wizardStep + 1)}
-                  className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20"
-                >
-                  Suivant →
-                </button>
-              ) : (
-                <button
-                  onClick={() => setIsWizardOpen(false)}
-                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20"
-                >
-                  Terminer l'assistant
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}

@@ -11,12 +11,13 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react';
-import { UserSession, AdminNotification } from '../types';
+import { UserSession, AdminNotification, DiscordServer } from '../types';
 
 interface TopBarProps {
   activeTab: string;
   session: UserSession;
   notifications: AdminNotification[];
+  activeServer?: DiscordServer | null;
   onOpenMobileMenu: () => void;
   onLogout: () => void;
   onNavigate: (tab: string) => void;
@@ -26,6 +27,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   activeTab,
   session,
   notifications,
+  activeServer,
   onOpenMobileMenu,
   onLogout,
   onNavigate,
@@ -73,10 +75,17 @@ export const TopBar: React.FC<TopBarProps> = ({
       {/* Right Controls */}
       <div className="flex items-center gap-3">
         {/* Discord Connection Status Badge */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Discord Connected</span>
-        </div>
+        {activeServer ? (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>{activeServer.name}</span>
+          </div>
+        ) : (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span>Aucun serveur</span>
+          </div>
+        )}
 
         {/* Notification Bell Dropdown */}
         <div className="relative">

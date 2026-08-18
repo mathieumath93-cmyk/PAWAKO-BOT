@@ -50,9 +50,22 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
     const res = await discordService.sendModuleEmbed(mod);
     setSendingId(null);
     if (res.success) {
-      onShowToast('Embed Envoyé 🚀', res.message, 'success');
+      moduleService.updateModule(mod.id, {
+        isActive: true,
+        publishStatus: 'published',
+        discordMessageId: res.messageId,
+        discordChannelId: res.channelId,
+        discordGuildId: res.guildId,
+        publishedAt: new Date().toISOString(),
+      });
+      onRefresh();
+      onShowToast('Embed Publié sur Discord 🚀', res.message, 'success');
     } else {
-      onShowToast('Échec Envoi Embed', res.message, 'info');
+      moduleService.updateModule(mod.id, {
+        publishStatus: 'publish_failed',
+      });
+      onRefresh();
+      onShowToast('Échec Publication Discord ❌', res.message, 'info');
     }
   };
 
@@ -119,15 +132,30 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                 </div>
 
                 {/* Meta details */}
-                <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
-                  <div>
-                    <span className="text-slate-500 block">Salon :</span>
-                    <span className="font-semibold text-slate-300 font-mono">{mod.channelName}</span>
+                <div className="space-y-2 text-[11px] bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-slate-500 block">Salon :</span>
+                      <span className="font-semibold text-slate-300 font-mono truncate block">{mod.channelName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Rôle Validé :</span>
+                      <span className="font-semibold text-indigo-300 truncate block">{mod.roleValidatedName}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-500 block">Rôle Validé :</span>
-                    <span className="font-semibold text-indigo-300">{mod.roleValidatedName}</span>
-                  </div>
+
+                  {mod.discordMessageId && (
+                    <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono">
+                      <span className="text-slate-500">ID Message Discord:</span>
+                      <span className="text-emerald-400 font-semibold">{mod.discordMessageId}</span>
+                    </div>
+                  )}
+
+                  {mod.publishStatus === 'publish_failed' && (
+                    <div className="pt-1 text-[10px] text-rose-400 font-semibold flex items-center gap-1">
+                      ⚠️ Échec de publication récente
+                    </div>
+                  )}
                 </div>
 
                 {/* Progress bar */}

@@ -12,6 +12,8 @@ import {
   Hash,
   Shield,
   FileCode,
+  Server,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -50,7 +52,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const roles = roleService.getRoles();
   const session = store.getSession();
 
-  const totalMembersCount = activeServer.memberCount || members.length || 0;
+  const totalMembersCount = activeServer?.memberCount || members.length || 0;
   const realLogs = logs && logs.length > 0 ? logs.slice(0, 5) : store.getLogs().slice(0, 5);
 
   // Dynamic Chart based on real module & quiz counts
@@ -64,6 +66,30 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Banner if No Server */}
+      {!activeServer && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+              <Server className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-amber-200">Aucun serveur Discord synchronisé</h3>
+              <p className="text-xs text-amber-300/80 mt-0.5">
+                Pour afficher et gérer vos salons, rôles et membres réels, lancez la synchronisation avec votre serveur Discord.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('discord-sync')}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0 flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Synchroniser un serveur</span>
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 shadow-xl">
         <div>
@@ -71,7 +97,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             Bienvenue, <span className="text-indigo-400">{session.username}</span> 👋
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Connecté au serveur <strong className="text-slate-200">{activeServer.name}</strong> • Statistiques réelles synchronisées en temps réel.
+            {activeServer ? (
+              <>Connecté au serveur <strong className="text-slate-200">{activeServer.name}</strong> • Statistiques réelles synchronisées.</>
+            ) : (
+              <>Aucun serveur Discord connecté • Lancez la synchronisation dans l'onglet Discord Sync.</>
+            )}
           </p>
         </div>
 
@@ -100,7 +130,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               Discord <CheckCircle2 className="w-3 h-3 ml-1" />
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 font-mono">Membres sur {activeServer.name}</p>
+          <p className="text-[11px] text-slate-500 font-mono">Membres sur {activeServer?.name || 'le serveur'}</p>
         </div>
 
         {/* Channels Count */}

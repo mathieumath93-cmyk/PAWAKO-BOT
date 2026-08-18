@@ -134,12 +134,19 @@ export const MembersView: React.FC<MembersViewProps> = ({
             </thead>
 
             <tbody className="divide-y divide-slate-800/80 text-slate-300">
-              {filteredMembers.map((member) => {
-                const completedCount = member.modulesCompletedCount || 2;
-                const progressPct = Math.round((completedCount / 5) * 100);
+              {filteredMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-slate-400 italic">
+                    Aucun membre trouvé. Synchronisez un serveur dans <strong className="text-indigo-400">Discord Sync</strong> pour charger les membres réels.
+                  </td>
+                </tr>
+              ) : (
+                filteredMembers.map((member) => {
+                  const completedCount = member.modulesCompletedCount || 0;
+                  const progressPct = Math.round((completedCount / 5) * 100);
 
-                return (
-                  <tr key={member.id} className="hover:bg-slate-800/40 transition-colors group">
+                  return (
+                    <tr key={member.id} className="hover:bg-slate-800/40 transition-colors group">
                     {/* Member Name */}
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -218,7 +225,8 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Zap, Plus, CheckCircle2, Play, Trash2, ArrowRight, Sparkles, X, ShieldAlert, BookOpen, Lock } from 'lucide-react';
 import { AutomationRule, AutomationAction, TrainingModule, Quiz } from '../types';
 import { automationService } from '../services/automationService';
+import { discordService } from '../services/discordService';
 import { OnboardingFlowConfigurator } from './OnboardingFlowConfigurator';
 import { MemberJourneySimulator } from './MemberJourneySimulator';
 
@@ -21,6 +22,7 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
 
   const [rules, setRules] = useState<AutomationRule[]>(automationService.getRules());
   const [showModal, setShowModal] = useState(false);
+  const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
 
   // Form State for new Automation
   const [name, setName] = useState('');
@@ -33,6 +35,51 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
   const [actions, setActions] = useState<AutomationAction[]>([
     { type: 'add_role', target: 'Junior', payload: 'role-junior' },
   ]);
+
+  const handleTestRule = async (rule: AutomationRule) => {
+    setTestingRuleId(rule.id);
+    onShowToast('Test d\'Automatisation...', `Publication de "${rule.name}" sur Discord`, 'info');
+
+    try {
+      for (const act of rule.actions) {
+        if (act.type === 'send_message') {
+          const targetChan = act.target || '#general';
+          const embed = {
+            title: `⚡ Automatisation Activée : ${rule.name}`,
+            description: act.payload || `Action automatique déclenchée pour **${rule.trigger}**.`,
+            color: 0xf59e0b,
+            fields: [
+              { name: '🤖 Règle', value: rule.name, inline: true },
+              { name: '📍 Salon', value: targetChan, inline: true },
+            ],
+            footer: { text: 'Pawako Formation • Publication Automatisée' },
+            timestamp: new Date().toISOString(),
+          };
+
+          await discordService.sendCustomEmbed({
+            channelName: targetChan,
+            embed,
+            content: `⚡ **Déclenchement Automatique** : ${rule.name}`,
+          });
+        } else if (act.type === 'unlock_module') {
+          const mod = modules.find((m) => m.title.includes(act.target) || m.id === act.payload) || modules[0];
+          if (mod) {
+            await discordService.sendModuleEmbed(mod);
+          }
+        }
+      }
+
+      onShowToast(
+        'Test d\'Automatisation Réussi 🚀',
+        `La règle "${rule.name}" a publié ses actions sur Discord !`,
+        'success'
+      );
+    } catch (err: any) {
+      onShowToast('Erreur Test', err.message || 'Échec du test d\'automatisation', 'info');
+    } finally {
+      setTestingRuleId(null);
+    }
+  };
 
   const handleToggle = (id: string) => {
     const updated = automationService.toggleRule(id);
@@ -199,13 +246,26 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleDelete(rule.id, rule.name)}
-                    className="p-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-400 transition-colors"
-                    title="Supprimer la règle"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={testingRuleId === rule.id}
+                      onClick={() => handleTestRule(rule)}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Tester la publication de cette règle sur Discord"
+                    >
+                      <Zap className={`w-3.5 h-3.5 ${testingRuleId === rule.id ? 'animate-spin' : ''}`} />
+                      <span>{testingRuleId === rule.id ? 'Test en cours...' : 'Tester sur Discord'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(rule.id, rule.name)}
+                      className="p-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-400 transition-colors"
+                      title="Supprimer la règle"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Visual Flow Nodes: WHEN -> IF -> THEN */}

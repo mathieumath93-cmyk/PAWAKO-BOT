@@ -1,16 +1,5 @@
 import { DiscordRole } from '../types';
 
-export const mockDiscordRoles: DiscordRole[] = [
-  { id: 'role-trainee', name: 'Trainee', color: '#94a3b8', position: 1 },
-  { id: 'role-junior', name: 'Junior', color: '#38bdf8', position: 2 },
-  { id: 'role-senior', name: 'Senior', color: '#818cf8', position: 3 },
-  { id: 'role-certified', name: 'Certified', color: '#34d399', position: 4 },
-  { id: 'role-admin', name: 'Admin', color: '#f43f5e', position: 5, isManaged: true },
-  { id: 'role-formateur', name: 'Formateur', color: '#fbbf24', position: 6 },
-  { id: 'role-mod-1', name: 'Module 1 Validé', color: '#6366f1', position: 7 },
-  { id: 'role-mod-2', name: 'Module 2 Validé', color: '#06b6d4', position: 8 },
-];
-
 export interface ModuleRoleMapping {
   moduleId: string;
   moduleTitle: string;
@@ -31,24 +20,26 @@ class RoleService {
 
   private loadRoles(): DiscordRole[] {
     try {
-      const stored = localStorage.getItem('pawako_discord_roles');
-      if (stored) {
-        return JSON.parse(stored);
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('pawako_discord_roles');
+        if (stored) {
+          return JSON.parse(stored);
+        }
       }
     } catch {
       // Ignore
     }
-    return [...mockDiscordRoles];
+    return [];
   }
 
   public setRoles(newRoles: DiscordRole[]) {
-    if (newRoles && newRoles.length > 0) {
-      this.roles = newRoles;
-      try {
+    this.roles = newRoles || [];
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
         localStorage.setItem('pawako_discord_roles', JSON.stringify(this.roles));
-      } catch {
-        // Ignore
       }
+    } catch {
+      // Ignore
     }
   }
 

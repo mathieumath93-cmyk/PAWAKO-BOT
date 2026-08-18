@@ -14,6 +14,14 @@ export const MessagesView: React.FC<MessagesViewProps> = ({ onShowToast }) => {
 
   const activeTemplate = templates.find((t) => t.key === selectedKey) || templates[0];
 
+  if (!activeTemplate) {
+    return (
+      <div className="p-8 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-2xl">
+        Aucun modèle de message disponible.
+      </div>
+    );
+  }
+
   const handleUpdate = (updates: Partial<BotMessageTemplate>) => {
     try {
       const updated = messageService.updateTemplate(activeTemplate.id, updates);

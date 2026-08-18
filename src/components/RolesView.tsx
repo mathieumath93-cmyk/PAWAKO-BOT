@@ -91,11 +91,15 @@ export const RolesView: React.FC<RolesViewProps> = ({ onShowToast }) => {
                     onChange={(e) => handleUpdateRole(map.moduleId, e.target.value)}
                     className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-bold focus:outline-none focus:border-indigo-500"
                   >
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
+                    {roles.length === 0 ? (
+                      <option value="" disabled>Aucun rôle (synchronisez Discord)</option>
+                    ) : (
+                      roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -107,17 +111,23 @@ export const RolesView: React.FC<RolesViewProps> = ({ onShowToast }) => {
       {/* Discord Server Roles List */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <h2 className="text-sm font-bold text-white">Rôles Détectés sur le Serveur Discord</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {roles.map((r) => (
-            <div
-              key={r.id}
-              className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 flex items-center gap-2.5"
-            >
-              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: r.color }}></span>
-              <span className="text-xs font-semibold text-slate-200 truncate">{r.name}</span>
-            </div>
-          ))}
-        </div>
+        {roles.length === 0 ? (
+          <div className="text-xs text-slate-400 italic p-4 bg-slate-950/50 border border-slate-800/80 rounded-xl text-center">
+            Aucun rôle détecté. Cliquez sur <strong className="text-indigo-400">Sync Discord</strong> pour importer les rôles réels de votre serveur.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {roles.map((r) => (
+              <div
+                key={r.id}
+                className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 flex items-center gap-2.5"
+              >
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: r.color || '#818cf8' }}></span>
+                <span className="text-xs font-semibold text-slate-200 truncate">{r.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

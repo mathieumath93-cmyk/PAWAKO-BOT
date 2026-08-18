@@ -2,15 +2,10 @@ import { DiscordChannelConfig } from '../types';
 import { roleService } from './roleService';
 import { serverService } from './serverService';
 import { store } from './store';
+import { discordSyncService } from './discordSyncService';
+import { safeFetchJson } from '../utils/apiUtils';
 
-export const mockChannels: DiscordChannelConfig[] = [
-  { id: 'chan-formation', name: 'formation', type: 'text', categoryName: '📚 ACADÉMIE', isConfiguredFor: 'training' },
-  { id: 'chan-quiz', name: 'quiz-onboarding', type: 'text', categoryName: '📚 ACADÉMIE', isConfiguredFor: 'quiz' },
-  { id: 'chan-results', name: 'resultats-certifications', type: 'text', categoryName: '📚 ACADÉMIE', isConfiguredFor: 'results' },
-  { id: 'chan-logs', name: 'bot-logs', type: 'text', categoryName: '⚙️ ADMIN', isConfiguredFor: 'logs' },
-  { id: 'chan-general', name: 'général', type: 'text', categoryName: '💬 DISCUSSIONS', isConfiguredFor: 'general' },
-  { id: 'chan-tickets', name: 'support-tickets', type: 'text', categoryName: '⚙️ ADMIN', isConfiguredFor: 'tickets' },
-];
+export const mockChannels: DiscordChannelConfig[] = [];
 
 export interface DiscordConfig {
   botToken: string;
@@ -23,14 +18,65 @@ export interface DiscordConfig {
 }
 
 const DEFAULT_CONFIG: DiscordConfig = {
-  botToken: 'MTUzODg3NDIyNjQxNTUwMTQ2Mg.GRRAAr.5NbxFb6dbuz9rwki_yyiapVY4786aZx5i---dQ',
-  clientId: '1538874226415501462',
-  clientSecret: 'Qd3R0-xv4wszPNh1WxKBFxY0zO_-ETMd',
-  webhookUrl: 'https://discord.com/api/webhooks/1538892353849532527/8KQxKy9_LOgoL11MAGbYzNeKVyn4lmYr6dLRYqrwve3A0eyJCffSyxyAvLhSMBCMC8rh',
+  botToken: '',
+  clientId: '',
+  clientSecret: '',
+  webhookUrl: '',
   commandPrefix: '!',
   botName: 'Pawako Bot',
   botAvatarUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
 };
+
+/**
+ * Helper for detailed console logging of requests sent to Discord / backend
+ */
+function logDiscordRequest(context: string, url: string, options?: any) {
+  console.group(`[DiscordService Request 🚀] ${context}`);
+  console.log(`URL:`, url);
+  console.log(`Method:`, options?.method || 'GET');
+  if (options?.headers) console.log(`Headers:`, options.headers);
+  if (options?.body) {
+    try {
+      console.log(`Body (Parsed):`, JSON.parse(options.body));
+    } catch {
+      console.log(`Body (Raw):`, options.body);
+    }
+  }
+  console.groupEnd();
+}
+
+function logDiscordResponse(context: string, status: number, contentType: string | null, rawText: string, parsedData?: any, parseError?: any) {
+  const isOk = status >= 200 && status < 300;
+  console.group(`[DiscordService Response ${isOk ? '✅' : '❌'}] ${context}`);
+  console.log(`HTTP Status:`, status);
+  console.log(`Content-Type:`, contentType || '(aucun)');
+  console.log(`Raw Text Length:`, rawText ? rawText.length : 0);
+  console.log(`Raw Text Preview:`, rawText ? rawText.slice(0, 500) : '(RÉPONSE VIDE)');
+  if (parseError) {
+    console.error(`🔴 Origine de l'erreur d'analyse JSON (JSON Parsing Error):`, parseError);
+  }
+  if (parsedData !== undefined && parsedData !== null) {
+    console.log(`Données JSON analysées avec succès:`, parsedData);
+  }
+  console.groupEnd();
+}
+
+/**
+ * Helper to log detailed response metadata BEFORE parsing JSON
+ */
+function logBeforeJsonParse(context: string, response: Response, rawText: string) {
+  const statusCode = response.status;
+  const contentType = response.headers.get('content-type') || '(none)';
+  const snippet = rawText ? rawText.slice(0, 300) : '(RÉPONSE VIDE / EMPTY)';
+
+  console.log(`[DiscordService BEFORE JSON PARSE 🔍] ${context}:`);
+  console.log(`  - Status Code: ${statusCode}`);
+  console.log(`  - Content-Type: ${contentType}`);
+  console.log(`  - Raw Text Snippet (first 300 chars): "${snippet}"`);
+  if (!rawText || !rawText.trim()) {
+    console.warn(`⚠️ [DiscordService Warning] Raw response text is empty for ${context}! Attempting JSON.parse on empty string would cause 'Unexpected end of JSON input'.`);
+  }
+}
 
 class DiscordService {
   private channels: DiscordChannelConfig[] = [...mockChannels];
@@ -43,21 +89,25 @@ class DiscordService {
 
   private loadChannels(): DiscordChannelConfig[] {
     try {
-      const stored = localStorage.getItem('pawako_discord_channels');
-      if (stored) {
-        return JSON.parse(stored);
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('pawako_discord_channels');
+        if (stored) {
+          return JSON.parse(stored);
+        }
       }
     } catch {
       // Ignore
     }
-    return [...mockChannels];
+    return [];
   }
 
   private loadConfig(): DiscordConfig {
     try {
-      const stored = localStorage.getItem('pawako_discord_config');
-      if (stored) {
-        return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('pawako_discord_config');
+        if (stored) {
+          return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+        }
       }
     } catch {
       // Ignore
@@ -145,24 +195,106 @@ class DiscordService {
   }
 
   public async fetchAndSyncRealDiscordData(): Promise<{ success: boolean; message?: string; server?: any }> {
+    const token = this.config.botToken;
+    const url = `/api/discord/sync-real-data?token=${encodeURIComponent(token)}`;
+
+    logDiscordRequest('fetchAndSyncRealDiscordData', url);
+
     try {
-      const token = this.config.botToken;
-      const res = await fetch(`/api/discord/sync-real-data?token=${encodeURIComponent(token)}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        return { success: false, message: err.error || 'Erreur lors de la synchronisation avec Discord' };
+      const response = await fetch(url);
+      const statusCode = response.status;
+      const contentType = response.headers.get('content-type') || '(aucun)';
+
+      console.log(`[fetchAndSyncRealDiscordData 📡] Response received from ${url}`);
+      console.log(`  - Status Code: ${statusCode}`);
+      console.log(`  - Content-Type: ${contentType}`);
+
+      // 1. Verify content-type header BEFORE reading text or calling .json()
+      const isJsonContentType = contentType.toLowerCase().includes('json');
+      if (!isJsonContentType) {
+        const rawText = await response.text();
+        console.warn(`[fetchAndSyncRealDiscordData ⚠️] Content-Type non-JSON reçu: "${contentType}". Raw snippet: "${rawText.slice(0, 200)}"`);
+        logDiscordResponse(
+          'fetchAndSyncRealDiscordData',
+          statusCode,
+          contentType,
+          rawText,
+          null,
+          `Content-Type non valide (${contentType}), JSON attendu`
+        );
+        serverService.setServers([]);
+        return {
+          success: false,
+          message: `Le serveur a renvoyé un type de contenu invalide (${contentType || 'non spécifié'}) au lieu du format JSON.`,
+        };
       }
 
-      const data = await res.json();
+      // 2. Read raw response text to verify non-empty body
+      const rawText = await response.text();
+      logBeforeJsonParse('fetchAndSyncRealDiscordData', response, rawText);
+
+      if (!rawText || !rawText.trim()) {
+        console.warn('[fetchAndSyncRealDiscordData ⚠️] Réponse vide reçue du serveur! Annulation du parsing JSON.');
+        logDiscordResponse(
+          'fetchAndSyncRealDiscordData',
+          statusCode,
+          contentType,
+          '',
+          null,
+          'Réponse vide reçue du serveur'
+        );
+        serverService.setServers([]);
+        return {
+          success: false,
+          message: `Le serveur a renvoyé une réponse vide (HTTP ${statusCode}).`,
+        };
+      }
+
+      // 3. Parse JSON safely now that content-type and body text are validated
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseError) {
+        console.error('[fetchAndSyncRealDiscordData 🔴] Échec de l\'analyse du JSON:', parseError);
+        logDiscordResponse(
+          'fetchAndSyncRealDiscordData',
+          statusCode,
+          contentType,
+          rawText,
+          null,
+          parseError
+        );
+        serverService.setServers([]);
+        return {
+          success: false,
+          message: `Format JSON invalide reçu du serveur: ${rawText.slice(0, 100)}`,
+        };
+      }
+
+      logDiscordResponse(
+        'fetchAndSyncRealDiscordData',
+        statusCode,
+        contentType,
+        rawText,
+        data,
+        response.ok ? null : data?.error || 'Erreur HTTP'
+      );
+
+      if (!response.ok || !data) {
+        serverService.setServers([]);
+        return { success: false, message: data?.error || data?.message || `Erreur lors de la synchronisation avec Discord (HTTP ${statusCode})` };
+      }
+
       if (!data.success) {
+        serverService.setServers([]);
         return { success: false, message: data.message || 'Aucun serveur trouvé' };
       }
 
-      if (data.channels && data.channels.length > 0) {
+      if (data.channels && Array.isArray(data.channels)) {
         this.setChannels(data.channels);
       }
 
-      if (data.roles && data.roles.length > 0) {
+      if (data.roles && Array.isArray(data.roles)) {
         roleService.setRoles(data.roles);
       }
 
@@ -170,13 +302,14 @@ class DiscordService {
         serverService.updateServerDetails(data.server);
       }
 
-      if (data.members && data.members.length > 0) {
+      if (data.members && Array.isArray(data.members)) {
         store.setMembers(data.members);
       }
 
       return data;
     } catch (err: any) {
-      console.error('[Discord Sync Error]', err);
+      console.error('[Discord Sync Exception]', err);
+      serverService.setServers([]);
       return { success: false, message: err.message };
     }
   }
@@ -224,20 +357,41 @@ class DiscordService {
       ],
     };
 
+    const requestOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    };
+
+    logDiscordRequest('sendWebhookTestMessage', url, requestOptions);
+
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(url, requestOptions);
+      const contentType = response.headers.get('content-type');
+      const rawText = await response.text();
+
+      logBeforeJsonParse('sendWebhookTestMessage', response, rawText);
+
+      let parsedJson: any = null;
+      let parseError: any = null;
+
+      if (rawText && rawText.trim()) {
+        try {
+          parsedJson = JSON.parse(rawText);
+        } catch (e) {
+          parseError = e;
+          console.error(`[DiscordService] Failed to parse JSON in sendWebhookTestMessage:`, e);
+        }
+      }
+
+      logDiscordResponse('sendWebhookTestMessage', response.status, contentType, rawText, parsedJson, parseError);
 
       if (response.ok || response.status === 204) {
         return { success: true, message: 'Message de test envoyé sur votre salon Discord avec succès !' };
       } else {
-        const text = await response.text();
-        return { success: false, message: `Erreur Discord (${response.status}): ${text || 'Échec d\'envoi'}` };
+        return { success: false, message: `Erreur Discord (${response.status}): ${rawText || 'Échec d\'envoi'}` };
       }
     } catch (err: any) {
       console.error('[Discord Webhook Error]', err);
@@ -291,14 +445,37 @@ class DiscordService {
       ],
     };
 
+    const requestOptions = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    };
+
+    logDiscordRequest(`sendWebhookLog [${action}]`, url, requestOptions);
+
     try {
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      return true;
-    } catch {
+      const res = await fetch(url, requestOptions);
+      const contentType = res.headers.get('content-type');
+      const rawText = await res.text();
+
+      logBeforeJsonParse(`sendWebhookLog [${action}]`, res, rawText);
+
+      let parsedJson: any = null;
+      let parseError: any = null;
+
+      if (rawText && rawText.trim()) {
+        try {
+          parsedJson = JSON.parse(rawText);
+        } catch (e) {
+          parseError = e;
+          console.error(`[DiscordService] Failed to parse JSON in sendWebhookLog [${action}]:`, e);
+        }
+      }
+
+      logDiscordResponse(`sendWebhookLog [${action}]`, res.status, contentType, rawText, parsedJson, parseError);
+      return res.ok || res.status === 204;
+    } catch (err: any) {
+      console.error('[Discord Webhook Log Error]', err);
       return false;
     }
   }
@@ -312,29 +489,76 @@ class DiscordService {
     description: string;
     channelName: string;
     channelId?: string;
+    guildId?: string;
     roleEnCoursName?: string;
     roleValidatedName?: string;
     blocks?: any[];
     isActive?: boolean;
-  }): Promise<{ success: boolean; message: string }> {
+  }): Promise<{ success: boolean; message: string; messageId?: string; channelId?: string; guildId?: string; discordStatus?: number }> {
     const cleanChannel = (moduleData.channelName || '#formation').replace(/^#/, '');
+    const activeGuildId = moduleData.guildId || discordSyncService.getActiveGuildId();
 
-    // Format blocks summary for embed description
-    const blockSummary = moduleData.blocks && moduleData.blocks.length > 0
+    if (!activeGuildId || !/^\d{17,20}$/.test(activeGuildId)) {
+      return {
+        success: false,
+        message: 'Veuillez d\'abord synchroniser un serveur Discord actif dans l\'onglet "Discord Sync".',
+      };
+    }
+
+    let targetChannelId = moduleData.channelId || (moduleData as any).discordChannelId;
+
+    // Auto-resolve real channel snowflake ID if missing or dummy string (e.g. "chan-mod-1")
+    if (!targetChannelId || !/^\d{17,20}$/.test(targetChannelId)) {
+      const syncedChannels = discordSyncService.getChannels(activeGuildId);
+      const cleanTargetName = cleanChannel.toLowerCase().trim();
+
+      // 1. Match by channel name
+      const matchedChan = syncedChannels.find(
+        (c) =>
+          c.name.replace(/^#/, '').toLowerCase().trim() === cleanTargetName ||
+          c.discord_channel_id === targetChannelId ||
+          c.id === targetChannelId
+      );
+
+      if (matchedChan) {
+        targetChannelId = matchedChan.discord_channel_id || matchedChan.id;
+      } else if (syncedChannels.length > 0) {
+        // 2. Fallback to first text channel on the synced server
+        const firstTextChan = syncedChannels.find((c) => c.type === 0 || !c.type) || syncedChannels[0];
+        if (firstTextChan) {
+          targetChannelId = firstTextChan.discord_channel_id || firstTextChan.id;
+        }
+      }
+    }
+
+    if (!targetChannelId || !/^\d{17,20}$/.test(targetChannelId)) {
+      return {
+        success: false,
+        message: `Le salon configuré pour ce module ("#${cleanChannel}") n'a pas pu être associé à un salon Discord réel (snowflake). Veuillez synchroniser vos salons dans "Discord Sync" ou sélectionner un salon existant dans les paramètres du module.`,
+      };
+    }
+
+    // Format blocks summary cleanly for embed description
+    const formattedBlocks = moduleData.blocks && moduleData.blocks.length > 0
       ? moduleData.blocks
           .map((b) => {
-            if (b.type === 'heading' || b.title) return `**${b.title || b.content}**`;
-            if (b.type === 'alert') return `> ⚠️ **${b.title || 'Note'}**: ${b.content}`;
-            if (b.type === 'button') return `🔘 **[${b.content || 'Démarrer'}]**`;
-            return b.content;
+            if (b.type === 'heading' || b.title) return `**${b.title || ''}**\n${b.content || ''}`;
+            if (b.type === 'alert') return `> ⚠️ **${b.title || 'Note'}**: ${b.content || ''}`;
+            if (b.type === 'button') return `🔘 **[${b.content || 'Démarrer le Module'}]**`;
+            return b.content || '';
           })
-          .join('\n')
-      : moduleData.description;
+          .filter(Boolean)
+          .join('\n\n')
+      : '';
+
+    const descriptionText = moduleData.description && formattedBlocks
+      ? `${moduleData.description}\n\n${formattedBlocks}`
+      : moduleData.description || formattedBlocks || 'Module de formation disponible pour tous les membres.';
 
     const embed = {
-      title: `🎓 Module de Formation : ${moduleData.title}`,
-      description: `${moduleData.description || ''}\n\n${blockSummary || ''}`,
-      color: moduleData.isActive ? 0x6366f1 : 0xf59e0b,
+      title: `🎓 ${moduleData.title}`,
+      description: descriptionText,
+      color: 0x6366f1, // Indigo color #6366f1
       fields: [
         { name: '📍 Salon Dédié', value: `#${cleanChannel}`, inline: true },
         { name: '🛡️ Rôle Inscription', value: moduleData.roleEnCoursName || 'Trainee', inline: true },
@@ -342,30 +566,130 @@ class DiscordService {
         { name: '⚡ Statut', value: moduleData.isActive ? '✅ Publié sur Discord' : '🕒 Brouillon / Modifié', inline: true },
       ],
       footer: {
-        text: 'Pawako Formation • Système de Formation Discord',
+        text: 'Pawako Formation • Système Officiel',
         icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
       },
       timestamp: new Date().toISOString(),
     };
 
+    const endpoint = '/api/discord/send-channel-embed';
+    const requestBody = {
+      guildId: activeGuildId,
+      channelName: cleanChannel,
+      channelId: targetChannelId,
+      embed,
+      content: `📢 **Nouveau Module de Formation Disponible !**`,
+    };
+
+    logDiscordRequest('sendModuleEmbed', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
+
     try {
-      const res = await fetch('/api/discord/send-channel-embed', {
+      const result = await safeFetchJson(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channelName: cleanChannel,
-          channelId: moduleData.channelId,
-          embed,
-          content: `📢 **Mise à jour de la Formation !** Le module **${moduleData.title}** est prêt dans le salon #${cleanChannel}.`,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        this.sendWebhookLog('Publication Embed Module', 'module', `Module "${moduleData.title}" publié dans #${cleanChannel}`);
-        return { success: true, message: data.message || `Embed envoyé dans #${cleanChannel}` };
+      logDiscordResponse(
+        'sendModuleEmbed',
+        result.status,
+        'application/json',
+        JSON.stringify(result.data || {}),
+        result.data,
+        result.ok ? null : result.error
+      );
+
+      if (result.ok && result.data && result.data.success) {
+        const data = result.data;
+        this.sendWebhookLog('Publication Embed Module', 'module', `Module "${moduleData.title}" publié dans #${cleanChannel} (Message ID: ${data.messageId})`);
+        return {
+          success: true,
+          message: data.message || `Embed envoyé dans #${cleanChannel} (Message ID: ${data.messageId})`,
+          messageId: data.messageId,
+          channelId: data.channelId || targetChannelId,
+          guildId: data.guildId || activeGuildId,
+          discordStatus: data.discordStatus || 201,
+        };
       }
-      return { success: false, message: data.error || 'Échec de l\'envoi de l\'embed' };
+      return {
+        success: false,
+        message: result.error || (result.data && result.data.error) || `Échec de publication Discord (HTTP ${result.status})`,
+        discordStatus: (result.data && result.data.discordStatus) || result.status,
+      };
+    } catch (err: any) {
+      console.error('[Discord sendModuleEmbed Exception]', err);
+      return { success: false, message: err.message || 'Erreur réseau lors de l\'envoi' };
+    }
+  }
+
+  /**
+   * Send a custom embed / message to a specified Discord channel
+   */
+  public async sendCustomEmbed(options: {
+    channelName: string;
+    channelId?: string;
+    guildId?: string;
+    embed: any;
+    content?: string;
+  }): Promise<{ success: boolean; message: string; messageId?: string }> {
+    const cleanChannel = (options.channelName || '#general').replace(/^#/, '');
+    const activeGuildId = options.guildId || discordSyncService.getActiveGuildId();
+
+    let targetChannelId = options.channelId;
+    if (!targetChannelId || !/^\d{17,20}$/.test(targetChannelId)) {
+      const syncedChannels = discordSyncService.getChannels(activeGuildId);
+      const cleanTargetName = cleanChannel.toLowerCase().trim();
+      const matchedChan = syncedChannels.find(
+        (c) =>
+          c.name.replace(/^#/, '').toLowerCase().trim() === cleanTargetName ||
+          c.discord_channel_id === targetChannelId ||
+          c.id === targetChannelId
+      );
+
+      if (matchedChan) {
+        targetChannelId = matchedChan.discord_channel_id || matchedChan.id;
+      } else if (syncedChannels.length > 0) {
+        const firstTextChan = syncedChannels.find((c) => c.type === 0 || !c.type) || syncedChannels[0];
+        if (firstTextChan) {
+          targetChannelId = firstTextChan.discord_channel_id || firstTextChan.id;
+        }
+      }
+    }
+
+    if (!targetChannelId || !/^\d{17,20}$/.test(targetChannelId)) {
+      return {
+        success: false,
+        message: `Le salon ("#${cleanChannel}") n'a pas pu être associé à un salon Discord réel.`,
+      };
+    }
+
+    const endpoint = '/api/discord/send-channel-embed';
+    const requestBody = {
+      guildId: activeGuildId,
+      channelName: cleanChannel,
+      channelId: targetChannelId,
+      embed: options.embed,
+      content: options.content || `📢 **Message Automatique**`,
+    };
+
+    try {
+      const result = await safeFetchJson(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (result.ok && result.data && result.data.success) {
+        return {
+          success: true,
+          message: result.data.message || `Message envoyé dans #${cleanChannel}`,
+          messageId: result.data.messageId,
+        };
+      }
+      return {
+        success: false,
+        message: result.error || (result.data && result.data.error) || 'Échec de l\'envoi du message',
+      };
     } catch (err: any) {
       return { success: false, message: err.message || 'Erreur réseau lors de l\'envoi' };
     }
@@ -377,6 +701,7 @@ class DiscordService {
   public async createPrivateQuizThread(options: {
     channelName: string;
     channelId?: string;
+    guildId?: string;
     quizTitle: string;
     memberName: string;
     memberDiscordId?: string;
@@ -387,6 +712,7 @@ class DiscordService {
     details?: string;
   }): Promise<{ success: boolean; threadName?: string; message: string }> {
     const cleanChannel = (options.channelName || '#results').replace(/^#/, '');
+    const activeGuildId = options.guildId || discordSyncService.getActiveGuildId();
     const maxScore = options.maxScore || 20;
 
     const embed = {
@@ -407,31 +733,47 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
+    const endpoint = '/api/discord/create-private-thread';
+    const requestBody = {
+      guildId: activeGuildId,
+      channelName: cleanChannel,
+      channelId: options.channelId,
+      memberName: options.memberName,
+      memberDiscordId: options.memberDiscordId,
+      quizTitle: options.quizTitle,
+      score: options.score,
+      maxScore,
+      passed: options.passed,
+      embed,
+      content: `🔒 **Fil Privé de Résultats** pour @${options.memberName} — Évaluation **${options.quizTitle}**`,
+    };
+
+    logDiscordRequest('createPrivateQuizThread', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
+
     try {
-      const res = await fetch('/api/discord/create-private-thread', {
+      const result = await safeFetchJson(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channelName: cleanChannel,
-          channelId: options.channelId,
-          memberName: options.memberName,
-          memberDiscordId: options.memberDiscordId,
-          quizTitle: options.quizTitle,
-          score: options.score,
-          maxScore,
-          passed: options.passed,
-          embed,
-          content: `🔒 **Fil Privé de Résultats** pour @${options.memberName} — Évaluation **${options.quizTitle}**`,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
+      logDiscordResponse(
+        'createPrivateQuizThread',
+        result.status,
+        'application/json',
+        JSON.stringify(result.data || {}),
+        result.data,
+        result.ok ? null : result.error
+      );
+
+      if (result.ok && result.data && result.data.success) {
+        const data = result.data;
         this.sendWebhookLog('Fil Privé Résultats', 'quiz', `Fil "${data.threadName}" créé dans #${cleanChannel} pour ${options.memberName}`);
         return { success: true, threadName: data.threadName, message: data.message || `Fil privé créé dans #${cleanChannel}` };
       }
-      return { success: false, message: data.error || 'Impossible de créer le fil privé' };
+      return { success: false, message: result.error || (result.data && result.data.error) || 'Impossible de créer le fil privé' };
     } catch (err: any) {
+      console.error('[Discord createPrivateQuizThread Exception]', err);
       return { success: false, message: err.message || 'Erreur réseau lors de la création du fil privé' };
     }
   }
@@ -441,23 +783,43 @@ class DiscordService {
    */
   public async createPersonalChannel(options: {
     memberName: string;
+    guildId?: string;
     prefix?: string;
     rulesMessage?: string;
   }): Promise<{ success: boolean; channelName?: string; message: string }> {
+    const activeGuildId = options.guildId || discordSyncService.getActiveGuildId();
+    const endpoint = '/api/discord/create-personal-channel';
+    const requestBody = {
+      ...options,
+      guildId: activeGuildId,
+    };
+
+    logDiscordRequest('createPersonalChannel', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
+
     try {
-      const res = await fetch('/api/discord/create-personal-channel', {
+      const result = await safeFetchJson(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(options),
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
+      logDiscordResponse(
+        'createPersonalChannel',
+        result.status,
+        'application/json',
+        JSON.stringify(result.data || {}),
+        result.data,
+        result.ok ? null : result.error
+      );
+
+      if (result.ok && result.data && result.data.success) {
+        const data = result.data;
         this.sendWebhookLog('Salon Personnel Créé', 'member', `Salon "${data.channelName}" créé pour ${options.memberName}`);
         return { success: true, channelName: data.channelName, message: data.message || `Salon personnel ${data.channelName} créé` };
       }
-      return { success: false, message: data.error || 'Échec de la création du salon personnel' };
+      return { success: false, message: result.error || (result.data && result.data.error) || 'Échec de la création du salon personnel' };
     } catch (err: any) {
+      console.error('[Discord createPersonalChannel Exception]', err);
       return { success: false, message: err.message || 'Erreur réseau lors de la création du salon personnel' };
     }
   }

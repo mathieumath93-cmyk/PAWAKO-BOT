@@ -115,11 +115,19 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
 
   const handleSaveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanChan = channelName.replace(/^#/, '').toLowerCase().trim();
+    const matchedChan = availableChannels.find(
+      (c) => c.name.replace(/^#/, '').toLowerCase().trim() === cleanChan || c.id === channelName
+    );
+    const resolvedChannelId = matchedChan?.id || moduleToEdit?.channelId || moduleToEdit?.discordChannelId || '';
+
     onSave({
       title,
       description,
       isActive,
       channelName,
+      channelId: resolvedChannelId,
+      discordChannelId: resolvedChannelId,
       roleEnCoursName,
       roleValidatedName,
       blocks,

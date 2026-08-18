@@ -14,6 +14,7 @@ import {
   Plus,
   ShieldAlert,
   Server,
+  RefreshCw,
   X,
 } from 'lucide-react';
 import { DiscordServer } from '../types';
@@ -22,7 +23,7 @@ import { serverService } from '../services/serverService';
 interface SidebarProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
-  activeServer: DiscordServer;
+  activeServer: DiscordServer | null;
   onServerChange: (server: DiscordServer) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
@@ -31,6 +32,7 @@ interface SidebarProps {
 
 export const navItems = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'discord-sync', label: 'Discord Sync', icon: RefreshCw },
   { id: 'modules', label: 'Modules', icon: BookOpen },
   { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
   { id: 'members', label: 'Members', icon: Users },
@@ -91,17 +93,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => setIsServerDropdownOpen(!isServerDropdownOpen)}
             className="w-full bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-left transition-all group"
           >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <img
-                src={activeServer.iconUrl}
-                alt={activeServer.name}
-                className="w-7 h-7 rounded-lg object-cover shrink-0 border border-slate-700"
-              />
-              <div className="truncate">
-                <div className="text-xs font-bold text-slate-100 truncate">{activeServer.name}</div>
-                <div className="text-[10px] text-slate-400 font-mono">{activeServer.memberCount} membres</div>
+            {activeServer ? (
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src={activeServer.iconUrl}
+                  alt={activeServer.name}
+                  className="w-7 h-7 rounded-lg object-cover shrink-0 border border-slate-700"
+                />
+                <div className="truncate">
+                  <div className="text-xs font-bold text-slate-100 truncate">{activeServer.name}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">{activeServer.memberCount} membres</div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                  <Server className="w-4 h-4" />
+                </div>
+                <div className="truncate">
+                  <div className="text-xs font-bold text-amber-400 truncate">Aucun serveur</div>
+                  <div className="text-[10px] text-slate-500 font-mono">Discord non synchronisé</div>
+                </div>
+              </div>
+            )}
             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isServerDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
 
@@ -109,21 +123,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isServerDropdownOpen && (
             <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95">
               <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500 tracking-wider">Serveurs Administrés</div>
-              {servers.map((srv) => (
-                <button
-                  key={srv.id}
-                  onClick={() => handleSelectServer(srv)}
-                  className={`w-full p-2 rounded-lg flex items-center justify-between text-xs transition-colors ${
-                    srv.id === activeServer.id ? 'bg-indigo-600/20 text-indigo-300 font-bold border border-indigo-500/30' : 'text-slate-300 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <img src={srv.iconUrl} alt={srv.name} className="w-5 h-5 rounded object-cover" />
-                    <span className="truncate">{srv.name}</span>
-                  </div>
-                  {srv.id === activeServer.id && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>}
-                </button>
-              ))}
+              {servers.length === 0 ? (
+                <div className="px-2 py-2 text-xs text-slate-400 italic text-center">Aucun serveur trouvé</div>
+              ) : (
+                servers.map((srv) => (
+                  <button
+                    key={srv.id}
+                    onClick={() => handleSelectServer(srv)}
+                    className={`w-full p-2 rounded-lg flex items-center justify-between text-xs transition-colors ${
+                      activeServer && srv.id === activeServer.id ? 'bg-indigo-600/20 text-indigo-300 font-bold border border-indigo-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <img src={srv.iconUrl} alt={srv.name} className="w-5 h-5 rounded object-cover" />
+                      <span className="truncate">{srv.name}</span>
+                    </div>
+                    {activeServer && srv.id === activeServer.id && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>}
+                  </button>
+                ))
+              )}
 
               <div className="border-t border-slate-800 my-1"></div>
 

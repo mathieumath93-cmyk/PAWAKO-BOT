@@ -1,26 +1,44 @@
 import { DiscordServer } from '../types';
 
-export const mockServers: DiscordServer[] = [
-  {
-    id: '1538874226415501462',
-    name: 'Mon Serveur Discord 🛡️',
-    iconUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
-    memberCount: 1,
-    isBotPresent: true,
-    channelsCount: 6,
-    rolesCount: 5,
-    activeModulesCount: 5,
-  },
-];
-
 class ServerService {
-  private servers: DiscordServer[] = [...mockServers];
-  private activeServerId: string = '1538874226415501462';
+  private servers: DiscordServer[] = [];
+  private activeServerId: string | null = null;
 
-  public updateServerDetails(serverData: Partial<DiscordServer>) {
-    const s = this.getActiveServer();
-    if (s && serverData) {
-      Object.assign(s, serverData);
+  public setServers(list: DiscordServer[]) {
+    this.servers = list || [];
+    if (this.servers.length > 0) {
+      if (!this.activeServerId || !this.servers.some((s) => s.id === this.activeServerId)) {
+        this.activeServerId = this.servers[0].id;
+      }
+    } else {
+      this.activeServerId = null;
+    }
+  }
+
+  public updateServerDetails(serverData: Partial<DiscordServer> & { id?: string }) {
+    if (!serverData) return;
+
+    let target = this.servers.find((s) => s.id === serverData.id);
+    if (!target && this.activeServerId) {
+      target = this.servers.find((s) => s.id === this.activeServerId);
+    }
+
+    if (target) {
+      Object.assign(target, serverData);
+      if (serverData.id) target.id = serverData.id;
+    } else if (serverData.id && serverData.name) {
+      const newServer: DiscordServer = {
+        id: serverData.id,
+        name: serverData.name,
+        iconUrl: serverData.iconUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
+        memberCount: serverData.memberCount || 0,
+        isBotPresent: serverData.isBotPresent ?? true,
+        channelsCount: serverData.channelsCount || 0,
+        rolesCount: serverData.rolesCount || 0,
+        activeModulesCount: serverData.activeModulesCount || 0,
+      };
+      this.servers = [newServer];
+      this.activeServerId = newServer.id;
     }
   }
 
@@ -28,17 +46,18 @@ class ServerService {
     return this.servers;
   }
 
-  public getActiveServer(): DiscordServer {
-    return this.servers.find((s) => s.id === this.activeServerId) || this.servers[0];
+  public getActiveServer(): DiscordServer | null {
+    if (this.servers.length === 0) return null;
+    return this.servers.find((s) => s.id === this.activeServerId) || this.servers[0] || null;
   }
 
-  public setActiveServer(id: string): DiscordServer {
+  public setActiveServer(id: string): DiscordServer | null {
     const s = this.servers.find((srv) => srv.id === id);
     if (s) {
       this.activeServerId = s.id;
       return s;
     }
-    return this.servers[0];
+    return null;
   }
 
   public addServer(name: string): DiscordServer {
@@ -46,10 +65,10 @@ class ServerService {
       id: `server-${Date.now()}`,
       name,
       iconUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
-      memberCount: 1,
+      memberCount: 0,
       isBotPresent: true,
-      channelsCount: 5,
-      rolesCount: 3,
+      channelsCount: 0,
+      rolesCount: 0,
       activeModulesCount: 0,
     };
     this.servers.push(newServer);
@@ -59,3 +78,4 @@ class ServerService {
 }
 
 export const serverService = new ServerService();
+

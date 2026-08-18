@@ -124,6 +124,11 @@ export interface TrainingModule {
   buttons: ModuleActionButton[];
   isActive: boolean;
   completionRate?: number; // e.g. 82
+  discordMessageId?: string;
+  discordChannelId?: string;
+  discordGuildId?: string;
+  publishedAt?: string;
+  publishStatus?: 'draft' | 'publishing' | 'published' | 'publish_failed';
 }
 
 export interface MemberProgress {
@@ -298,6 +303,68 @@ export interface BackupRecord {
   };
 }
 
+export interface DiscordGuildSyncData {
+  id: string; // Internal or discord ID
+  discord_guild_id: string;
+  name: string;
+  icon?: string;
+  owner_id?: string;
+  member_count?: number;
+  bot_present: boolean;
+  last_synced_at?: string;
+  sync_status: 'idle' | 'syncing' | 'success' | 'error';
+  errorMessage?: string;
+}
+
+export interface DiscordRoleSyncData {
+  id: string;
+  guild_id: string;
+  discord_role_id: string;
+  name: string;
+  color?: string;
+  position: number;
+  managed: boolean;
+  mentionable: boolean;
+  hoist?: boolean;
+  permissions?: string;
+  canAssignByBot?: boolean;
+  isHigherThanBot?: boolean;
+  last_synced_at?: string;
+}
+
+export interface DiscordChannelSyncData {
+  id: string;
+  guild_id: string;
+  discord_channel_id: string;
+  name: string;
+  type: number; // 0 = text, 2 = voice, 4 = category
+  parent_id?: string;
+  parent_name?: string;
+  position: number;
+  topic?: string;
+  permissions?: {
+    viewChannel: boolean;
+    sendMessages: boolean;
+    embedLinks: boolean;
+    createPrivateThreads: boolean;
+    readMessageHistory: boolean;
+  };
+  last_synced_at?: string;
+}
+
+export interface BotPermissionAnalysis {
+  viewChannel: boolean;
+  sendMessages: boolean;
+  embedLinks: boolean;
+  readMessageHistory: boolean;
+  manageChannels: boolean;
+  manageRoles: boolean;
+  createPrivateThreads: boolean;
+  sendMessagesInThreads: boolean;
+  botHighestRolePosition: number;
+  botRoleName?: string;
+}
+
 export interface ModuleStepConfig {
   moduleId: string;
   moduleTitle: string;
@@ -314,14 +381,19 @@ export interface ModuleStepConfig {
 }
 
 export interface OnboardingFlowConfig {
-  welcomeChannelName: string; // e.g. "#bienvenue"
+  guildId?: string;
   welcomeChannelId?: string;
+  welcomeChannelName?: string;
   welcomeButtonLabel: string; // "Commencer la formation"
+  personalCategoryId?: string;
+  personalCategoryName?: string;
   personalChannelPrefix: string; // "formation-" -> "🔒-formation-[pseudo]"
   welcomeRulesMessage: string; // Message + règles
   startTrainingButtonLabel: string; // "Lancer la formation"
   initialRoleId?: string;
-  initialRoleName?: string; // e.g. "Trainee"
+  initialRoleName?: string;
+  logChannelId?: string;
+  logChannelName?: string;
   cooldownMinutes: number; // default 15
   randomizeQuestions: boolean; // default true
   hideQuizSolutions: boolean; // default true

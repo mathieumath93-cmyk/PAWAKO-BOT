@@ -13,15 +13,22 @@ export class PawakoBotRunner {
     }
   }
 
-  public connectWithToken(token: string) {
-    if (!token || !token.trim()) return;
+  public async connectWithToken(rawToken: string) {
+    if (!rawToken || !rawToken.trim()) return;
+
+    let cleanToken = rawToken.trim();
+    if (cleanToken.startsWith('Bot ')) cleanToken = cleanToken.substring(4).trim();
+    if (cleanToken.startsWith('Bearer ')) cleanToken = cleanToken.substring(7).trim();
+
+    if (!cleanToken) return;
 
     if (this.client) {
       try {
-        this.client.destroy();
+        await this.client.destroy();
       } catch (e) {
         // ignore
       }
+      this.client = null;
     }
 
     try {
@@ -148,7 +155,7 @@ export class PawakoBotRunner {
         }
       });
 
-      this.client.login(token).catch((err) => {
+      this.client.login(cleanToken).catch((err) => {
         console.warn('[PAWAKO BOT] Login Error:', err.message);
       });
     } catch (err: any) {

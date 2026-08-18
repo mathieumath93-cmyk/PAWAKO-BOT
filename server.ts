@@ -10,43 +10,151 @@ async function startServer() {
   const PORT = 3000;
 
   // Initialize Discord Bot if token is present
-  const defaultBotToken = process.env.DISCORD_BOT_TOKEN || 'MTUzODg3NDIyNjQxNTUwMTQ2Mg.GRRAAr.5NbxFb6dbuz9rwki_yyiapVY4786aZx5i---dQ';
-  if (defaultBotToken) {
-    console.log('[PAWAKO BOT] Initialisation avec le token par defaut...');
-    pawakoBot.connectWithToken(defaultBotToken);
+  const botTokenEnv = (process.env.DISCORD_BOT_TOKEN || '').trim();
+  if (botTokenEnv) {
+    console.log('[PAWAKO BOT] Initialisation Gateway avec DISCORD_BOT_TOKEN...');
+    pawakoBot.connectWithToken(botTokenEnv);
   }
 
   app.use(express.json());
 
+  // Helper function to handle Discord REST API rate limits (HTTP 429) automatically
+  async function fetchDiscordWithRetry(url: string, options: any = {}, maxRetries = 3): Promise<any> {
+    let attempt = 0;
+    const method = options.method || 'GET';
+    console.log(`[SERVER Discord API Request 🚀] ${method} ${url}`);
+    while (attempt <= maxRetries) {
+      const res = await fetch(url, options);
+      const contentType = res.headers.get('content-type') || 'none';
+      console.log(`[SERVER Discord API Response ${res.ok ? '✅' : '❌'}] ${method} ${url} - Status: ${res.status} - Content-Type: ${contentType}`);
+      if (res.status === 429) {
+        attempt++;
+        try {
+          const body = await res.clone().json();
+          const retryAfterMs = Math.ceil(((body && body.retry_after) || 0.6) * 1000) + 150;
+          console.warn(`[Discord 429 Rate Limit] Pausing ${retryAfterMs}ms before retry ${attempt}/${maxRetries} for ${url}`);
+          await new Promise((r) => setTimeout(r, retryAfterMs));
+          continue;
+        } catch (jsonErr) {
+          console.error(`[Discord 429 JSON Error] Impossible d'analyser le JSON de rate limit 429:`, jsonErr);
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+      }
+      return res;
+    }
+    return fetch(url, options);
+  }
+
+  // Global active guild state
+  let activeGuildId: string | null = null;
+
+  function sanitizeBotToken(rawToken: string): string {
+    let clean = (rawToken || '').trim();
+    if (clean.startsWith('Bot ')) clean = clean.substring(4).trim();
+    if (clean.startsWith('Bearer ')) clean = clean.substring(7).trim();
+    return clean;
+  }
+
+  function getBotTokenOrError(req: Request, res: Response): string | null {
+    const rawParamToken = (req.query.token as string) || (req.body && req.body.token);
+    let token = sanitizeBotToken(rawParamToken || process.env.DISCORD_BOT_TOKEN || '');
+
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        discordStatus: 401,
+        error: 'Token Bot Discord non configuré. Veuillez saisir votre Token de Bot dans l\'onglet Synchronisation Discord.',
+      });
+      return null;
+    }
+
+    process.env.DISCORD_BOT_TOKEN = token;
+    return token;
+  }
+
+  function formatDiscordApiError(status: number, rawText: string): string {
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      // Raw text not JSON
+    }
+
+    const code = parsed?.code;
+    const msg = parsed?.message || rawText;
+
+    if (status === 401 || msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+      return 'Token Bot Discord invalide ou expiré (Erreur 401: Unauthorized). Veuillez réinitialiser le Token de votre Bot dans le Discord Developer Portal (Onglet Bot -> Reset Token) puis copier-coller la nouvelle clé dans les Paramètres.';
+    }
+
+    if (status === 403 || msg.toLowerCase().includes('missing access') || msg.toLowerCase().includes('missing permissions') || code === 50001 || code === 50013) {
+      return 'Permissions Discord insuffisantes (Erreur 403: Forbidden). Assurez-vous que le Bot est présent sur votre serveur Discord avec les permissions suffisantes.';
+    }
+
+    if (status === 404 || code === 10004 || code === 10003) {
+      return 'Serveur ou salon Discord non trouvé (Erreur 404: Not Found). Vérifiez l\'ID du serveur ou réinvitez le Bot.';
+    }
+
+    return `Impossible de contacter Discord (HTTP ${status}): ${msg}`;
+  }
+
   // --- DISCORD REST API REAL-TIME SYNC ---
   app.get('/api/discord/guilds', async (req: Request, res: Response) => {
-    const token = (req.query.token as string) || defaultBotToken;
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
     try {
-      const response = await fetch('https://discord.com/api/v10/users/@me/guilds', {
-        headers: { Authorization: `Bot ${token.trim()}` },
+      const response = await fetchDiscordWithRetry('https://discord.com/api/v10/users/@me/guilds', {
+        headers: { Authorization: `Bot ${token}` },
       });
       if (!response.ok) {
         const errorText = await response.text();
-        return res.status(response.status).json({ error: errorText || 'Échec de récupération des serveurs Discord' });
+        return res.status(response.status).json({
+          success: false,
+          discordStatus: response.status,
+          error: formatDiscordApiError(response.status, errorText)
+        });
       }
       const guilds = await response.json();
       res.json(guilds);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, discordStatus: 500, error: err.message });
     }
   });
 
-  app.get('/api/discord/sync-real-data', async (req: Request, res: Response) => {
-    const token = (req.query.token as string) || defaultBotToken;
+  app.post('/api/discord/select-guild', (req: Request, res: Response) => {
+    const { guildId } = req.body;
+    if (!guildId) {
+      return res.status(400).json({ success: false, error: 'guildId requis' });
+    }
+    activeGuildId = guildId;
+    res.json({ success: true, activeGuildId });
+  });
+
+  app.get('/api/discord/active-guild', (req: Request, res: Response) => {
+    res.json({ activeGuildId });
+  });
+
+  app.all(['/api/discord/guild/:guildId/sync', '/api/discord/sync-real-data'], async (req: Request, res: Response) => {
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
+    const requestedGuildId = req.params.guildId || (req.query.guildId as string) || activeGuildId;
+
     try {
       // 1. Get Guilds for this bot
-      const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
-        headers: { Authorization: `Bot ${token.trim()}` },
+      const guildsRes = await fetchDiscordWithRetry('https://discord.com/api/v10/users/@me/guilds', {
+        headers: { Authorization: `Bot ${token}` },
       });
 
       if (!guildsRes.ok) {
         const errText = await guildsRes.text();
-        return res.status(guildsRes.status).json({ error: `Impossible de contacter Discord: ${errText}` });
+        return res.status(guildsRes.status).json({
+          success: false,
+          discordStatus: guildsRes.status,
+          error: formatDiscordApiError(guildsRes.status, errText)
+        });
       }
 
       const guilds: any[] = await guildsRes.json();
@@ -58,39 +166,85 @@ async function startServer() {
         });
       }
 
-      const primaryGuild = guilds[0]; // Take the first server
-      const guildId = primaryGuild.id;
+      let targetGuild = null;
+      if (requestedGuildId) {
+        targetGuild = guilds.find((g: any) => g.id === requestedGuildId);
+        if (!targetGuild) {
+          return res.status(404).json({
+            success: false,
+            discordStatus: 404,
+            error: `Le Bot n'appartient pas au serveur Discord ID ${requestedGuildId}`
+          });
+        }
+      } else {
+        targetGuild = guilds[0];
+      }
 
-      // 2. Fetch Guild details, Channels, Roles, and Members in parallel
-      const [guildDetailRes, channelsRes, rolesRes, membersRes] = await Promise.all([
-        fetch(`https://discord.com/api/v10/guilds/${guildId}?with_counts=true`, {
-          headers: { Authorization: `Bot ${token.trim()}` },
-        }),
-        fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
-          headers: { Authorization: `Bot ${token.trim()}` },
-        }),
-        fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
-          headers: { Authorization: `Bot ${token.trim()}` },
-        }),
-        fetch(`https://discord.com/api/v10/guilds/${guildId}/members?limit=1000`, {
-          headers: { Authorization: `Bot ${token.trim()}` },
-        }),
-      ]);
+      const guildId = targetGuild.id;
+      activeGuildId = guildId;
 
-      const guildDetail = guildDetailRes.ok ? await guildDetailRes.json() : primaryGuild;
+      // Fetch bot user info to get bot user id
+      const botUserRes = await fetchDiscordWithRetry('https://discord.com/api/v10/users/@me', {
+        headers: { Authorization: `Bot ${token}` },
+      });
+      const botUser = botUserRes.ok ? await botUserRes.json() : null;
+
+      // 2. Fetch Guild details, Channels, Roles, Members, and Bot Guild Member info
+      const guildDetailRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}?with_counts=true`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+      const channelsRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+      const rolesRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+      const membersRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/members?limit=1000`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+      const botMemberRes = botUser ? await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/members/${botUser.id}`, {
+        headers: { Authorization: `Bot ${token}` },
+      }) : null;
+
+      const guildDetail = guildDetailRes.ok ? await guildDetailRes.json() : targetGuild;
       const rawChannels = channelsRes.ok ? await channelsRes.json() : [];
       const rawRoles = rolesRes.ok ? await rolesRes.json() : [];
       const rawMembers = membersRes.ok ? await membersRes.json() : [];
+      const botMember = botMemberRes && botMemberRes.ok ? await botMemberRes.json() : null;
+
+      // Calculate bot highest role position
+      let botHighestRolePosition = 0;
+      if (botMember && botMember.roles && rawRoles.length > 0) {
+        for (const roleId of botMember.roles) {
+          const r = rawRoles.find((role: any) => role.id === roleId);
+          if (r && r.position > botHighestRolePosition) {
+            botHighestRolePosition = r.position;
+          }
+        }
+      }
 
       // Format Channels
       const formattedChannels = rawChannels
-        .filter((c: any) => c.type === 0 || c.type === 2 || c.type === 4) // 0: text, 2: voice, 4: category
+        .filter((c: any) => c.type === 0 || c.type === 2 || c.type === 4 || c.type === 5)
+        .map((c: any) => ({
+          id: c.id,
+          guild_id: guildId,
+          discord_channel_id: c.id,
+          name: c.name,
+          type: c.type === 2 ? 'voice' : c.type === 4 ? 'category' : c.type === 5 ? 'announcements' : 'text',
+          categoryName: c.parent_id ? (rawChannels.find((p: any) => p.id === c.parent_id)?.name || 'DISCORD') : 'GÉNÉRAL',
+          parent_id: c.parent_id,
+          position: c.position,
+          topic: c.topic,
+        }));
+
+      // Extract Categories
+      const categories = rawChannels
+        .filter((c: any) => c.type === 4)
         .map((c: any) => ({
           id: c.id,
           name: c.name,
-          type: c.type === 2 ? 'voice' : c.type === 4 ? 'category' : 'text',
-          categoryName: c.parent_id ? (rawChannels.find((p: any) => p.id === c.parent_id)?.name || 'SALONS') : 'GÉNÉRAL',
-          isConfiguredFor: c.name.includes('log') ? 'logs' : c.name.includes('ticket') ? 'tickets' : c.name.includes('quiz') ? 'quiz' : undefined,
+          position: c.position,
         }));
 
       // Format Roles
@@ -98,10 +252,15 @@ async function startServer() {
         .filter((r: any) => r.name !== '@everyone')
         .map((r: any) => ({
           id: r.id,
+          guild_id: guildId,
+          discord_role_id: r.id,
           name: r.name,
           color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : '#6366f1',
           position: r.position,
-          isManaged: r.managed || false,
+          managed: r.managed || false,
+          mentionable: r.mentionable || false,
+          permissions: r.permissions,
+          canAssignByBot: r.position < botHighestRolePosition && !r.managed,
         }));
 
       // Format Members
@@ -127,15 +286,12 @@ async function startServer() {
           currentModuleId: 'mod-1',
           progress: {
             'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
-            'mod-2': { moduleId: 'mod-2', status: 'verrouille', attemptsCount: 0 },
           },
-          extraAttemptsGranted: {},
           isActive: true,
           lastActiveAt: new Date().toLocaleString('fr-FR'),
         };
       });
 
-      // Construct Guild summary
       const guildIcon = guildDetail.icon
         ? `https://cdn.discordapp.com/icons/${guildDetail.id}/${guildDetail.icon}.png`
         : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80';
@@ -151,389 +307,493 @@ async function startServer() {
         activeModulesCount: 4,
       };
 
+      const botPermissions = {
+        viewChannel: true,
+        sendMessages: true,
+        embedLinks: true,
+        readMessageHistory: true,
+        manageChannels: true,
+        manageRoles: true,
+        createPrivateThreads: true,
+        sendMessagesInThreads: true,
+        botHighestRolePosition,
+      };
+
       res.json({
         success: true,
         server: serverSummary,
-        channels: formattedChannels,
+        guild: {
+          id: guildDetail.id,
+          name: guildDetail.name,
+          icon: guildIcon,
+          owner_id: guildDetail.owner_id,
+          member_count: guildDetail.approximate_member_count || rawMembers.length || 1,
+          bot_present: true,
+        },
         roles: formattedRoles,
+        channels: formattedChannels,
+        categories,
         members: formattedMembers,
+        botPermissions,
         rawGuildsCount: guilds.length,
       });
     } catch (err: any) {
       console.error('[Discord Sync Error]', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, discordStatus: 500, error: err.message });
     }
   });
 
-  // --- SEND EMBED DIRECTLY TO DISCORD CHANNEL OR WEBHOOK ---
+  // --- SEND EMBED/MESSAGE STRICT DISCORD PUBLICATION ---
   app.post('/api/discord/send-channel-embed', async (req: Request, res: Response) => {
-    const token = (req.query.token as string) || (req.headers.authorization ? req.headers.authorization.replace('Bot ', '') : '') || defaultBotToken;
-    const { channelName, channelId, embed, content } = req.body;
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
 
-    let targetChannelId = channelId;
+    const { guildId, channelId, embed, content } = req.body;
 
-    // 1. If no numeric channelId provided, lookup guild channels via Discord REST API
-    if (!targetChannelId || !/^\d{17,20}$/.test(targetChannelId)) {
-      try {
-        const cleanName = (channelName || '').replace(/^#/, '').trim().toLowerCase();
-        const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
-          headers: { Authorization: `Bot ${token.trim()}` },
-        });
-
-        if (guildsRes.ok) {
-          const guilds: any[] = await guildsRes.json();
-          if (guilds && guilds.length > 0) {
-            const primaryGuildId = guilds[0].id;
-            const channelsRes = await fetch(`https://discord.com/api/v10/guilds/${primaryGuildId}/channels`, {
-              headers: { Authorization: `Bot ${token.trim()}` },
-            });
-
-            if (channelsRes.ok) {
-              const channels: any[] = await channelsRes.json();
-              const match = channels.find(
-                (c: any) =>
-                  c.name.toLowerCase() === cleanName ||
-                  c.id === channelId ||
-                  c.name.toLowerCase().includes(cleanName)
-              );
-              if (match) {
-                targetChannelId = match.id;
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[Channel Lookup Error]', err);
-      }
-    }
-
-    let sentViaApi = false;
-    let apiError = '';
-
-    // 2. Send via Discord REST API directly to the target channel
-    if (targetChannelId && /^\d{17,20}$/.test(targetChannelId)) {
-      try {
-        const msgRes = await fetch(`https://discord.com/api/v10/channels/${targetChannelId}/messages`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bot ${token.trim()}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            content: content || null,
-            embeds: embed ? [embed] : [],
-          }),
-        });
-
-        if (msgRes.ok) {
-          sentViaApi = true;
-        } else {
-          const errText = await msgRes.text();
-          apiError = errText;
-        }
-      } catch (err: any) {
-        apiError = err.message;
-      }
-    }
-
-    // 3. Always send/broadcast via Webhook as well to guarantee delivery
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1538892353849532527/8KQxKy9_LOgoL11MAGbYzNeKVyn4lmYr6dLRYqrwve3A0eyJCffSyxyAvLhSMBCMC8rh';
-    let sentViaWebhook = false;
-
-    if (webhookUrl && webhookUrl.startsWith('http')) {
-      try {
-        const whRes = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: 'Pawako Formation 🤖',
-            avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
-            content: content || null,
-            embeds: embed ? [embed] : [],
-          }),
-        });
-        if (whRes.ok || whRes.status === 204) {
-          sentViaWebhook = true;
-        }
-      } catch (err) {
-        console.error('[Webhook Embed Delivery Error]', err);
-      }
-    }
-
-    if (sentViaApi || sentViaWebhook) {
-      const cleanChan = (channelName || 'formation').replace(/^#/, '');
-      return res.json({
-        success: true,
-        sentViaApi,
-        sentViaWebhook,
-        targetChannelId,
-        message: `Message Embed publié avec succès dans le salon #${cleanChan} !`,
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
+      return res.status(400).json({
+        success: false,
+        discordStatus: 400,
+        error: 'guildId Discord obligatoire et doit être un identifiant snowflake réel.'
       });
     }
 
-    res.status(400).json({
-      success: false,
-      error: apiError || 'Impossible d\'envoyer le message sur le salon Discord.',
-    });
+    if (!channelId || !/^\d{17,20}$/.test(channelId)) {
+      return res.status(400).json({
+        success: false,
+        discordStatus: 400,
+        error: 'Invalid Discord channel ID. Veuillez sélectionner un salon Discord réel dans le dashboard.'
+      });
+    }
+
+    try {
+      // 1. Pre-flight check channel
+      const chanRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${channelId}`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+
+      if (!chanRes.ok) {
+        const chanErrText = await chanRes.text();
+        let chanErr: any = {};
+        try { chanErr = JSON.parse(chanErrText); } catch {}
+        return res.status(chanRes.status).json({
+          success: false,
+          discordStatus: chanRes.status,
+          error: `Impossible de trouver le salon Discord (${channelId}) : ${chanErr.message || chanErrText || 'Salon introuvable'}`,
+          discordResponse: chanErr
+        });
+      }
+
+      const chanData = await chanRes.json();
+
+      if (chanData.guild_id && chanData.guild_id !== guildId) {
+        return res.status(400).json({
+          success: false,
+          discordStatus: 400,
+          error: 'Le salon sélectionné n\'appartient pas au serveur Discord sélectionné.'
+        });
+      }
+
+      const allowedTypes = [0, 5, 11, 12, 15];
+      if (!allowedTypes.includes(chanData.type)) {
+        return res.status(400).json({
+          success: false,
+          discordStatus: 400,
+          error: `Le salon "${chanData.name}" n'est pas un salon textuel compatible pour envoyer un message.`
+        });
+      }
+
+      // 2. Send message via Discord REST API
+      const msgRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: content || null,
+          embeds: embed ? [embed] : [],
+        }),
+      });
+
+      if (msgRes.ok || msgRes.status === 201 || msgRes.status === 200) {
+        const msgData = await msgRes.json();
+        store.addLog(
+          'Discord API',
+          `[ACTION_SUCCESS] Message/Embed publié dans #${chanData.name} (${channelId}) - Message ID: ${msgData.id} - HTTP 201`,
+          'module'
+        );
+
+        return res.status(201).json({
+          success: true,
+          messageId: msgData.id,
+          channelId: msgData.channel_id,
+          guildId,
+          discordStatus: 201,
+          message: `Message/Embed publié avec succès dans le salon #${chanData.name} !`
+        });
+      } else {
+        const errText = await msgRes.text();
+        let errJson: any = {};
+        try { errJson = JSON.parse(errText); } catch {}
+
+        store.addLog(
+          'Discord API',
+          `[ACTION_FAILED] Échec envoi message dans channel ${channelId} - HTTP ${msgRes.status}: ${errJson.message || errText}`,
+          'system'
+        );
+
+        return res.status(msgRes.status).json({
+          success: false,
+          discordStatus: msgRes.status,
+          error: errJson.message || `Échec d'envoi Discord (HTTP ${msgRes.status})`,
+          discordResponse: errJson
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        discordStatus: 500,
+        error: `Erreur serveur: ${err.message}`
+      });
+    }
+  });
+
+  // --- SEND TEST MESSAGE / EMBED (Dedicated UI Testing Endpoint) ---
+  app.post('/api/discord/send-test-message', async (req: Request, res: Response) => {
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
+    const { guildId, channelId, content, embed } = req.body;
+
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
+      return res.status(400).json({ success: false, error: 'guildId Discord valide requis' });
+    }
+    if (!channelId || !/^\d{17,20}$/.test(channelId)) {
+      return res.status(400).json({ success: false, error: 'channelId Discord valide (snowflake) requis' });
+    }
+
+    try {
+      const msgRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: content || '🤖 PAWAKO Discord API Test',
+          embeds: embed ? [embed] : [],
+        }),
+      });
+
+      if (msgRes.ok || msgRes.status === 201) {
+        const msgData = await msgRes.json();
+        return res.status(201).json({
+          success: true,
+          messageId: msgData.id,
+          channelId: msgData.channel_id,
+          guildId,
+          discordStatus: 201,
+          message: `Test réussi ! Message ID: ${msgData.id}`
+        });
+      } else {
+        const errText = await msgRes.text();
+        let errJson: any = {};
+        try { errJson = JSON.parse(errText); } catch {}
+        return res.status(msgRes.status).json({
+          success: false,
+          discordStatus: msgRes.status,
+          error: errJson.message || `Échec API Discord (HTTP ${msgRes.status})`,
+          discordResponse: errJson
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, discordStatus: 500, error: err.message });
+    }
+  });
+
+  // --- DIAGNOSTIC ENDPOINT (GET /api/discord/diagnostic/:guildId) ---
+  app.get('/api/discord/diagnostic/:guildId', async (req: Request, res: Response) => {
+    const token = (process.env.DISCORD_BOT_TOKEN || '').trim();
+    const guildId = req.params.guildId;
+
+    const results: any = {
+      timestamp: new Date().toISOString(),
+      guildId,
+      botTokenSet: Boolean(token),
+      botGateway: { pass: false, details: '' },
+      guild: { pass: false, details: '' },
+      botMember: { pass: false, details: '' },
+      channels: { pass: false, details: '' },
+      roles: { pass: false, details: '' },
+      hierarchy: { pass: false, details: '' },
+    };
+
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'DISCORD_BOT_TOKEN non configuré', results });
+    }
+
+    try {
+      // 1. Bot User
+      const botRes = await fetchDiscordWithRetry('https://discord.com/api/v10/users/@me', {
+        headers: { Authorization: `Bot ${token}` },
+      });
+      if (botRes.ok) {
+        const botUser = await botRes.json();
+        results.botGateway = { pass: true, details: `Connecté sous l'identité ${botUser.username}#${botUser.discriminator || '0'} (ID: ${botUser.id})` };
+
+        // 2. Guild
+        const guildRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}?with_counts=true`, {
+          headers: { Authorization: `Bot ${token}` },
+        });
+        if (guildRes.ok) {
+          const guildData = await guildRes.json();
+          results.guild = { pass: true, details: `Serveur "${guildData.name}" trouvé (${guildData.approximate_member_count || 0} membres)` };
+
+          // 3. Bot Member in Guild
+          const botMemberRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/members/${botUser.id}`, {
+            headers: { Authorization: `Bot ${token}` },
+          });
+          if (botMemberRes.ok) {
+            const botMember = await botMemberRes.json();
+            results.botMember = { pass: true, details: `Bot présent sur le serveur avec ${botMember.roles ? botMember.roles.length : 0} rôles assignés` };
+
+            // 4. Channels check
+            const chanRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+              headers: { Authorization: `Bot ${token}` },
+            });
+            if (chanRes.ok) {
+              const channels = await chanRes.json();
+              const textChans = channels.filter((c: any) => c.type === 0);
+              results.channels = { pass: true, details: `${channels.length} salons détectés (${textChans.length} salons textuels)` };
+            } else {
+              results.channels = { pass: false, details: `Erreur récupération salons: HTTP ${chanRes.status}` };
+            }
+
+            // 5. Roles & Hierarchy check
+            const rolesRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+              headers: { Authorization: `Bot ${token}` },
+            });
+            if (rolesRes.ok) {
+              const roles = await rolesRes.json();
+              let highestPos = 0;
+              if (botMember.roles) {
+                for (const rId of botMember.roles) {
+                  const r = roles.find((role: any) => role.id === rId);
+                  if (r && r.position > highestPos) highestPos = r.position;
+                }
+              }
+              results.roles = { pass: true, details: `${roles.length} rôles détectés sur le serveur` };
+              results.hierarchy = { pass: highestPos > 0, details: `Position maximale du rôle du Bot: ${highestPos}` };
+            } else {
+              results.roles = { pass: false, details: `Erreur récupération rôles: HTTP ${rolesRes.status}` };
+            }
+          } else {
+            results.botMember = { pass: false, details: `Bot absent ou introuvable sur le serveur ${guildId} (HTTP ${botMemberRes.status})` };
+          }
+        } else {
+          results.guild = { pass: false, details: `Serveur introuvable ou Bot non autorisé (HTTP ${guildRes.status})` };
+        }
+      } else {
+        results.botGateway = { pass: false, details: `Échec d'authentification Bot Token (HTTP ${botRes.status})` };
+      }
+    } catch (err: any) {
+      results.error = err.message;
+    }
+
+    const overallSuccess = results.botGateway.pass && results.guild.pass && results.botMember.pass;
+    res.json({ success: overallSuccess, results });
   });
 
   // --- CREATE PRIVATE THREAD FOR QUIZ RESULTS ON SPECIFIED CHANNEL ---
   app.post('/api/discord/create-private-thread', async (req: Request, res: Response) => {
-    const token = (req.query.token as string) || (req.headers.authorization ? req.headers.authorization.replace('Bot ', '') : '') || defaultBotToken;
-    const { channelName, channelId, memberName, memberDiscordId, quizTitle, score, maxScore, passed, embed, content } = req.body;
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
 
-    const cleanChannel = (channelName || 'results').replace(/^#/, '').trim().toLowerCase();
-    const cleanUsername = (memberName || 'membre').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 25);
-    const cleanQuizTitle = (quizTitle || 'quiz').toLowerCase().replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 20);
+    const { guildId, channelId, memberName, memberDiscordId, quizTitle, embed, content } = req.body;
 
-    // Thread name formatted so it's clearly identifiable by the member's pseudo/username
-    const threadName = `🔒 quiz-${cleanQuizTitle}-${cleanUsername || 'resultats'}`;
-
-    let parentChannelId = channelId;
-
-    // 1. Lookup parent text channel ID if not passed as numeric ID
-    if (!parentChannelId || !/^\d{17,20}$/.test(parentChannelId)) {
-      try {
-        const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
-          headers: { Authorization: `Bot ${token.trim()}` },
-        });
-
-        if (guildsRes.ok) {
-          const guilds: any[] = await guildsRes.json();
-          if (guilds && guilds.length > 0) {
-            const primaryGuildId = guilds[0].id;
-            const channelsRes = await fetch(`https://discord.com/api/v10/guilds/${primaryGuildId}/channels`, {
-              headers: { Authorization: `Bot ${token.trim()}` },
-            });
-
-            if (channelsRes.ok) {
-              const channels: any[] = await channelsRes.json();
-              const match = channels.find(
-                (c: any) =>
-                  c.name.toLowerCase() === cleanChannel ||
-                  c.id === channelId ||
-                  c.name.toLowerCase().includes(cleanChannel) ||
-                  c.type === 0 // Text channel
-              );
-              if (match) {
-                parentChannelId = match.id;
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[Parent Channel Lookup Error]', err);
-      }
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
+      return res.status(400).json({ success: false, error: 'guildId valide requis' });
+    }
+    if (!channelId || !/^\d{17,20}$/.test(channelId)) {
+      return res.status(400).json({ success: false, error: 'channelId valide (snowflake) requis' });
     }
 
-    let createdThreadId = '';
-    let apiError = '';
+    const cleanUsername = (memberName || 'membre').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 25);
+    const cleanQuizTitle = (quizTitle || 'quiz').toLowerCase().replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 20);
+    const threadName = `🔒 quiz-${cleanQuizTitle}-${cleanUsername || 'resultats'}`;
 
-    // 2. Create Private Thread via Discord REST API (Type 12 = GUILD_PRIVATE_THREAD)
-    if (parentChannelId && /^\d{17,20}$/.test(parentChannelId)) {
-      try {
-        // Try creating private thread (Type 12)
-        let threadRes = await fetch(`https://discord.com/api/v10/channels/${parentChannelId}/threads`, {
+    let createdThreadId = '';
+
+    try {
+      // 1. Create Private Thread (Type 12)
+      let threadRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${channelId}/threads`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: threadName,
+          auto_archive_duration: 1440,
+          type: 12, // GUILD_PRIVATE_THREAD
+          invitable: true,
+        }),
+      });
+
+      if (!threadRes.ok) {
+        // Fallback to Public Thread (Type 11)
+        threadRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${channelId}/threads`, {
           method: 'POST',
           headers: {
-            Authorization: `Bot ${token.trim()}`,
+            Authorization: `Bot ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             name: threadName,
-            auto_archive_duration: 1440, // 24 hours
-            type: 12, // GUILD_PRIVATE_THREAD
-            invitable: true,
+            auto_archive_duration: 1440,
+            type: 11, // GUILD_PUBLIC_THREAD
           }),
         });
-
-        // Fallback to public thread (Type 11) if private thread requires extra permissions/tier
-        if (!threadRes.ok && threadRes.status !== 200 && threadRes.status !== 201) {
-          threadRes = await fetch(`https://discord.com/api/v10/channels/${parentChannelId}/threads`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bot ${token.trim()}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              name: threadName,
-              auto_archive_duration: 1440,
-              type: 11, // GUILD_PUBLIC_THREAD
-            }),
-          });
-        }
-
-        if (threadRes.ok) {
-          const threadData = await threadRes.json();
-          createdThreadId = threadData.id;
-        } else {
-          apiError = await threadRes.text();
-        }
-      } catch (err: any) {
-        apiError = err.message;
       }
-    }
 
-    // 3. Post the embed/results inside the newly created thread
-    const targetMsgChannel = createdThreadId || parentChannelId;
-
-    if (targetMsgChannel && /^\d{17,20}$/.test(targetMsgChannel)) {
-      try {
-        const pingMention = memberDiscordId ? `<@${memberDiscordId}>` : `@${memberName || 'Membre'}`;
-        const defaultContent = content || `🔒 **Fil Privé de Résultats Quiz** — Notification pour ${pingMention}\nCe fil contient vos résultats personnels pour **${quizTitle || 'le quiz'}**.`;
-
-        await fetch(`https://discord.com/api/v10/channels/${targetMsgChannel}/messages`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bot ${token.trim()}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            content: defaultContent,
-            embeds: embed ? [embed] : [],
-          }),
+      if (!threadRes.ok) {
+        const errText = await threadRes.text();
+        let errJson: any = {};
+        try { errJson = JSON.parse(errText); } catch {}
+        return res.status(threadRes.status).json({
+          success: false,
+          discordStatus: threadRes.status,
+          error: `Échec de création du fil de discussion: ${errJson.message || errText}`
         });
-
-        // Add member to thread if memberDiscordId exists
-        if (createdThreadId && memberDiscordId && /^\d{17,20}$/.test(memberDiscordId)) {
-          try {
-            await fetch(`https://discord.com/api/v10/channels/${createdThreadId}/thread-members/${memberDiscordId}`, {
-              method: 'PUT',
-              headers: { Authorization: `Bot ${token.trim()}` },
-            });
-          } catch (e) {
-            // Ignore if unable to add member directly
-          }
-        }
-      } catch (err) {
-        console.error('[Post Thread Message Error]', err);
       }
-    }
 
-    // 4. Always issue Webhook log as well
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1538892353849532527/8KQxKy9_LOgoL11MAGbYzNeKVyn4lmYr6dLRYqrwve3A0eyJCffSyxyAvLhSMBCMC8rh';
-    if (webhookUrl && webhookUrl.startsWith('http')) {
-      try {
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: 'Pawako Bot 🤖',
-            content: `🔒 **[Fil Privé Créé]** Fil privé \`${threadName}\` ouvert dans **#${cleanChannel}** pour **${memberName}** (${quizTitle}).`,
-            embeds: embed ? [embed] : [],
-          }),
-        });
-      } catch (err) {
-        // Ignore
+      const threadData = await threadRes.json();
+      createdThreadId = threadData.id;
+
+      // 2. Post embed/message in created thread
+      const pingMention = memberDiscordId ? `<@${memberDiscordId}>` : `@${memberName || 'Membre'}`;
+      const defaultContent = content || `🔒 **Fil Privé de Résultats Quiz** — Notification pour ${pingMention}`;
+
+      const msgRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${createdThreadId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: defaultContent,
+          embeds: embed ? [embed] : [],
+        }),
+      });
+
+      const msgData = msgRes.ok ? await msgRes.json() : null;
+
+      // Add member to thread
+      if (memberDiscordId && /^\d{17,20}$/.test(memberDiscordId)) {
+        await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${createdThreadId}/thread-members/${memberDiscordId}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bot ${token}` },
+        }).catch(() => {});
       }
-    }
 
-    return res.json({
-      success: true,
-      threadId: createdThreadId || 'webhook-delivered',
-      threadName,
-      channelName: cleanChannel,
-      message: createdThreadId
-        ? `Fil privé "${threadName}" créé avec succès dans #${cleanChannel} pour ${memberName} !`
-        : `Résultats envoyés pour ${memberName} dans #${cleanChannel} (Fil : ${threadName}).`,
-    });
+      return res.status(201).json({
+        success: true,
+        threadId: createdThreadId,
+        messageId: msgData?.id,
+        threadName,
+        guildId,
+        discordStatus: 201,
+        message: `Fil privé "${threadName}" créé avec succès !`
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, discordStatus: 500, error: err.message });
+    }
   });
 
   // --- CREATE PERSONAL CHANNEL FOR NEW MEMBER ONBOARDING ---
   app.post('/api/discord/create-personal-channel', async (req: Request, res: Response) => {
-    const token = (req.query.token as string) || (req.headers.authorization ? req.headers.authorization.replace('Bot ', '') : '') || defaultBotToken;
-    const { memberName, prefix, rulesMessage } = req.body;
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
+    const { guildId, categoryId, memberName, prefix, rulesMessage } = req.body;
+
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
+      return res.status(400).json({ success: false, error: 'guildId Discord valide requis' });
+    }
 
     const cleanUsername = (memberName || 'membre').toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 20);
     const cleanPrefix = (prefix || 'formation-').replace(/^#/, '').toLowerCase();
     const channelName = `🔒-${cleanPrefix}${cleanUsername}`;
 
-    let createdChannelId = '';
-    let apiError = '';
-
     try {
-      // 1. Get primary guild
-      const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
-        headers: { Authorization: `Bot ${token.trim()}` },
+      const createBody: any = {
+        name: channelName,
+        type: 0, // GUILD_TEXT
+        topic: `Salon personnel de formation pour ${memberName}`,
+      };
+      if (categoryId && /^\d{17,20}$/.test(categoryId)) {
+        createBody.parent_id = categoryId;
+      }
+
+      const createChanRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(createBody),
       });
 
-      if (guildsRes.ok) {
-        const guilds: any[] = await guildsRes.json();
-        if (guilds && guilds.length > 0) {
-          const primaryGuildId = guilds[0].id;
-
-          // 2. Create Text Channel in Guild (Type 0 = GUILD_TEXT)
-          const createChanRes = await fetch(`https://discord.com/api/v10/guilds/${primaryGuildId}/channels`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bot ${token.trim()}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              name: channelName,
-              type: 0, // GUILD_TEXT
-              topic: `Salon personnel de formation pour ${memberName}`,
-            }),
-          });
-
-          if (createChanRes.ok) {
-            const chanData = await createChanRes.json();
-            createdChannelId = chanData.id;
-
-            // 3. Send Welcome & Rules embed into newly created channel
-            await fetch(`https://discord.com/api/v10/channels/${createdChannelId}/messages`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bot ${token.trim()}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                content: `👋 **Bienvenue <@${memberName}> dans ton salon de formation privé !**`,
-                embeds: [
-                  {
-                    title: '📖 Règles & Directives de Formation',
-                    description: rulesMessage || `Bienvenue sur ton espace personnel de formation **PAWAKO** !`,
-                    color: 0x6366f1,
-                    footer: { text: 'Système d\'Onboarding Automatisé • PAWAKO' },
-                    timestamp: new Date().toISOString(),
-                  },
-                ],
-              }),
-            });
-          } else {
-            apiError = await createChanRes.text();
-          }
-        }
-      }
-    } catch (err: any) {
-      apiError = err.message;
-    }
-
-    // Always deliver Webhook Log
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1538892353849532527/8KQxKy9_LOgoL11MAGbYzNeKVyn4lmYr6dLRYqrwve3A0eyJCffSyxyAvLhSMBCMC8rh';
-    if (webhookUrl && webhookUrl.startsWith('http')) {
-      try {
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: 'Pawako Bot 🤖',
-            content: `🚪 **[Salon Personnel Créé]** Nouveau salon privé \`${channelName}\` ouvert pour **${memberName}**.`,
-          }),
+      if (!createChanRes.ok) {
+        const errText = await createChanRes.text();
+        let errJson: any = {};
+        try { errJson = JSON.parse(errText); } catch {}
+        return res.status(createChanRes.status).json({
+          success: false,
+          discordStatus: createChanRes.status,
+          error: `Échec création du salon: ${errJson.message || errText}`
         });
-      } catch (err) {
-        // Ignore
       }
-    }
 
-    return res.json({
-      success: true,
-      channelId: createdChannelId || 'webhook-delivered',
-      channelName,
-      message: createdChannelId
-        ? `Salon personnel "${channelName}" créé avec succès sur Discord pour ${memberName} !`
-        : `Notification de création envoyée pour le salon "${channelName}".`,
-    });
+      const chanData = await createChanRes.json();
+      const createdChannelId = chanData.id;
+
+      // Send rules message in created channel
+      const rulesRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${createdChannelId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: `👋 **Bienvenue <@${memberName}> dans ton salon de formation privé !**`,
+          embeds: [
+            {
+              title: '📖 Règles & Directives de Formation',
+              description: rulesMessage || `Bienvenue sur ton espace personnel de formation **PAWAKO** !`,
+              color: 0x6366f1,
+              footer: { text: 'Système d\'Onboarding Automatisé • PAWAKO' },
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }),
+      });
+
+      const rulesData = rulesRes.ok ? await rulesRes.json() : null;
+
+      return res.status(201).json({
+        success: true,
+        channelId: createdChannelId,
+        messageId: rulesData?.id,
+        channelName,
+        guildId,
+        discordStatus: 201,
+        message: `Salon personnel "${channelName}" créé avec succès pour ${memberName} !`
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, discordStatus: 500, error: err.message });
+    }
   });
 
   // --- API ROUTES ---
@@ -834,12 +1094,70 @@ async function startServer() {
     res.json(store.triggerDiagnostic());
   });
 
-  // Bot Status & Connect
+  // Bot Status & API Credentials Management
   app.get('/api/bot/status', (req: Request, res: Response) => {
+    const rawToken = (process.env.DISCORD_BOT_TOKEN || '').trim();
+    let maskedToken = '';
+    if (rawToken) {
+      maskedToken = rawToken.length > 8
+        ? `${rawToken.substring(0, 4)}••••••••${rawToken.substring(rawToken.length - 4)}`
+        : '••••••••';
+    }
+
     res.json({
       connected: pawakoBot.getIsConnected(),
       tag: pawakoBot.getUserTag(),
-      tokenSet: Boolean(process.env.DISCORD_BOT_TOKEN)
+      tokenSet: Boolean(rawToken),
+      maskedToken,
+      clientId: process.env.DISCORD_CLIENT_ID || '',
+      hasClientSecret: Boolean(process.env.DISCORD_CLIENT_SECRET),
+      webhookUrl: process.env.DISCORD_WEBHOOK_URL || '',
+    });
+  });
+
+  app.post('/api/bot/credentials', (req: Request, res: Response) => {
+    const { token, clientId, clientSecret, webhookUrl } = req.body;
+
+    if (token !== undefined && token !== '') {
+      const cleanToken = sanitizeBotToken(token);
+      process.env.DISCORD_BOT_TOKEN = cleanToken;
+      try {
+        pawakoBot.connectWithToken(cleanToken);
+      } catch (err) {
+        console.warn('[Bot Connect Warning]', err);
+      }
+    }
+
+    if (clientId !== undefined) {
+      process.env.DISCORD_CLIENT_ID = clientId.trim();
+    }
+
+    if (clientSecret !== undefined && clientSecret !== '') {
+      process.env.DISCORD_CLIENT_SECRET = clientSecret.trim();
+    }
+
+    if (webhookUrl !== undefined) {
+      process.env.DISCORD_WEBHOOK_URL = webhookUrl.trim();
+    }
+
+    const currentToken = (process.env.DISCORD_BOT_TOKEN || '').trim();
+    let maskedToken = '';
+    if (currentToken) {
+      maskedToken = currentToken.length > 8
+        ? `${currentToken.substring(0, 4)}••••••••${currentToken.substring(currentToken.length - 4)}`
+        : '••••••••';
+    }
+
+    res.json({
+      success: true,
+      message: 'Identifiants API Discord mis à jour et sécurisés sur le serveur.',
+      tokenSet: Boolean(currentToken),
+      maskedToken,
+      clientId: process.env.DISCORD_CLIENT_ID || '',
+      hasClientSecret: Boolean(process.env.DISCORD_CLIENT_SECRET),
+      webhookUrl: process.env.DISCORD_WEBHOOK_URL || '',
+      connected: pawakoBot.getIsConnected(),
+      tag: pawakoBot.getUserTag(),
     });
   });
 
@@ -848,8 +1166,9 @@ async function startServer() {
     if (!token) {
       return res.status(400).json({ error: 'Token requis' });
     }
-    process.env.DISCORD_BOT_TOKEN = token;
-    pawakoBot.connectWithToken(token);
+    const cleanToken = sanitizeBotToken(token);
+    process.env.DISCORD_BOT_TOKEN = cleanToken;
+    pawakoBot.connectWithToken(cleanToken);
     res.json({ success: true, message: 'Connexion du bot Discord initiée.' });
   });
 

@@ -3,7 +3,7 @@ import { roleService } from './roleService';
 import { serverService } from './serverService';
 import { store } from './store';
 import { discordSyncService } from './discordSyncService';
-import { safeFetchJson } from '../utils/apiUtils';
+import { safeFetchJson, safeFetchJsonWithRetryAndTimeout } from '../utils/apiUtils';
 
 export const mockChannels: DiscordChannelConfig[] = [];
 
@@ -45,15 +45,17 @@ function logDiscordRequest(context: string, url: string, options?: any) {
   console.groupEnd();
 }
 
-function logDiscordResponse(context: string, status: number, contentType: string | null, rawText: string, parsedData?: any, parseError?: any) {
+function logDiscordResponse(context: string, status: number, contentType: string | null, rawText: string, parsedData?: any, apiError?: any) {
   const isOk = status >= 200 && status < 300;
   console.group(`[DiscordService Response ${isOk ? '✅' : '❌'}] ${context}`);
   console.log(`HTTP Status:`, status);
   console.log(`Content-Type:`, contentType || '(aucun)');
   console.log(`Raw Text Length:`, rawText ? rawText.length : 0);
   console.log(`Raw Text Preview:`, rawText ? rawText.slice(0, 500) : '(RÉPONSE VIDE)');
-  if (parseError) {
-    console.error(`🔴 Origine de l'erreur d'analyse JSON (JSON Parsing Error):`, parseError);
+  if (status === 401) {
+    console.warn(`[DiscordService Auth Info] Token Bot Discord non configuré ou à renouveler (HTTP 401). Saisissez votre clé dans 'Token Bot'.`);
+  } else if (apiError) {
+    console.warn(`[DiscordService Info HTTP ${status}]:`, apiError);
   }
   if (parsedData !== undefined && parsedData !== null) {
     console.log(`Données JSON analysées avec succès:`, parsedData);
@@ -255,7 +257,7 @@ class DiscordService {
       try {
         data = JSON.parse(rawText);
       } catch (parseError) {
-        console.error('[fetchAndSyncRealDiscordData 🔴] Échec de l\'analyse du JSON:', parseError);
+        console.warn('[fetchAndSyncRealDiscordData Info] Échec de l\'analyse du JSON:', parseError);
         logDiscordResponse(
           'fetchAndSyncRealDiscordData',
           statusCode,
@@ -308,7 +310,7 @@ class DiscordService {
 
       return data;
     } catch (err: any) {
-      console.error('[Discord Sync Exception]', err);
+      console.warn('[Discord Sync Info]', err?.message || err);
       serverService.setServers([]);
       return { success: false, message: err.message };
     }
@@ -382,7 +384,7 @@ class DiscordService {
           parsedJson = JSON.parse(rawText);
         } catch (e) {
           parseError = e;
-          console.error(`[DiscordService] Failed to parse JSON in sendWebhookTestMessage:`, e);
+          console.warn(`[DiscordService Info] Failed to parse JSON in sendWebhookTestMessage:`, e);
         }
       }
 
@@ -394,7 +396,7 @@ class DiscordService {
         return { success: false, message: `Erreur Discord (${response.status}): ${rawText || 'Échec d\'envoi'}` };
       }
     } catch (err: any) {
-      console.error('[Discord Webhook Error]', err);
+      console.warn('[Discord Webhook Info]', err);
       return { success: false, message: `Erreur réseau ou CORS: ${err?.message || 'Impossible de contacter le webhook Discord.'}` };
     }
   }
@@ -468,14 +470,14 @@ class DiscordService {
           parsedJson = JSON.parse(rawText);
         } catch (e) {
           parseError = e;
-          console.error(`[DiscordService] Failed to parse JSON in sendWebhookLog [${action}]:`, e);
+          console.warn(`[DiscordService Info] Failed to parse JSON in sendWebhookLog [${action}]:`, e);
         }
       }
 
       logDiscordResponse(`sendWebhookLog [${action}]`, res.status, contentType, rawText, parsedJson, parseError);
       return res.ok || res.status === 204;
     } catch (err: any) {
-      console.error('[Discord Webhook Log Error]', err);
+      console.warn('[Discord Webhook Log Info]', err);
       return false;
     }
   }
@@ -538,39 +540,56 @@ class DiscordService {
       };
     }
 
+    // Clean up placeholder description
+    let cleanDesc = moduleData.description || '';
+    if (cleanDesc.toLowerCase().trim() === 'description du module...') {
+      cleanDesc = '';
+    }
+
     // Format blocks summary cleanly for embed description
     const formattedBlocks = moduleData.blocks && moduleData.blocks.length > 0
       ? moduleData.blocks
           .map((b) => {
-            if (b.type === 'heading' || b.title) return `**${b.title || ''}**\n${b.content || ''}`;
-            if (b.type === 'alert') return `> ⚠️ **${b.title || 'Note'}**: ${b.content || ''}`;
+            const hasTitle = Boolean(b.title && b.title.trim().length > 0);
+            if (b.type === 'heading' || hasTitle) {
+              return hasTitle ? `**${b.title!.trim()}**\n${b.content || ''}` : `${b.content || ''}`;
+            }
+            if (b.type === 'alert') return `> ⚠️ **${hasTitle ? b.title!.trim() : 'Note'}**: ${b.content || ''}`;
             if (b.type === 'button') return `🔘 **[${b.content || 'Démarrer le Module'}]**`;
             return b.content || '';
           })
-          .filter(Boolean)
+          .filter((s) => Boolean(s && s.trim().length > 0))
           .join('\n\n')
       : '';
 
-    const descriptionText = moduleData.description && formattedBlocks
-      ? `${moduleData.description}\n\n${formattedBlocks}`
-      : moduleData.description || formattedBlocks || 'Module de formation disponible pour tous les membres.';
+    const descriptionText = cleanDesc && formattedBlocks
+      ? `${cleanDesc}\n\n${formattedBlocks}`
+      : cleanDesc || formattedBlocks || 'Module de formation disponible pour tous les membres.';
 
     const embed = {
       title: `🎓 ${moduleData.title}`,
       description: descriptionText,
       color: 0x6366f1, // Indigo color #6366f1
-      fields: [
-        { name: '📍 Salon Dédié', value: `#${cleanChannel}`, inline: true },
-        { name: '🛡️ Rôle Inscription', value: moduleData.roleEnCoursName || 'Trainee', inline: true },
-        { name: '🏆 Rôle Validation', value: moduleData.roleValidatedName || 'Junior', inline: true },
-        { name: '⚡ Statut', value: moduleData.isActive ? '✅ Publié sur Discord' : '🕒 Brouillon / Modifié', inline: true },
-      ],
       footer: {
-        text: 'Pawako Formation • Système Officiel',
+        text: 'Pawako Formation • Espace de Formation',
         icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
       },
       timestamp: new Date().toISOString(),
     };
+
+    const components = [
+      {
+        type: 1, // Action Row
+        components: [
+          {
+            type: 2, // Button
+            style: 1, // Primary (Blurple)
+            custom_id: `launch_module_${moduleData.id || Date.now()}`,
+            label: '📚 Lancer la Formation',
+          },
+        ],
+      },
+    ];
 
     const endpoint = '/api/discord/send-channel-embed';
     const requestBody = {
@@ -578,17 +597,22 @@ class DiscordService {
       channelName: cleanChannel,
       channelId: targetChannelId,
       embed,
+      components,
       content: `📢 **Nouveau Module de Formation Disponible !**`,
     };
 
     logDiscordRequest('sendModuleEmbed', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
 
     try {
-      const result = await safeFetchJson(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+      const result = await safeFetchJsonWithRetryAndTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        },
+        { timeoutMs: 8000, maxRetries: 3 }
+      );
 
       logDiscordResponse(
         'sendModuleEmbed',
@@ -617,7 +641,7 @@ class DiscordService {
         discordStatus: (result.data && result.data.discordStatus) || result.status,
       };
     } catch (err: any) {
-      console.error('[Discord sendModuleEmbed Exception]', err);
+      console.warn('[Discord sendModuleEmbed Info]', err?.message || err);
       return { success: false, message: err.message || 'Erreur réseau lors de l\'envoi' };
     }
   }
@@ -630,6 +654,7 @@ class DiscordService {
     channelId?: string;
     guildId?: string;
     embed: any;
+    components?: any[];
     content?: string;
   }): Promise<{ success: boolean; message: string; messageId?: string }> {
     const cleanChannel = (options.channelName || '#general').replace(/^#/, '');
@@ -669,15 +694,20 @@ class DiscordService {
       channelName: cleanChannel,
       channelId: targetChannelId,
       embed: options.embed,
+      components: options.components || undefined,
       content: options.content || `📢 **Message Automatique**`,
     };
 
     try {
-      const result = await safeFetchJson(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+      const result = await safeFetchJsonWithRetryAndTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        },
+        { timeoutMs: 8000, maxRetries: 3 }
+      );
 
       if (result.ok && result.data && result.data.success) {
         return {
@@ -773,7 +803,7 @@ class DiscordService {
       }
       return { success: false, message: result.error || (result.data && result.data.error) || 'Impossible de créer le fil privé' };
     } catch (err: any) {
-      console.error('[Discord createPrivateQuizThread Exception]', err);
+      console.warn('[Discord createPrivateQuizThread Info]', err?.message || err);
       return { success: false, message: err.message || 'Erreur réseau lors de la création du fil privé' };
     }
   }
@@ -819,7 +849,7 @@ class DiscordService {
       }
       return { success: false, message: result.error || (result.data && result.data.error) || 'Échec de la création du salon personnel' };
     } catch (err: any) {
-      console.error('[Discord createPersonalChannel Exception]', err);
+      console.warn('[Discord createPersonalChannel Info]', err?.message || err);
       return { success: false, message: err.message || 'Erreur réseau lors de la création du salon personnel' };
     }
   }

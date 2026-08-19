@@ -941,7 +941,23 @@ class StoreService {
     return this.health;
   }
 
-  // --- Backups ---
+  // --- Backups & Data Reset ---
+  public resetAllData(): void {
+    this.adminLogs = [];
+    this.notifications = [];
+    this.tickets = [];
+    this.members = defaultMembers.map((m) => ({
+      ...m,
+      modulesCompleted: [],
+      quizzesPassed: [],
+      attempts: [],
+      currentModuleId: 'mod-1',
+      score: 0,
+      totalQuizzesTaken: 0,
+    }));
+    this.addLog('Anthony (Admin)', 'Nettoyage complet des données effectué avec succès.', 'system');
+  }
+
   public getBackups(): BackupRecord[] {
     return this.backups;
   }

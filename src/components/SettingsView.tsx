@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send } from 'lucide-react';
+import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send, Trash2, RefreshCw } from 'lucide-react';
 import { discordService } from '../services/discordService';
 
 interface SettingsViewProps {
@@ -53,6 +53,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
       onShowToast('Test Webhook Réussi !', 'Un message de confirmation a été posté sur votre salon Discord.', 'success');
     } else {
       onShowToast('Erreur Webhook', result.message, 'info');
+    }
+  };
+
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetAllData = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir effectuer un nettoyage complet des données ? Cette action réinitialise les logs, tentatives de quiz et le cache.')) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        localStorage.clear();
+      }
+
+      await fetch('/api/store/reset-all', { method: 'POST' });
+
+      onShowToast('Nettoyage Effectué !', 'Toutes les données ont été réinitialisées avec succès.', 'success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch {
+      onShowToast('Erreur Nettoyage', 'Impossible de réinitialiser le serveur.', 'info');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -180,6 +206,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
               }`}
             >
               <span className="w-4 h-4 bg-white rounded-full shadow-md"></span>
+            </button>
+          </div>
+        </div>
+
+        {/* Data Reset & Danger Zone Card */}
+        <div className="bg-rose-950/30 border border-rose-500/30 rounded-2xl p-6 space-y-3 shadow-xl">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Nettoyage Complet des Données</h3>
+                <p className="text-xs text-slate-400">
+                  Réinitialise le cache local, les tentatives de quiz, les logs et l'historique des membres.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetAllData}
+              disabled={isResetting}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer transition-all shrink-0"
+            >
+              {isResetting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Nettoyage...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Effacer Toutes les Données</span>
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -15,12 +15,14 @@ import { AutomationsView } from './components/AutomationsView';
 import { DiscordSyncView } from './components/DiscordSyncView';
 import { LogsView } from './components/LogsView';
 import { SettingsView } from './components/SettingsView';
+import { BotTokenModal } from './components/BotTokenModal';
 
 import { serverService } from './services/serverService';
 import { moduleService } from './services/moduleService';
 import { quizService } from './services/quizService';
 import { memberService } from './services/memberService';
 import { discordService } from './services/discordService';
+import { firebaseSyncService } from './services/firebaseSyncService';
 import {
   DiscordServer,
   UserSession,
@@ -58,6 +60,7 @@ export function App() {
 
   const [isQuizBuilderOpen, setIsQuizBuilderOpen] = useState(false);
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
+  const [isBotTokenModalOpen, setIsBotTokenModalOpen] = useState(false);
 
   // System Notifications
   const [notifications, setNotifications] = useState<AdminNotification[]>([
@@ -123,6 +126,9 @@ export function App() {
   };
 
   useEffect(() => {
+    firebaseSyncService.initSync().then(() => {
+      refreshData();
+    });
     discordService.fetchAndSyncRealDiscordData().then((res) => {
       if (res && res.success) {
         refreshData();
@@ -216,6 +222,7 @@ export function App() {
           onOpenMobileMenu={() => setIsOpenMobileSidebar(true)}
           onLogout={() => showToast('Déconnexion simulée', 'Session terminée', 'info')}
           onNavigate={setActiveTab}
+          onOpenTokenModal={() => setIsBotTokenModalOpen(true)}
         />
 
         {/* View Content */}
@@ -299,6 +306,16 @@ export function App() {
         modules={modules}
         onClose={() => setIsQuizBuilderOpen(false)}
         onSave={handleSaveQuiz}
+      />
+
+      {/* Bot Token Configuration Modal */}
+      <BotTokenModal
+        isOpen={isBotTokenModalOpen}
+        onClose={() => setIsBotTokenModalOpen(false)}
+        onSuccess={() => {
+          refreshData();
+        }}
+        onShowToast={showToast}
       />
     </div>
   );

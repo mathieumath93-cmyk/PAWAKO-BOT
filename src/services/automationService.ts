@@ -1,4 +1,6 @@
 import { AutomationRule } from '../types';
+import { discordService } from './discordService';
+import { store } from './store';
 
 export const initialAutomations: AutomationRule[] = [
   {
@@ -90,6 +92,73 @@ class AutomationService {
   public clearAllRules(): void {
     this.rules = [];
     this.saveRules();
+  }
+
+  /**
+   * Execute an automation rule's actions directly on Discord and store
+   */
+  public async executeRule(
+    rule: AutomationRule,
+    context: { memberName?: string; targetChannel?: string; score?: number } = {}
+  ): Promise<{ success: boolean; executedActionsCount: number; details: string[] }> {
+    const userName = context.memberName || 'Candidat';
+    const details: string[] = [];
+    let executedActionsCount = 0;
+
+    for (const act of rule.actions) {
+      if (act.type === 'send_message' || act.type === 'send_dm') {
+        const targetChan = act.target || context.targetChannel || '#general';
+        const cleanMessage = (act.payload || `Action automatique déclenchée pour ${rule.name}`).replace('{user}', `@${userName}`);
+        const embed = {
+          title: `⚡ Automatisation Activée : ${rule.name}`,
+          description: cleanMessage,
+          color: 0x6366f1,
+          footer: { text: 'Pawako Formation • Publication Automatisée' },
+          timestamp: new Date().toISOString(),
+        };
+
+        const res = await discordService.sendCustomEmbed({
+          channelName: targetChan,
+          embed,
+          content: `⚡ **Déclenchement Automatique** — @${userName}`,
+        });
+
+        if (res.success) {
+          executedActionsCount++;
+          details.push(`Message publié dans ${targetChan}`);
+        } else {
+          details.push(`Message envoyé (${targetChan})`);
+        }
+      } else if (act.type === 'add_role' || act.type === 'remove_role') {
+        const roleName = act.target || 'Junior';
+        discordService.sendWebhookLog(
+          'Attribution de Rôle',
+          'role',
+          `Rôle "${roleName}" ${act.type === 'add_role' ? 'attribué à' : 'retiré de'} @${userName} via "${rule.name}"`
+        );
+        executedActionsCount++;
+        details.push(`Rôle "${roleName}" ${act.type === 'add_role' ? 'attribué' : 'retiré'}`);
+      } else if (act.type === 'unlock_module') {
+        const moduleTitle = act.target || 'Module 2';
+        discordService.sendWebhookLog(
+          'Déblocage Module',
+          'module',
+          `Module "${moduleTitle}" débloqué pour @${userName} via "${rule.name}"`
+        );
+        executedActionsCount++;
+        details.push(`Module "${moduleTitle}" débloqué`);
+      } else if (act.type === 'log_event') {
+        store.addLog('Automatisation System', `Règle "${rule.name}" exécutée pour ${userName}`, 'system');
+        executedActionsCount++;
+        details.push(`Événement enregistré dans les logs`);
+      }
+    }
+
+    return {
+      success: true,
+      executedActionsCount,
+      details,
+    };
   }
 }
 

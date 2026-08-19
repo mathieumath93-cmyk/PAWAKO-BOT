@@ -21,6 +21,8 @@ import {
 import { OnboardingFlowConfig, ModuleStepConfig, TrainingModule } from '../types';
 import { onboardingService } from '../services/onboardingService';
 import { discordSyncService, PreFlightValidationResult } from '../services/discordSyncService';
+import { discordService } from '../services/discordService';
+import { reminderService, CandidateReminderRule } from '../services/reminderService';
 import { DiscordResourceSelect } from './DiscordResourceSelect';
 
 interface OnboardingFlowConfiguratorProps {
@@ -39,6 +41,99 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   const [validationResult, setValidationResult] = useState<PreFlightValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState<boolean>(false);
 
+  const [isLaunchingOnboarding, setIsLaunchingOnboarding] = useState(false);
+  const [reminderRules, setReminderRules] = useState<CandidateReminderRule[]>(reminderService.getRules());
+
+  const handleLaunchOnboardingOnDiscord = async () => {
+    setIsLaunchingOnboarding(true);
+    onShowToast('Lancement Onboarding...', `Publication du message d'accueil dans #${config.welcomeChannelName}`, 'info');
+
+    try {
+      const embed = {
+        title: `👋 Bienvenue dans la Formation Pawako !`,
+        description: config.welcomeRulesMessage || `Bienvenue ! Suivez les consignes ci-dessous pour démarrer votre formation.`,
+        color: 0x6366f1, // Indigo #6366f1
+        footer: {
+          text: 'Pawako Formation • Espace de Formation Officiel',
+          icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      const components = [
+        {
+          type: 1, // Action Row
+          components: [
+            {
+              type: 2, // Button
+              style: 1, // Primary (Blurple)
+              custom_id: 'start_onboarding_process',
+              label: `🚀 ${config.welcomeButtonLabel || 'Commencer la formation'}`,
+            },
+          ],
+        },
+      ];
+
+      const res = await discordService.sendCustomEmbed({
+        channelName: config.welcomeChannelName || '#bienvenue',
+        channelId: config.welcomeChannelId,
+        embed,
+        components,
+        content: `📢 **Lancement de l'Onboarding Pawako Formation !**`,
+      });
+
+      if (res.success) {
+        onShowToast(
+          'Onboarding Publié sur Discord 🚀',
+          `Message d'accueil et bouton d'inscription envoyés dans #${config.welcomeChannelName} !`,
+          'success'
+        );
+      } else {
+        onShowToast('Erreur Publication', res.message, 'error');
+      }
+    } catch (err: any) {
+      onShowToast('Erreur Discord', err.message || 'Impossible de publier sur Discord', 'error');
+    } finally {
+      setIsLaunchingOnboarding(false);
+    }
+  };
+
+  const handleTestReminderRule = async (ruleId: string) => {
+    onShowToast('Exécution de la Relance...', 'Envoi du message de relance sur Discord...', 'info');
+    const res = await reminderService.executeCandidateReminder(ruleId, 'Alex', config.welcomeChannelName);
+    if (res.success) {
+      onShowToast('Relance Candidat Envoyée 🚀', res.message, 'success');
+    } else {
+      onShowToast('Erreur Relance', res.message, 'error');
+    }
+  };
+
+  const handleToggleReminderRule = (ruleId: string) => {
+    const updated = reminderRules.map((r) => (r.id === ruleId ? { ...r, enabled: !r.enabled } : r));
+    setReminderRules(updated);
+    reminderService.saveRules(updated);
+    onShowToast('Relance Mise à Jour', 'Modifications enregistrées', 'info');
+  };
+
+  const [isEvaluatingAutoReminders, setIsEvaluatingAutoReminders] = useState(false);
+
+  const handleAutoEvaluateProgressReminders = async () => {
+    setIsEvaluatingAutoReminders(true);
+    onShowToast('Scan d\'Avancement des Membres...', 'Analyse du niveau d\'avancement de chaque candidat...', 'info');
+    try {
+      const res = await reminderService.evaluateAndAutoRemindMembers();
+      onShowToast(
+        'Scan d\'Avancement Terminé 🚀',
+        `${res.evaluatedCount} membres analysés. ${res.remindedCount} relances automatiques envoyées selon leur avancement !`,
+        'success'
+      );
+    } catch (err: any) {
+      onShowToast('Erreur Scan Relances', err?.message || 'Échec de l\'évaluation automatique', 'info');
+    } finally {
+      setIsEvaluatingAutoReminders(false);
+    }
+  };
+
   const handleRunPreFlightCheck = async () => {
     setIsValidating(true);
     try {
@@ -50,7 +145,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         onShowToast('Incohérences détectées', 'Certaines ressources Discord sélectionnées sont manquantes ou inaccessibles.', 'error');
       }
     } catch (err: any) {
-      console.error('[PreFlight Error]', err);
+      console.warn('[PreFlight Info]', err?.message || err);
     } finally {
       setIsValidating(false);
     }
@@ -101,7 +196,17 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <button
+            type="button"
+            disabled={isLaunchingOnboarding}
+            onClick={handleLaunchOnboardingOnDiscord}
+            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <Play className={`w-4 h-4 fill-slate-950 ${isLaunchingOnboarding ? 'animate-spin' : ''}`} />
+            <span>{isLaunchingOnboarding ? 'Publication...' : '🚀 Lancer l\'Onboarding sur Discord'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleRunPreFlightCheck}
@@ -482,6 +587,90 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-red-500 font-mono"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Section 4: Relances Automatiques Adaptées à l'Avancement du Membre */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                4. Relances Automatiques Adaptées à l'Avancement du Membre
+              </h3>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAutoEvaluateProgressReminders}
+                disabled={isEvaluatingAutoReminders}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{isEvaluatingAutoReminders ? 'Analyse...' : '⚡ Scan & Relancer selon l\'Avancement'}</span>
+              </button>
+              <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+                Relances Adaptatives Activées
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Les messages de relance sont automatiquement adaptés au statut exact du membre (non démarré, module en cours, quiz échoué à repasser, ou attente de validation de rôle).
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {reminderRules.map((rule) => (
+              <div
+                key={rule.id}
+                className={`bg-slate-950/80 border rounded-xl p-4 space-y-3 transition-all ${
+                  rule.enabled ? 'border-amber-500/40' : 'border-slate-800 opacity-70'
+                }`}
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleReminderRule(rule.id)}
+                      className={`w-9 h-5 rounded-full transition-colors p-0.5 flex items-center ${
+                        rule.enabled ? 'bg-emerald-600 justify-end' : 'bg-slate-800 justify-start'
+                      }`}
+                    >
+                      <span className="w-3.5 h-3.5 bg-white rounded-full shadow-md"></span>
+                    </button>
+                    <div>
+                      <span className="text-xs font-bold text-white block">{rule.label}</span>
+                      <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 inline-block mt-0.5">
+                        Étape : {rule.stageLabel || rule.stageCondition}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTestReminderRule(rule.id)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Play className="w-3 h-3 fill-amber-300" />
+                    <span>Tester Relance</span>
+                  </button>
+                </div>
+
+                <textarea
+                  rows={2}
+                  value={rule.messageText}
+                  onChange={(e) => {
+                    const updated = reminderRules.map((r) =>
+                      r.id === rule.id ? { ...r, messageText: e.target.value } : r
+                    );
+                    setReminderRules(updated);
+                    reminderService.saveRules(updated);
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+            ))}
           </div>
         </div>
       </div>

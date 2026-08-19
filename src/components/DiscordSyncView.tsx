@@ -300,10 +300,10 @@ export const DiscordSyncView: React.FC = () => {
         `🟢 Synchronisation réussie pour ${data.guild.name} ! ${data.roles.length} rôles, ${data.channels.length} salons, ${data.categories.length} catégories et ${data.members.length} membres récupérés.`
       );
     } catch (err: any) {
-      console.error('[Sync Error]', err);
+      console.warn('[Discord Sync Info]', err?.message || err);
       setSyncError(
         err.message ||
-          'Échec de la synchronisation. Vérifiez que le bot possède les permissions suffisantes sur le serveur Discord.'
+          'Clé Bot Discord non renseignée ou expirée. Cliquez sur \'Token Bot\' en haut à droite pour la saisir.'
       );
     } finally {
       setIsSyncing(false);

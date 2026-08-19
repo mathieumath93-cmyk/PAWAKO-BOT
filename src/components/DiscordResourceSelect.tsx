@@ -97,7 +97,7 @@ export const DiscordResourceSelect: React.FC<DiscordResourceSelectProps> = ({
       await discordSyncService.syncGuild(activeGuildId);
       loadResources();
     } catch (err) {
-      console.error('[Resource Refresh Error]', err);
+      console.warn('[Resource Refresh Info]', err);
     } finally {
       setIsSyncing(false);
     }

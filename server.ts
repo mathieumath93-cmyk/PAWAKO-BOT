@@ -7,7 +7,7 @@ import { pawakoBot } from './src/bot/discordBot';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Initialize Discord Bot if token is present
   const botTokenEnv = (process.env.DISCORD_BOT_TOKEN || '').trim();
@@ -19,31 +19,63 @@ async function startServer() {
   app.use(express.json());
 
   // Helper function to handle Discord REST API rate limits (HTTP 429) automatically
-  async function fetchDiscordWithRetry(url: string, options: any = {}, maxRetries = 3): Promise<any> {
+  async function fetchDiscordWithRetry(url: string, options: any = {}, maxRetries = 3, timeoutMs = 8000): Promise<any> {
     let attempt = 0;
     const method = options.method || 'GET';
     console.log(`[SERVER Discord API Request 🚀] ${method} ${url}`);
+
     while (attempt <= maxRetries) {
-      const res = await fetch(url, options);
-      const contentType = res.headers.get('content-type') || 'none';
-      console.log(`[SERVER Discord API Response ${res.ok ? '✅' : '❌'}] ${method} ${url} - Status: ${res.status} - Content-Type: ${contentType}`);
-      if (res.status === 429) {
-        attempt++;
-        try {
-          const body = await res.clone().json();
-          const retryAfterMs = Math.ceil(((body && body.retry_after) || 0.6) * 1000) + 150;
-          console.warn(`[Discord 429 Rate Limit] Pausing ${retryAfterMs}ms before retry ${attempt}/${maxRetries} for ${url}`);
-          await new Promise((r) => setTimeout(r, retryAfterMs));
-          continue;
-        } catch (jsonErr) {
-          console.error(`[Discord 429 JSON Error] Impossible d'analyser le JSON de rate limit 429:`, jsonErr);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const mergedOptions = {
+          ...options,
+          signal: controller.signal,
+        };
+
+        const res = await fetch(url, mergedOptions);
+        clearTimeout(timeoutId);
+
+        const contentType = res.headers.get('content-type') || 'none';
+        console.log(`[SERVER Discord API Response ${res.ok ? '✅' : '❌'}] ${method} ${url} - Status: ${res.status} - Content-Type: ${contentType}`);
+
+        if (res.status === 429) {
+          attempt++;
+          try {
+            const body = await res.clone().json();
+            const retryAfterMs = Math.ceil(((body && body.retry_after) || 0.6) * 1000) + 150;
+            console.warn(`[Discord 429 Rate Limit] Pausing ${retryAfterMs}ms before retry ${attempt}/${maxRetries} for ${url}`);
+            await new Promise((r) => setTimeout(r, retryAfterMs));
+            continue;
+          } catch (jsonErr) {
+            console.warn(`[Discord 429 JSON Info] Non-JSON payload in rate limit 429:`, jsonErr);
+            await new Promise((r) => setTimeout(r, 1000));
+            continue;
+          }
+        }
+
+        if (res.status >= 500 && attempt < maxRetries) {
+          attempt++;
+          console.warn(`[Discord 5xx Server Error] HTTP ${res.status}. Retrying ${attempt}/${maxRetries} in 1000ms...`);
           await new Promise((r) => setTimeout(r, 1000));
           continue;
         }
+
+        return res;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        attempt++;
+        const isTimeout = err?.name === 'AbortError';
+        console.warn(`[Discord API Request Failed ${attempt}/${maxRetries}] ${isTimeout ? 'Timeout' : err?.message}. Retrying in 1000ms...`);
+
+        if (attempt <= maxRetries) {
+          await new Promise((r) => setTimeout(r, 1000));
+        } else {
+          throw err;
+        }
       }
-      return res;
     }
-    return fetch(url, options);
   }
 
   // Global active guild state
@@ -85,7 +117,7 @@ async function startServer() {
     const msg = parsed?.message || rawText;
 
     if (status === 401 || msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
-      return 'Token Bot Discord invalide ou expiré (Erreur 401: Unauthorized). Veuillez réinitialiser le Token de votre Bot dans le Discord Developer Portal (Onglet Bot -> Reset Token) puis copier-coller la nouvelle clé dans les Paramètres.';
+      return 'Token Bot Discord non configuré ou à renouveler. Cliquez sur le bouton \'Token Bot\' en haut à droite pour saisir votre clé.';
     }
 
     if (status === 403 || msg.toLowerCase().includes('missing access') || msg.toLowerCase().includes('missing permissions') || code === 50001 || code === 50013) {
@@ -134,6 +166,37 @@ async function startServer() {
 
   app.get('/api/discord/active-guild', (req: Request, res: Response) => {
     res.json({ activeGuildId });
+  });
+
+  // --- DISCORD INTERACTIONS WEBHOOK ENDPOINT (Instant Response to Prevent Timeout) ---
+  app.post('/api/discord/interactions', (req: Request, res: Response) => {
+    const { type, data, member, user } = req.body || {};
+
+    // 1. PING verification for Discord Developer Portal
+    if (type === 1) {
+      return res.status(200).json({ type: 1 });
+    }
+
+    const customId = data?.custom_id || '';
+    const username = member?.user?.username || user?.username || 'Membre';
+
+    // 2. Instant response (type 4 = CHANNEL_MESSAGE_WITH_SOURCE) with Ephemeral Flag (flags: 64)
+    let responseText = `👋 Bonjour **@${username}** ! Votre demande a bien été prise en compte par le système PAWAKO.`;
+
+    if (customId.startsWith('start_onboarding') || customId.startsWith('launch_module')) {
+      responseText = `🚀 **Bienvenue @${username} !** Votre session de formation est activée. Vos accès et votre salon privé sont ouverts !`;
+    } else if (customId.startsWith('resume_training')) {
+      responseText = `📚 **Reprise de Formation !** Bonjour @${username}, vous pouvez poursuivre vos cours et votre évaluation.`;
+    }
+
+    // Return instant response (<10ms) so Discord NEVER displays "L'application n'a pas répondu à temps"
+    return res.status(200).json({
+      type: 4,
+      data: {
+        content: responseText,
+        flags: 64, // Ephemeral message (visible only to the user who clicked)
+      },
+    });
   });
 
   app.all(['/api/discord/guild/:guildId/sync', '/api/discord/sync-real-data'], async (req: Request, res: Response) => {
@@ -338,7 +401,7 @@ async function startServer() {
         rawGuildsCount: guilds.length,
       });
     } catch (err: any) {
-      console.error('[Discord Sync Error]', err);
+      console.warn('[Discord Sync Info]', err?.message || err);
       res.status(500).json({ success: false, discordStatus: 500, error: err.message });
     }
   });
@@ -348,7 +411,7 @@ async function startServer() {
     const token = getBotTokenOrError(req, res);
     if (!token) return;
 
-    const { guildId, channelId, embed, content } = req.body;
+    const { guildId, channelId, embed, content, components } = req.body;
 
     if (!guildId || !/^\d{17,20}$/.test(guildId)) {
       return res.status(400).json({
@@ -413,6 +476,7 @@ async function startServer() {
         body: JSON.stringify({
           content: content || null,
           embeds: embed ? [embed] : [],
+          components: components || undefined,
         }),
       });
 
@@ -1182,6 +1246,12 @@ async function startServer() {
       jwksUrl: process.env.SUPABASE_JWKS_URL || 'https://qozrmsyhfxhvnudxfuhu.supabase.co/auth/v1/.well-known/jwks.json',
       configured: true
     });
+  });
+
+  // Data Reset & Cleanup
+  app.post('/api/store/reset-all', (req: Request, res: Response) => {
+    store.resetAllData();
+    res.json({ success: true, message: 'Toutes les données ont été réinitialisées avec succès.' });
   });
 
   // Backups

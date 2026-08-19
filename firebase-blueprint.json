@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "Module": {
+      "title": "Module",
+      "description": "Modules de formation Pawako",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "targetChannel": { "type": "string" },
+        "roleEnCoursName": { "type": "string" },
+        "roleValidatedName": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Évaluations et quiz de validation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "passingScore": { "type": "number" },
+        "questions": { "type": "array" }
+      },
+      "required": ["id", "title"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Membres apprenants et formateurs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "discordId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "roles": { "type": "array" },
+        "progress": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "UsefulLink": {
+      "title": "UsefulLink",
+      "description": "Ressources et liens utiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "title", "url"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Tickets de support et demandes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "authorName": { "type": "string" },
+        "status": { "type": "string" },
+        "messages": { "type": "array" }
+      },
+      "required": ["id", "subject"]
+    }
+  },
+  "firestore": {
+    "/modules/{moduleId}": {
+      "schema": "Module",
+      "description": "Collection des modules de formation"
+    },
+    "/quizzes/{quizId}": {
+      "schema": "Quiz",
+      "description": "Collection des quiz"
+    },
+    "/members/{memberId}": {
+      "schema": "Member",
+      "description": "Collection des membres"
+    },
+    "/usefulLinks/{linkId}": {
+      "schema": "UsefulLink",
+      "description": "Collection des liens utiles"
+    },
+    "/tickets/{ticketId}": {
+      "schema": "Ticket",
+      "description": "Collection des tickets support"
+    }
+  }
+}

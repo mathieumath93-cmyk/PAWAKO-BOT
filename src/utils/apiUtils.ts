@@ -53,7 +53,7 @@ export async function safeFetchJson<T = any>(
     try {
       parsed = JSON.parse(text);
     } catch (jsonErr) {
-      console.error(`[safeFetchJson 🔴] JSON Parsing Error: Failed to parse raw text to JSON:`, jsonErr);
+      console.warn(`[safeFetchJson Info] Non-JSON payload received:`, jsonErr);
       return {
         ok: false,
         status,
@@ -92,4 +92,73 @@ export async function safeFetchJson<T = any>(
       error: err?.message || 'Erreur de connexion réseau au serveur',
     };
   }
+}
+
+export interface RetryOptions {
+  timeoutMs?: number; // Default 8000ms
+  maxRetries?: number; // Default 3
+  retryDelayMs?: number; // Default 500ms
+}
+
+/**
+ * Fetch helper with AbortController timeout and exponential backoff retries.
+ * Handles Discord API timeouts and transient network failures cleanly.
+ */
+export async function safeFetchJsonWithRetryAndTimeout<T = any>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options: RetryOptions = {}
+): Promise<SafeFetchResult<T>> {
+  const timeoutMs = options.timeoutMs ?? 8000;
+  const maxRetries = options.maxRetries ?? 3;
+  let retryDelayMs = options.retryDelayMs ?? 500;
+
+  let lastResult: SafeFetchResult<T> = {
+    ok: false,
+    status: 0,
+    data: null,
+    error: 'Initialisation de la requête',
+  };
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const mergedInit: RequestInit = {
+        ...init,
+        signal: controller.signal,
+      };
+
+      lastResult = await safeFetchJson<T>(input, mergedInit);
+      clearTimeout(timeoutId);
+
+      // If request succeeded or got a non-retriable client error (400, 401, 403, 404), return immediately
+      if (lastResult.ok || (lastResult.status >= 400 && lastResult.status <= 404)) {
+        return lastResult;
+      }
+
+      console.warn(`[safeFetchJson Retry ${attempt}/${maxRetries}] Request to ${input} returned status ${lastResult.status}. Retrying in ${retryDelayMs}ms...`);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      const isTimeout = err?.name === 'AbortError';
+      lastResult = {
+        ok: false,
+        status: isTimeout ? 504 : 0,
+        data: null,
+        error: isTimeout
+          ? `Délai d'attente réseau dépassé (${timeoutMs}ms - Timeout Discord API)`
+          : `Erreur réseau: ${err?.message || 'Connexion interrompue'}`,
+      };
+
+      console.warn(`[safeFetchJson Retry ${attempt}/${maxRetries}] ${lastResult.error}. Retrying in ${retryDelayMs}ms...`);
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise((res) => setTimeout(res, retryDelayMs));
+      retryDelayMs = Math.round(retryDelayMs * 1.5);
+    }
+  }
+
+  return lastResult;
 }

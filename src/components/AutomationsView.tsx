@@ -38,44 +38,18 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
 
   const handleTestRule = async (rule: AutomationRule) => {
     setTestingRuleId(rule.id);
-    onShowToast('Test d\'Automatisation...', `Publication de "${rule.name}" sur Discord`, 'info');
+    onShowToast('Exécution Automatisation...', `Déclenchement des actions pour "${rule.name}" sur Discord`, 'info');
 
     try {
-      for (const act of rule.actions) {
-        if (act.type === 'send_message') {
-          const targetChan = act.target || '#general';
-          const embed = {
-            title: `⚡ Automatisation Activée : ${rule.name}`,
-            description: act.payload || `Action automatique déclenchée pour **${rule.trigger}**.`,
-            color: 0xf59e0b,
-            fields: [
-              { name: '🤖 Règle', value: rule.name, inline: true },
-              { name: '📍 Salon', value: targetChan, inline: true },
-            ],
-            footer: { text: 'Pawako Formation • Publication Automatisée' },
-            timestamp: new Date().toISOString(),
-          };
-
-          await discordService.sendCustomEmbed({
-            channelName: targetChan,
-            embed,
-            content: `⚡ **Déclenchement Automatique** : ${rule.name}`,
-          });
-        } else if (act.type === 'unlock_module') {
-          const mod = modules.find((m) => m.title.includes(act.target) || m.id === act.payload) || modules[0];
-          if (mod) {
-            await discordService.sendModuleEmbed(mod);
-          }
-        }
-      }
+      const res = await automationService.executeRule(rule, { memberName: 'Alex' });
 
       onShowToast(
-        'Test d\'Automatisation Réussi 🚀',
-        `La règle "${rule.name}" a publié ses actions sur Discord !`,
+        'Automatisation Exécutée 🚀',
+        `Règle "${rule.name}" déclenchée (${res.executedActionsCount} actions exécutées) : ${res.details.join(' • ')}`,
         'success'
       );
     } catch (err: any) {
-      onShowToast('Erreur Test', err.message || 'Échec du test d\'automatisation', 'info');
+      onShowToast('Erreur Exécution', err?.message || 'Échec du déclenchement de l\'automatisation', 'info');
     } finally {
       setTestingRuleId(null);
     }

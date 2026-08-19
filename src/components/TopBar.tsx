@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
+  Key,
 } from 'lucide-react';
 import { UserSession, AdminNotification, DiscordServer } from '../types';
 
@@ -21,6 +22,7 @@ interface TopBarProps {
   onOpenMobileMenu: () => void;
   onLogout: () => void;
   onNavigate: (tab: string) => void;
+  onOpenTokenModal?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -31,6 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenMobileMenu,
   onLogout,
   onNavigate,
+  onOpenTokenModal,
 }) => {
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -85,6 +88,19 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="w-2 h-2 rounded-full bg-amber-400"></span>
             <span>Aucun serveur</span>
           </div>
+        )}
+
+        {/* Key Bot Token Button */}
+        {onOpenTokenModal && (
+          <button
+            type="button"
+            onClick={onOpenTokenModal}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Saisir ou Mettre à Jour le Token du Bot Discord"
+          >
+            <Key className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Token Bot</span>
+          </button>
         )}
 
         {/* Notification Bell Dropdown */}

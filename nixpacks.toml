@@ -1,0 +1,9 @@
+# Railway Nixpacks configuration
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"

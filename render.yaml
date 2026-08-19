@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: pawako-formation
+    env: node
+    buildCommand: npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.10.0
+      - key: DISCORD_BOT_TOKEN
+        sync: false

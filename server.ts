@@ -1020,6 +1020,138 @@ async function startServer() {
     }
   });
 
+  // --- SYNC MEMBER ROLES ON DISCORD REST API ---
+  app.post('/api/discord/members/:discordId/roles', async (req: Request, res: Response) => {
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
+    const rawDiscordId = req.params.discordId || '';
+    const cleanDiscordId = rawDiscordId.replace(/^mem-/, '');
+    const { roles, guildId: customGuildId } = req.body;
+    const guildId = customGuildId || activeGuildId;
+
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
+      return res.status(400).json({ success: false, error: 'guildId Discord requis. Synchronisez un serveur dans Discord Sync.' });
+    }
+    if (!cleanDiscordId || !/^\d{17,20}$/.test(cleanDiscordId)) {
+      return res.status(400).json({ success: false, error: 'ID Discord du membre invalide (snowflake).' });
+    }
+    if (!Array.isArray(roles)) {
+      return res.status(400).json({ success: false, error: 'roles doit être un tableau de rôles.' });
+    }
+
+    try {
+      // 1. Fetch current guild roles to resolve role names -> snowflake IDs
+      const rolesRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+
+      if (!rolesRes.ok) {
+        const errText = await rolesRes.text();
+        return res.status(rolesRes.status).json({
+          success: false,
+          discordStatus: rolesRes.status,
+          error: `Impossible de récupérer les rôles du serveur (${guildId}) : ${errText}`,
+        });
+      }
+
+      const guildRoles: any[] = await rolesRes.json();
+      const targetRoleIds: string[] = [];
+      const assignedRoleNames: string[] = [];
+
+      for (const roleInput of roles) {
+        const cleanInput = String(roleInput).trim();
+        if (!cleanInput) continue;
+
+        if (/^\d{17,20}$/.test(cleanInput)) {
+          // It's already a snowflake role ID
+          targetRoleIds.push(cleanInput);
+          const matched = guildRoles.find((r) => r.id === cleanInput);
+          if (matched) assignedRoleNames.push(matched.name);
+        } else {
+          // Find by role name
+          let matchedRole = guildRoles.find(
+            (r) => r.name.toLowerCase().trim() === cleanInput.toLowerCase().trim()
+          );
+
+          // If role does not exist on Discord yet, create it on Discord automatically!
+          if (!matchedRole && cleanInput !== 'Membre' && cleanInput !== 'Nouveau membre') {
+            console.log(`[Role Creation 🛡️] Creating missing Discord role "${cleanInput}" on guild ${guildId}...`);
+            const createRoleRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bot ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                name: cleanInput,
+                color: 0x6366f1, // Indigo
+                mentionable: true,
+              }),
+            });
+
+            if (createRoleRes.ok) {
+              matchedRole = await createRoleRes.json();
+              guildRoles.push(matchedRole);
+              console.log(`[Role Creation ✅] Created Discord role "${matchedRole.name}" (ID: ${matchedRole.id})`);
+            }
+          }
+
+          if (matchedRole) {
+            targetRoleIds.push(matchedRole.id);
+            assignedRoleNames.push(matchedRole.name);
+          }
+        }
+      }
+
+      // 2. Assign resolved role IDs to member on Discord
+      const patchMemberRes = await fetchDiscordWithRetry(
+        `https://discord.com/api/v10/guilds/${guildId}/members/${cleanDiscordId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bot ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            roles: targetRoleIds,
+          }),
+        }
+      );
+
+      if (patchMemberRes.ok || patchMemberRes.status === 200 || patchMemberRes.status === 204) {
+        store.addLog(
+          'Discord API',
+          `[ROLES_UPDATED] Rôles de <@${cleanDiscordId}> mis à jour sur Discord : [${assignedRoleNames.join(', ')}]`,
+          'role'
+        );
+
+        return res.json({
+          success: true,
+          discordStatus: 200,
+          roles: assignedRoleNames,
+          roleIds: targetRoleIds,
+          message: `Rôles [${assignedRoleNames.join(', ')}] attribués au membre sur Discord avec succès !`,
+        });
+      } else {
+        const errText = await patchMemberRes.text();
+        let errJson: any = {};
+        try { errJson = JSON.parse(errText); } catch {}
+
+        const formattedErr = formatDiscordApiError(patchMemberRes.status, errText);
+
+        return res.status(patchMemberRes.status).json({
+          success: false,
+          discordStatus: patchMemberRes.status,
+          error: formattedErr,
+          discordResponse: errJson,
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, discordStatus: 500, error: err.message });
+    }
+  });
+
   // Members Endpoints
   app.get('/api/members', (req: Request, res: Response) => {
     res.json(store.getMembers());
@@ -1031,10 +1163,24 @@ async function startServer() {
     res.json(m);
   });
 
-  app.post('/api/members/:id/roles', (req: Request, res: Response) => {
+  app.post('/api/members/:id/roles', async (req: Request, res: Response) => {
     try {
       const { roles } = req.body;
       const updated = store.updateMemberRoles(req.params.id, roles);
+
+      // Trigger asynchronous sync to Discord REST API
+      const discordId = updated.discordId || req.params.id;
+      if (discordId && /^\d{17,20}$/.test(discordId.replace(/^mem-/, ''))) {
+        fetchDiscordWithRetry(
+          `http://127.0.0.1:${PORT}/api/discord/members/${discordId}/roles`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roles }),
+          }
+        ).catch((e) => console.warn('[Async Role Sync Warning]', e?.message || e));
+      }
+
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });

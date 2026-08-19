@@ -845,12 +845,64 @@ class DiscordService {
       if (result.ok && result.data && result.data.success) {
         const data = result.data;
         this.sendWebhookLog('Salon Personnel Créé', 'member', `Salon "${data.channelName}" créé pour ${options.memberName}`);
-        return { success: true, channelName: data.channelName, message: data.message || `Salon personnel ${data.channelName} créé` };
+        return { success: true, channelName: data.channelName, message: data.message || `Salon personnel ${data.channelName} created` };
       }
       return { success: false, message: result.error || (result.data && result.data.error) || 'Échec de la création du salon personnel' };
     } catch (err: any) {
       console.warn('[Discord createPersonalChannel Info]', err?.message || err);
       return { success: false, message: err.message || 'Erreur réseau lors de la création du salon personnel' };
+    }
+  }
+
+  /**
+   * Assign or update roles for a member on Discord REST API
+   */
+  public async assignDiscordRolesToMember(
+    discordId: string,
+    roles: string[],
+    guildId?: string
+  ): Promise<{ success: boolean; message: string; roles?: string[]; error?: string }> {
+    const activeGuildId = guildId || discordSyncService.getActiveGuildId();
+    const endpoint = `/api/discord/members/${encodeURIComponent(discordId)}/roles`;
+
+    const requestBody = {
+      guildId: activeGuildId,
+      roles,
+    };
+
+    logDiscordRequest('assignDiscordRolesToMember', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
+
+    try {
+      const result = await safeFetchJson(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      logDiscordResponse(
+        'assignDiscordRolesToMember',
+        result.status,
+        'application/json',
+        JSON.stringify(result.data || {}),
+        result.data,
+        result.ok ? null : result.error
+      );
+
+      if (result.ok && result.data && result.data.success) {
+        return {
+          success: true,
+          message: result.data.message || 'Rôles synchronisés sur Discord avec succès.',
+          roles: result.data.roles,
+        };
+      }
+      return {
+        success: false,
+        message: result.error || (result.data && result.data.error) || 'Échec de la synchronisation des rôles sur Discord.',
+        error: result.error || (result.data && result.data.error),
+      };
+    } catch (err: any) {
+      console.warn('[Discord assignDiscordRolesToMember Info]', err?.message || err);
+      return { success: false, message: err.message || 'Erreur réseau lors de la mise à jour des rôles.' };
     }
   }
 }

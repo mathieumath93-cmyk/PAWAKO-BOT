@@ -770,12 +770,21 @@ class StoreService {
       }
 
       this.addLog('System Bot', `Module ${quiz.moduleId} validé par ${member.username} (Score: ${score}%)`, 'quiz', member.username, quiz.title);
+
+      // Sync new roles directly to Discord REST API
+      const discordId = member.discordId || member.id;
+      if (discordId) {
+        discordService.assignDiscordRolesToMember(discordId, member.roles).catch((e) =>
+          console.warn('[Quiz Validation Discord Role Sync Error]', e?.message || e)
+        );
+      }
     } else {
       member.progress[quiz.moduleId] = prog;
       this.addLog('System Bot', `Échec au quiz ${quiz.title} pour ${member.username} (Score: ${score}%)`, 'quiz', member.username, quiz.title);
     }
 
     member.lastActiveAt = this.getFormattedNow();
+    this.saveMembers();
     return { passed, score, attempt };
   }
 
@@ -799,7 +808,17 @@ class StoreService {
     const m = this.getMember(memberId);
     if (!m) throw new Error('Membre non trouvé');
     m.roles = roles;
+    this.saveMembers();
     this.addLog('Anthony (Admin)', `Mise à jour des rôles Discord de ${m.username}`, 'role', m.username);
+
+    // Sync updated roles to Discord
+    const discordId = m.discordId || m.id;
+    if (discordId) {
+      discordService.assignDiscordRolesToMember(discordId, roles).catch((e) =>
+        console.warn('[Admin Update Roles Discord Sync Error]', e?.message || e)
+      );
+    }
+
     return m;
   }
 
@@ -811,7 +830,17 @@ class StoreService {
     };
     m.currentModuleId = 'mod-1';
     m.roles = ['Nouveau membre', 'Module 1 En cours'];
+    this.saveMembers();
     this.addLog('Anthony (Admin)', `Réinitialisation de la progression de ${m.username}`, 'member', m.username, undefined, undefined, 'effectué');
+
+    // Sync reset roles to Discord
+    const discordId = m.discordId || m.id;
+    if (discordId) {
+      discordService.assignDiscordRolesToMember(discordId, m.roles).catch((e) =>
+        console.warn('[Reset Progress Discord Role Sync Error]', e?.message || e)
+      );
+    }
+
     return m;
   }
 

@@ -10,10 +10,14 @@ import {
   MoreVertical,
   Plus,
   RefreshCw,
+  Bell,
+  AlertTriangle,
+  Zap,
 } from 'lucide-react';
 import { Member } from '../types';
 import { memberService } from '../services/memberService';
 import { discordService } from '../services/discordService';
+import { firebaseSyncService } from '../services/firebaseSyncService';
 
 interface MembersViewProps {
   members: Member[];
@@ -29,6 +33,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 
   const filteredMembers = memberService.filterMembers(filterStatus, searchQuery);
 
@@ -42,6 +47,18 @@ export const MembersView: React.FC<MembersViewProps> = ({
     } else {
       onShowToast('Info Synchronisation', res.message || 'Mise à jour effectuée', 'info');
     }
+  };
+
+  const handleRunInactivityWorker = async () => {
+    setIsEvaluating(true);
+    const res = await firebaseSyncService.checkAndApplyAutoReminders();
+    setIsEvaluating(false);
+    onRefresh();
+    onShowToast(
+      'Worker Inactivité Exécuté',
+      `${res.checked} membres vérifiés • ${res.flagged} avec Auto-Reminder (6h/12h/24h)`,
+      'success'
+    );
   };
 
   const handleResetProgress = (memberId: string, username: string) => {
@@ -62,18 +79,30 @@ export const MembersView: React.FC<MembersViewProps> = ({
             <span>Membres du Serveur Discord ({filteredMembers.length})</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Consultez le statut, la progression et les résultats des apprenants en temps réel.
+            Consultez le statut, la progression et le suivi des relances automatiques (6h, 12h, 24h).
           </p>
         </div>
 
-        <button
-          onClick={handleSyncMembers}
-          disabled={isSyncing}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all w-fit shrink-0"
-        >
-          <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>Synchroniser les Membres</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleRunInactivityWorker}
+            disabled={isEvaluating}
+            className="px-3.5 py-2.5 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-white font-semibold text-xs shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2 transition-all shrink-0"
+            title="Analyser l'inactivité et ajouter le drapeau Auto-Reminder (6h, 12h, 24h)"
+          >
+            <Zap className={`w-4 h-4 ${isEvaluating ? 'animate-spin text-amber-200' : 'text-amber-300'}`} />
+            <span>Worker Inactivité</span>
+          </button>
+
+          <button
+            onClick={handleSyncMembers}
+            disabled={isSyncing}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Synchroniser les Membres</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters and Search Bar */}
@@ -93,12 +122,14 @@ export const MembersView: React.FC<MembersViewProps> = ({
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto custom-scrollbar pb-1">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'active', label: 'Active' },
-            { id: 'inactive', label: 'Inactive' },
-            { id: 'completed', label: 'Completed' },
-            { id: 'failed', label: 'Failed' },
-            { id: 'in_progress', label: 'In progress' },
+            { id: 'all', label: 'Tous' },
+            { id: 'auto_reminder', label: '🔔 Auto-Rappels' },
+            { id: 'auto_reminder_6h', label: '⏳ 6h' },
+            { id: 'auto_reminder_12h', label: '⚠️ 12h' },
+            { id: 'auto_reminder_24h', label: '🚨 24h' },
+            { id: 'active', label: 'Actifs' },
+            { id: 'in_progress', label: 'En cours' },
+            { id: 'completed', label: 'Terminés' },
           ].map((f) => (
             <button
               key={f.id}
@@ -195,19 +226,41 @@ export const MembersView: React.FC<MembersViewProps> = ({
                       {member.averageScore || 17.4} / 20
                     </td>
 
-                    {/* Status */}
+                    {/* Status & Auto-Reminder Flag */}
                     <td className="p-4">
-                      {member.isActive ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold flex items-center gap-1 w-fit">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Active</span>
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-semibold flex items-center gap-1 w-fit">
-                          <Clock className="w-3 h-3" />
-                          <span>Inactive</span>
-                        </span>
-                      )}
+                      <div className="flex flex-col gap-1 items-start">
+                        {member.isActive ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold flex items-center gap-1 w-fit border border-emerald-500/20">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Actif</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-semibold flex items-center gap-1 w-fit border border-slate-700">
+                            <Clock className="w-3 h-3" />
+                            <span>Inactif</span>
+                          </span>
+                        )}
+
+                        {member.autoReminderFlag && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit border shadow-sm ${
+                              member.autoReminderLevel === '24h'
+                                ? 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse'
+                                : member.autoReminderLevel === '12h'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                            }`}
+                            title={member.autoReminderReason || 'Relance automatique liée au retard d\'onboarding'}
+                          >
+                            {member.autoReminderLevel === '24h' ? (
+                              <AlertTriangle className="w-3 h-3 text-red-400" />
+                            ) : (
+                              <Bell className="w-3 h-3 text-amber-400" />
+                            )}
+                            <span>Auto-Rappel {member.autoReminderLevel || '6h'}</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Last Activity */}

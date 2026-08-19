@@ -417,6 +417,112 @@ class StoreService {
   private health: SystemHealth = { ...defaultHealth };
   private backups: BackupRecord[] = [...defaultBackups];
   private quizAttempts: QuizAttempt[] = [];
+  private listeners: Array<() => void> = [];
+
+  constructor() {
+    this.loadFromLocalStorage();
+  }
+
+  private loadFromLocalStorage() {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    try {
+      const storedMods = localStorage.getItem('pawako_modules');
+      if (storedMods) this.modules = JSON.parse(storedMods);
+
+      const storedQuizzes = localStorage.getItem('pawako_quizzes');
+      if (storedQuizzes) this.quizzes = JSON.parse(storedQuizzes);
+
+      const storedMembers = localStorage.getItem('pawako_members');
+      if (storedMembers) this.members = JSON.parse(storedMembers);
+
+      const storedLinks = localStorage.getItem('pawako_usefullinks');
+      if (storedLinks) this.usefulLinks = JSON.parse(storedLinks);
+    } catch (e) {
+      console.warn('Error loading store from localStorage:', e);
+    }
+  }
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  public notify(): void {
+    this.listeners.forEach((l) => {
+      try {
+        l();
+      } catch (e) {
+        console.warn('Error in store listener:', e);
+      }
+    });
+  }
+
+  public saveModules(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_modules', JSON.stringify(this.modules));
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
+  }
+
+  public setModules(modules: TrainingModule[]): void {
+    if (Array.isArray(modules) && modules.length > 0) {
+      this.modules = modules;
+      this.saveModules();
+    }
+  }
+
+  public saveQuizzes(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_quizzes', JSON.stringify(this.quizzes));
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
+  }
+
+  public setQuizzes(quizzes: Quiz[]): void {
+    if (Array.isArray(quizzes) && quizzes.length > 0) {
+      this.quizzes = quizzes;
+      this.saveQuizzes();
+    }
+  }
+
+  public saveMembers(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_members', JSON.stringify(this.members));
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
+  }
+
+  public saveUsefulLinks(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_usefullinks', JSON.stringify(this.usefulLinks));
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
+  }
+
+  public setUsefulLinks(links: UsefulLink[]): void {
+    if (Array.isArray(links) && links.length > 0) {
+      this.usefulLinks = links;
+      this.saveUsefulLinks();
+    }
+  }
 
   private maintenance: Record<MaintenanceType, MaintenanceSetting> = {
     quiz: { enabled: false, mode: 'standard' },
@@ -681,6 +787,7 @@ class StoreService {
   public setMembers(newMembers: Member[]): void {
     if (newMembers && newMembers.length > 0) {
       this.members = newMembers;
+      this.saveMembers();
     }
   }
 

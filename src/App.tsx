@@ -23,6 +23,7 @@ import { quizService } from './services/quizService';
 import { memberService } from './services/memberService';
 import { discordService } from './services/discordService';
 import { firebaseSyncService } from './services/firebaseSyncService';
+import { store } from './services/store';
 import {
   DiscordServer,
   UserSession,
@@ -126,14 +127,29 @@ export function App() {
   };
 
   useEffect(() => {
-    firebaseSyncService.initSync().then(() => {
+    // 1. Immediate Stale Data Render (Non-blocking)
+    refreshData();
+
+    // 2. Subscribe to background SWR revalidations and store updates
+    const unsubscribeFirebase = firebaseSyncService.subscribe(() => {
       refreshData();
     });
+    const unsubscribeStore = store.subscribe(() => {
+      refreshData();
+    });
+
+    // 3. Trigger background SWR sync
+    firebaseSyncService.initSync();
     discordService.fetchAndSyncRealDiscordData().then((res) => {
       if (res && res.success) {
         refreshData();
       }
     });
+
+    return () => {
+      unsubscribeFirebase();
+      unsubscribeStore();
+    };
   }, []);
 
   const showToast = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') => {

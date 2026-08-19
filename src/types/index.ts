@@ -155,6 +155,10 @@ export interface Member {
   lastActiveAt: string; // "17/08/2026 14:35"
   modulesCompletedCount?: number;
   averageScore?: number;
+  autoReminderFlag?: boolean;
+  autoReminderLevel?: '6h' | '12h' | '24h' | null;
+  autoReminderFlaggedAt?: string;
+  autoReminderReason?: string;
 }
 
 export interface TicketMessage {

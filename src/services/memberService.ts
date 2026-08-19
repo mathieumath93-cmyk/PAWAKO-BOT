@@ -45,6 +45,14 @@ class MemberService {
         );
       } else if (filterStatus === 'in_progress') {
         members = members.filter((m) => (m.modulesCompletedCount || 0) < 4);
+      } else if (filterStatus === 'auto_reminder') {
+        members = members.filter((m) => m.autoReminderFlag === true);
+      } else if (filterStatus === 'auto_reminder_6h') {
+        members = members.filter((m) => m.autoReminderFlag === true && m.autoReminderLevel === '6h');
+      } else if (filterStatus === 'auto_reminder_12h') {
+        members = members.filter((m) => m.autoReminderFlag === true && m.autoReminderLevel === '12h');
+      } else if (filterStatus === 'auto_reminder_24h') {
+        members = members.filter((m) => m.autoReminderFlag === true && m.autoReminderLevel === '24h');
       }
     }
 

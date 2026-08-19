@@ -207,89 +207,100 @@ class DiscordSyncService {
       throw new Error('Aucun identifiant de serveur fourni pour la synchronisation');
     }
 
-    this.syncStatus = 'syncing';
-    this.syncError = '';
-
-    try {
-      if (onProgress) onProgress('Récupération du serveur...');
-
-      if (onProgress) onProgress('Récupération des rôles et des permissions...');
-      const result = await safeFetchJson(`/api/discord/guild/${guildId}/sync`, { method: 'POST' });
-
-      if (!result.ok || !result.data) {
-        throw new Error(result.error || 'Échec de la synchronisation Discord');
-      }
-
-      const data = result.data;
-      if (!data.success) {
-        throw new Error(data.message || data.error || 'Échec de la synchronisation Discord');
-      }
-
-      if (onProgress) onProgress('Analyse de la hiérarchie et des salons...');
-
-      const cacheObj = {
-        guild: data.guild,
-        roles: data.roles || [],
-        channels: data.channels || [],
-        categories: data.categories || [],
-        members: data.members || [],
-        botPermissions: data.botPermissions || {
-          viewChannel: true,
-          sendMessages: true,
-          embedLinks: true,
-          readMessageHistory: true,
-          manageChannels: true,
-          manageRoles: true,
-          createPrivateThreads: true,
-          sendMessagesInThreads: true,
-          botHighestRolePosition: 99,
-          botRoleName: 'Bot',
-        },
-        lastSyncedAt: new Date().toISOString(),
-      };
-
-      this.syncCache[guildId] = cacheObj;
-      this.saveCacheToStorage(guildId);
-      this.setActiveGuildId(guildId);
-
-      // Update global app services with synced real data
-      const srvData = data.server || {
-        id: cacheObj.guild.id,
-        name: cacheObj.guild.name,
-        iconUrl: cacheObj.guild.icon,
-        memberCount: cacheObj.guild.member_count || cacheObj.members?.length || 0,
-        isBotPresent: true,
-        channelsCount: cacheObj.channels?.length || 0,
-        rolesCount: cacheObj.roles?.length || 0,
-        activeModulesCount: 4,
-      };
-      serverService.updateServerDetails(srvData);
-
-      if (cacheObj.roles && cacheObj.roles.length > 0) {
-        roleService.setRoles(
-          cacheObj.roles.map((r) => ({
-            id: r.id,
-            name: r.name,
-            color: r.color,
-            position: r.position,
-            isManaged: r.managed,
-          }))
-        );
-      }
-
-      if (cacheObj.members && cacheObj.members.length > 0) {
-        store.setMembers(cacheObj.members);
-      }
-
-      this.syncStatus = 'success';
-      if (onProgress) onProgress('Synchronisation terminée avec succès !');
-
-      return cacheObj;
-    } catch (err: any) {
-      this.syncStatus = 'error';
-      this.syncError = err.message || 'Erreur lors de la synchronisation Discord';
-      throw err;
+    if (this.inFlightSyncs.has(guildId)) {
+      return this.inFlightSyncs.get(guildId)!;
     }
+
+    const syncPromise = (async () => {
+      this.syncStatus = 'syncing';
+      this.syncError = '';
+
+      try {
+        if (onProgress) onProgress('Récupération du serveur...');
+
+        if (onProgress) onProgress('Récupération des rôles et des permissions...');
+        const result = await safeFetchJson(`/api/discord/guild/${guildId}/sync`, { method: 'POST' });
+
+        if (!result.ok || !result.data) {
+          throw new Error(result.error || 'Échec de la synchronisation Discord');
+        }
+
+        const data = result.data;
+        if (!data.success) {
+          throw new Error(data.message || data.error || 'Échec de la synchronisation Discord');
+        }
+
+        if (onProgress) onProgress('Analyse de la hiérarchie et des salons...');
+
+        const cacheObj = {
+          guild: data.guild,
+          roles: data.roles || [],
+          channels: data.channels || [],
+          categories: data.categories || [],
+          members: data.members || [],
+          botPermissions: data.botPermissions || {
+            viewChannel: true,
+            sendMessages: true,
+            embedLinks: true,
+            readMessageHistory: true,
+            manageChannels: true,
+            manageRoles: true,
+            createPrivateThreads: true,
+            sendMessagesInThreads: true,
+            botHighestRolePosition: 99,
+            botRoleName: 'Bot',
+          },
+          lastSyncedAt: new Date().toISOString(),
+        };
+
+        this.syncCache[guildId] = cacheObj;
+        this.saveCacheToStorage(guildId);
+        this.setActiveGuildId(guildId);
+
+        // Update global app services with synced real data
+        const srvData = data.server || {
+          id: cacheObj.guild.id,
+          name: cacheObj.guild.name,
+          iconUrl: cacheObj.guild.icon,
+          memberCount: cacheObj.guild.member_count || cacheObj.members?.length || 0,
+          isBotPresent: true,
+          channelsCount: cacheObj.channels?.length || 0,
+          rolesCount: cacheObj.roles?.length || 0,
+          activeModulesCount: 4,
+        };
+        serverService.updateServerDetails(srvData);
+
+        if (cacheObj.roles && cacheObj.roles.length > 0) {
+          roleService.setRoles(
+            cacheObj.roles.map((r) => ({
+              id: r.id,
+              name: r.name,
+              color: r.color,
+              position: r.position,
+              isManaged: r.managed,
+            }))
+          );
+        }
+
+        if (cacheObj.members && cacheObj.members.length > 0) {
+          store.setMembers(cacheObj.members);
+        }
+
+        this.syncStatus = 'success';
+        if (onProgress) onProgress('Synchronisation terminée avec succès !');
+
+        return cacheObj;
+      } catch (err: any) {
+        this.syncStatus = 'error';
+        this.syncError = err.message || 'Erreur lors de la synchronisation Discord';
+        throw err;
+      } finally {
+        this.inFlightSyncs.delete(guildId);
+      }
+    })();
+
+    this.inFlightSyncs.set(guildId, syncPromise);
+    return syncPromise;
   }
 
   public getCachedData(guildId?: string) {
@@ -297,19 +308,61 @@ class DiscordSyncService {
     return this.syncCache[targetGuildId] || null;
   }
 
+  private inFlightSyncs: Map<string, Promise<any>> = new Map();
+
   public getRoles(guildId?: string): DiscordRoleSyncData[] {
+    const targetGuildId = guildId || this.activeGuildId || 'default-guild';
     const cache = this.getCachedData(guildId);
-    return cache ? cache.roles : [];
+    if (cache && cache.roles && cache.roles.length > 0) {
+      return cache.roles;
+    }
+    // Fallback default roles
+    return [
+      { id: 'role-initial', discord_role_id: 'role-initial', guild_id: targetGuildId, name: 'Nouveau membre', color: '#6366f1', position: 1, managed: false, mentionable: false, canAssignByBot: true },
+      { id: 'role-admin', discord_role_id: 'role-admin', guild_id: targetGuildId, name: 'Lead Admin', color: '#f59e0b', position: 10, managed: false, mentionable: false, canAssignByBot: true },
+      { id: 'role-valide', discord_role_id: 'role-valide', guild_id: targetGuildId, name: 'Membre Validé', color: '#10b981', position: 5, managed: false, mentionable: false, canAssignByBot: true },
+      { id: 'role-mod-1-encours', discord_role_id: 'role-mod-1-encours', guild_id: targetGuildId, name: 'Module 1 En cours', color: '#3b82f6', position: 2, managed: false, mentionable: false, canAssignByBot: true },
+      { id: 'role-mod-1-valide', discord_role_id: 'role-mod-1-valide', guild_id: targetGuildId, name: 'Module 1 Validé', color: '#10b981', position: 3, managed: false, mentionable: false, canAssignByBot: true },
+      { id: 'role-mod-2-encours', discord_role_id: 'role-mod-2-encours', guild_id: targetGuildId, name: 'Module 2 En cours', color: '#3b82f6', position: 4, managed: false, mentionable: false, canAssignByBot: true },
+      { id: 'role-mod-2-valide', discord_role_id: 'role-mod-2-valide', guild_id: targetGuildId, name: 'Module 2 Validé', color: '#10b981', position: 5, managed: false, mentionable: false, canAssignByBot: true },
+    ];
   }
 
   public getChannels(guildId?: string): DiscordChannelSyncData[] {
+    const targetGuildId = guildId || this.activeGuildId || 'default-guild';
     const cache = this.getCachedData(guildId);
-    return cache ? cache.channels.filter((c) => c.type === 0 || c.type === 2) : [];
+    if (cache && cache.channels && cache.channels.length > 0) {
+      const nonCategory = cache.channels.filter((c) => String(c.type) !== '4');
+      if (nonCategory.length > 0) return nonCategory;
+    }
+    // Fallback default channels
+    return [
+      { id: 'chan-welcome', discord_channel_id: 'chan-welcome', guild_id: targetGuildId, name: 'bienvenue', type: 0, position: 0 },
+      { id: 'chan-general', discord_channel_id: 'chan-general', guild_id: targetGuildId, name: 'general', type: 0, position: 1 },
+      { id: 'chan-formation', discord_channel_id: 'chan-formation', guild_id: targetGuildId, name: 'formation', type: 0, position: 2 },
+      { id: 'chan-logs', discord_channel_id: 'chan-logs', guild_id: targetGuildId, name: 'logs-formation', type: 0, position: 3 },
+      { id: 'chan-mod-1', discord_channel_id: 'chan-mod-1', guild_id: targetGuildId, name: 'module-1', type: 0, position: 4 },
+      { id: 'chan-mod-2', discord_channel_id: 'chan-mod-2', guild_id: targetGuildId, name: 'module-2', type: 0, position: 5 },
+      { id: 'chan-mod-3', discord_channel_id: 'chan-mod-3', guild_id: targetGuildId, name: 'module-3', type: 0, position: 6 },
+    ];
   }
 
   public getCategories(guildId?: string): DiscordChannelSyncData[] {
+    const targetGuildId = guildId || this.activeGuildId || 'default-guild';
     const cache = this.getCachedData(guildId);
-    return cache ? cache.categories : [];
+    if (cache && cache.categories && cache.categories.length > 0) {
+      return cache.categories;
+    }
+    if (cache && cache.channels && cache.channels.length > 0) {
+      const catChannels = cache.channels.filter((c) => String(c.type) === '4');
+      if (catChannels.length > 0) return catChannels;
+    }
+    // Fallback default categories
+    return [
+      { id: 'cat-onboarding', discord_channel_id: 'cat-onboarding', guild_id: targetGuildId, name: 'FORMATION PAWAKO 🔒', type: 4, position: 0 },
+      { id: 'cat-personal', discord_channel_id: 'cat-personal', guild_id: targetGuildId, name: 'SALONS PERSONNELS 🔒', type: 4, position: 1 },
+      { id: 'cat-admin', discord_channel_id: 'cat-admin', guild_id: targetGuildId, name: 'ADMINISTRATION 🛡️', type: 4, position: 2 },
+    ];
   }
 
   public getRoleById(roleId: string, guildId?: string): DiscordRoleSyncData | undefined {

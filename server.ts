@@ -4,15 +4,23 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { store } from './src/services/store';
 import { pawakoBot } from './src/bot/discordBot';
+import { discordService } from './src/services/discordService';
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // Initialize Discord Bot if token is present
-  const botTokenEnv = (process.env.DISCORD_BOT_TOKEN || '').trim();
+  // Initialize Discord Bot if token is present in ENV or discordService
+  let botTokenEnv = sanitizeBotToken(process.env.DISCORD_BOT_TOKEN || '');
+  if (!botTokenEnv) {
+    const config = discordService.getConfig();
+    if (config && config.botToken) {
+      botTokenEnv = sanitizeBotToken(config.botToken);
+    }
+  }
   if (botTokenEnv) {
-    console.log('[PAWAKO BOT] Initialisation Gateway avec DISCORD_BOT_TOKEN...');
+    console.log('[PAWAKO BOT] Initialisation automatique de la Gateway Discord...');
+    process.env.DISCORD_BOT_TOKEN = botTokenEnv;
     pawakoBot.connectWithToken(botTokenEnv);
   }
 
@@ -102,6 +110,10 @@ async function startServer() {
     }
 
     process.env.DISCORD_BOT_TOKEN = token;
+    if (!pawakoBot.getIsConnected()) {
+      console.log('[PAWAKO BOT] Connexion à la Gateway Discord via le Token reçu dans la requête API...');
+      pawakoBot.connectWithToken(token);
+    }
     return token;
   }
 
@@ -183,8 +195,15 @@ async function startServer() {
     // 2. Instant response (type 4 = CHANNEL_MESSAGE_WITH_SOURCE) with Ephemeral Flag (flags: 64)
     let responseText = `👋 Bonjour **@${username}** ! Votre demande a bien été prise en compte par le système PAWAKO.`;
 
-    if (customId.startsWith('start_onboarding') || customId.startsWith('launch_module')) {
-      responseText = `🚀 **Bienvenue @${username} !** Votre session de formation est activée. Vos accès et votre salon privé sont ouverts !`;
+    if (customId.startsWith('start_onboarding') || customId.startsWith('launch_module') || customId === 'start_onboarding_process') {
+      const chanName = `🔒-formation-${username.toLowerCase().replace(/[^a-z0-9_\-]/g, '')}`;
+      responseText = `🚀 **Bienvenue @${username} !** Votre session de formation est activée. Votre salon privé **#${chanName}** est en cours de préparation dans le serveur !`;
+      
+      // Asynchronously trigger private channel creation in background
+      discordService.createPersonalChannel({
+        memberName: username,
+        prefix: 'formation-',
+      }).catch((err) => console.warn('[Interactions Webhook Async Channel Error]', err));
     } else if (customId.startsWith('resume_training')) {
       responseText = `📚 **Reprise de Formation !** Bonjour @${username}, vous pouvez poursuivre vos cours et votre évaluation.`;
     }

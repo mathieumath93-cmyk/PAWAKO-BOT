@@ -149,7 +149,9 @@ export class PawakoBotRunner {
 
         try {
           // Defer reply immediately (<10ms) so Discord NEVER shows "L'application n'a pas répondu à temps"
-          await interaction.deferReply({ ephemeral: true });
+          if (!interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ ephemeral: true }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
+          }
 
           const customId = interaction.customId;
           const user = interaction.user;

@@ -184,23 +184,18 @@ export class PawakoBotRunner {
               store.saveMembers();
             }
 
-            // Create personal private channel with fallback
-            let chanName = `formation-${user.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '')}`;
-            try {
-              const chanRes = await discordService.createPersonalChannel({
-                memberName: user.username,
-                prefix: 'formation-',
-              });
-              if (chanRes && chanRes.channelName) {
-                chanName = chanRes.channelName;
-              }
-            } catch (chanErr) {
-              console.warn('[Create Personal Channel Info]', chanErr);
-            }
+            // Edit reply INSTANTLY (<50ms) so Discord never displays "L'application n'a pas répondu à temps"
+            const expectedChanName = `🔒-formation-${user.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '')}`;
 
             await interaction.editReply({
-              content: `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours de formation. Votre salon privé **#${chanName}** est prêt ! Rendez-vous dedans pour commencer votre Module.`,
+              content: `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours. Votre salon privé **#${expectedChanName}** est en cours de préparation dans votre serveur !`,
             });
+
+            // Asynchronously create the private channel in background without blocking interaction
+            discordService.createPersonalChannel({
+              memberName: user.username,
+              prefix: 'formation-',
+            }).catch((chanErr) => console.warn('[Create Personal Channel Async Error]', chanErr));
           } else if (customId.startsWith('launch_quiz') || customId.startsWith('retry_quiz')) {
             let m = store.getMember(user.id);
             if (!m) {

@@ -5,11 +5,8 @@ import {
   Lock,
   MessageSquare,
   Shield,
-  HelpCircle,
   Hash,
   Clock,
-  Shuffle,
-  EyeOff,
   BookOpen,
   ArrowRight,
   CheckCircle2,
@@ -386,90 +383,14 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </div>
         </div>
 
-        {/* Section 2: Mode QuizBot & Regles de Quiz */}
+        {/* Section 2: Configuration par Module (Rôles & Progression) */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-            <HelpCircle className="w-4 h-4 text-amber-400" />
+            <BookOpen className="w-4 h-4 text-indigo-400" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              2. Paramètres du Moteur de Quiz (Mode QuizBot)
+              2. Configuration des Rôles Discord par Module
             </h3>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Cooldown minutes */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Délai de Cooldown en cas d'Échec (min)</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={1440}
-                value={config.cooldownMinutes}
-                onChange={(e) => setConfig({ ...config, cooldownMinutes: parseInt(e.target.value) || 15 })}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
-                required
-              />
-              <p className="text-[10px] text-slate-500">Ex: 15 minutes avant de pouvoir repasser un quiz échoué.</p>
-            </div>
-
-            {/* Randomize Questions */}
-            <div className="space-y-1.5 bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                  <Shuffle className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Ordre Aléatoire</span>
-                </label>
-                <p className="text-[10px] text-slate-500">Mélanger les questions à chaque tentative</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={config.randomizeQuestions}
-                onChange={(e) => setConfig({ ...config, randomizeQuestions: e.target.checked })}
-                className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
-              />
-            </div>
-
-            {/* Hide Quiz Solutions */}
-            <div className="space-y-1.5 bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                  <EyeOff className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Masquer la Correction</span>
-                </label>
-                <p className="text-[10px] text-slate-500">Ne pas afficher les bonnes réponses en cas d'échec</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={config.hideQuizSolutions}
-                onChange={(e) => setConfig({ ...config, hideQuizSolutions: e.target.checked })}
-                className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Submit Main Config */}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>Enregistrer la Configuration globale</span>
-          </button>
-        </div>
-      </form>
-
-      {/* Section 3: Configuration par Module (Rôles & Progression) */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-          <BookOpen className="w-4 h-4 text-indigo-400" />
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            3. Configuration des Rôles Discord par Module
-          </h3>
-        </div>
 
         {/* Module Tabs */}
         <div className="flex border-b border-slate-800 overflow-x-auto gap-2">
@@ -589,14 +510,27 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Section 4: Relances Automatiques Adaptées à l'Avancement du Membre */}
+        {/* Submit Main Config */}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>Enregistrer la Configuration globale</span>
+          </button>
+        </div>
+      </form>
+
+        {/* Section 3: Relances Automatiques Adaptées à l'Avancement du Membre */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-400" />
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                4. Relances Automatiques Adaptées à l'Avancement du Membre
+                3. Relances Automatiques Adaptées à l'Avancement du Membre
               </h3>
             </div>
 
@@ -674,6 +608,5 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };

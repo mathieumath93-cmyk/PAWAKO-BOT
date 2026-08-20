@@ -31,17 +31,13 @@ interface SidebarProps {
 }
 
 export const navItems = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'discord-sync', label: 'Discord Sync', icon: RefreshCw },
-  { id: 'modules', label: 'Modules', icon: BookOpen },
-  { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
-  { id: 'members', label: 'Members', icon: Users },
-  { id: 'roles', label: 'Roles', icon: Shield },
-  { id: 'channels', label: 'Channels', icon: Hash },
-  { id: 'messages', label: 'Messages', icon: MessageSquare },
-  { id: 'automations', label: 'Automations', icon: Zap },
-  { id: 'logs', label: 'Logs', icon: FileText },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'overview', label: 'Candidats & Progression', icon: Users },
+  { id: 'modules', label: 'Modules & Supports', icon: BookOpen },
+  { id: 'quizzes', label: 'Questions & Quiz', icon: HelpCircle },
+  { id: 'automations', label: 'Reminders & Relances', icon: Zap },
+  { id: 'messages', label: 'Modèles de Messages', icon: MessageSquare },
+  { id: 'discord-sync', label: 'Synchronisation Discord', icon: RefreshCw },
+  { id: 'settings', label: 'Paramètres', icon: Settings },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({

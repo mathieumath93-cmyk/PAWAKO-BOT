@@ -1,4 +1,4 @@
-import { BotMessageTemplate } from '../types';
+import { BotMessageTemplate, CustomButtonConfig } from '../types';
 
 export const initialBotTemplates: BotMessageTemplate[] = [
   {
@@ -6,23 +6,56 @@ export const initialBotTemplates: BotMessageTemplate[] = [
     key: 'welcome',
     name: "Message d'Accueil (Welcome)",
     channelId: 'chan-formation',
-    channelName: '#formation',
+    channelName: '#👋-bienvenue',
     embedTitle: '👋 Bienvenue sur {server}, {username} !',
-    embedDescription: 'Bienvenue dans notre espace de formation officiel. Clique sur le bouton ci-dessous pour démarrer le **{module}**.',
+    embedDescription: 'Bienvenue dans notre espace de formation officiel. Clique sur le bouton ci-dessous pour démarrer ton Onboarding.',
     embedColor: '#6366f1',
-    buttonLabel: '🚀 Commencer le module',
+    buttonLabel: '🚀 Rejoindre la formation',
+    buttons: [
+      {
+        id: 'btn-w1',
+        label: '🚀 Rejoindre la formation',
+        style: 'Success',
+        customId: 'join_training',
+        actionType: 'join_training',
+      },
+      {
+        id: 'btn-w2',
+        label: '👤 Mon Profil',
+        style: 'Secondary',
+        customId: 'show_my_profile',
+        actionType: 'show_profile',
+      },
+    ],
     enabled: true,
   },
   {
     id: 'msg-module',
     key: 'module',
-    name: 'Annonce de Nouveau Module',
+    name: 'Annonce de Module',
     channelId: 'chan-formation',
-    channelName: '#formation',
-    embedTitle: '📚 Nouveau Module Débloqué : {module}',
-    embedDescription: 'Félicitations {user} ! Tu as débloqué l\'accès au **{module}**. Consulte les leçons et passe le quiz pour obtenir ton badge.',
+    channelName: '#formation-privee',
+    embedTitle: '📚 Module Débloqué : {module}',
+    embedDescription: 'Félicitations {user} ! Tu as débloqué l\'accès au **{module}**. Consulte les leçons et passe le quiz pour valider cette étape.',
     embedColor: '#38bdf8',
     buttonLabel: '📖 Accéder au module',
+    buttons: [
+      {
+        id: 'btn-m1',
+        label: '📖 Démarrer le module',
+        style: 'Primary',
+        customId: 'start_module',
+        actionType: 'start_module',
+      },
+      {
+        id: 'btn-m2',
+        label: '📝 Passer le Quiz',
+        style: 'Success',
+        customId: 'launch_quiz_quiz-1',
+        actionType: 'launch_quiz',
+        actionValue: 'quiz-1',
+      },
+    ],
     enabled: true,
   },
   {
@@ -32,45 +65,54 @@ export const initialBotTemplates: BotMessageTemplate[] = [
     channelId: 'chan-quiz',
     channelName: '#quiz-onboarding',
     embedTitle: '✏️ Quiz Prêt : {module}',
-    embedDescription: 'Es-tu prêt à valider tes connaissances {username} ? Réponds aux questions pour obtenir ton score.',
+    embedDescription: 'Es-tu prêt à valider tes connaissances {username} ? Réponds aux 20 questions sélectionnées pour obtenir ton score.',
     embedColor: '#fbbf24',
     buttonLabel: '📝 Lancer le Quiz',
+    buttons: [
+      {
+        id: 'btn-q1',
+        label: '📝 Démarrer les 20 questions',
+        style: 'Success',
+        customId: 'launch_quiz_quiz-1',
+        actionType: 'launch_quiz',
+        actionValue: 'quiz-1',
+      },
+      {
+        id: 'btn-q2',
+        label: '👤 Mon Profil',
+        style: 'Secondary',
+        customId: 'show_my_profile',
+        actionType: 'show_profile',
+      },
+    ],
     enabled: true,
   },
   {
-    id: 'msg-success',
-    key: 'success',
-    name: 'Félicitations Réussite Quiz',
-    channelId: 'chan-results',
-    channelName: '#resultats-certifications',
-    embedTitle: '🎉 Félicitations {user} !',
-    embedDescription: 'Tu as réussi le **{module}** avec un score remarquable de **{score}/{max_score}** ! Ton prochain module est : **{next_module}**.',
-    embedColor: '#34d399',
-    buttonLabel: '📊 Voir le classement',
-    enabled: true,
-  },
-  {
-    id: 'msg-failure',
-    key: 'failure',
-    name: 'Notification Échec Quiz',
-    channelId: 'chan-results',
-    channelName: '#resultats-certifications',
-    embedTitle: '⚠️ Échec du Quiz pour {username}',
-    embedDescription: 'Désolé {user}, ton score est de **{score}/{max_score}**. Relis attentivement le cours avant de retenter ta chance !',
-    embedColor: '#f43f5e',
-    buttonLabel: '🔄 Réessayer le Quiz',
-    enabled: true,
-  },
-  {
-    id: 'msg-completion',
-    key: 'completion',
-    name: 'Certification Finale de Formation',
-    channelId: 'chan-results',
-    channelName: '#resultats-certifications',
-    embedTitle: '🏆 Parfait Onboarding Terminé !',
-    embedDescription: 'Bravo {user} ! Tu as complété l\'intégralité des modules sur **{server}**. Ton nouveau rôle a été attribué.',
-    embedColor: '#a855f7',
-    buttonLabel: '🎓 Voir mon certificat',
+    id: 'msg-reminder',
+    key: 'reminder',
+    name: 'Message de Relance Automatique',
+    channelId: 'chan-formation',
+    channelName: '#formation-privee',
+    embedTitle: '🔔 Ta formation t\'attend {username} !',
+    embedDescription: 'Tu es actuellement sur le **{module}**. Termine le cours et valide ton quiz pour débloquer la suite de ton parcours.',
+    embedColor: '#f59e0b',
+    buttonLabel: '📚 Reprendre le Module',
+    buttons: [
+      {
+        id: 'btn-r1',
+        label: '📚 Reprendre le Module',
+        style: 'Primary',
+        customId: 'start_module',
+        actionType: 'start_module',
+      },
+      {
+        id: 'btn-r2',
+        label: '📝 Passer le Quiz',
+        style: 'Success',
+        customId: 'launch_quiz_quiz-1',
+        actionType: 'launch_quiz',
+      },
+    ],
     enabled: true,
   },
 ];
@@ -82,6 +124,16 @@ class MessageService {
     return this.templates;
   }
 
+  public createTemplate(template: Omit<BotMessageTemplate, 'id'>): BotMessageTemplate {
+    const newTpl: BotMessageTemplate = {
+      ...template,
+      id: `tpl-${Date.now()}`,
+      buttons: template.buttons || [],
+    };
+    this.templates.push(newTpl);
+    return newTpl;
+  }
+
   public updateTemplate(id: string, updates: Partial<BotMessageTemplate>): BotMessageTemplate {
     const idx = this.templates.findIndex((t) => t.id === id);
     if (idx !== -1) {
@@ -89,6 +141,47 @@ class MessageService {
       return this.templates[idx];
     }
     throw new Error('Template non trouvé');
+  }
+
+  public deleteTemplate(id: string): void {
+    this.templates = this.templates.filter((t) => t.id !== id);
+  }
+
+  public addButtonToTemplate(templateId: string, button: Omit<CustomButtonConfig, 'id'>): BotMessageTemplate {
+    const tpl = this.templates.find((t) => t.id === templateId);
+    if (!tpl) throw new Error('Template non trouvé');
+
+    const newBtn: CustomButtonConfig = {
+      ...button,
+      id: `btn-${Date.now()}`,
+    };
+
+    if (!tpl.buttons) tpl.buttons = [];
+    tpl.buttons.push(newBtn);
+    return tpl;
+  }
+
+  public updateButtonInTemplate(templateId: string, buttonId: string, updates: Partial<CustomButtonConfig>): BotMessageTemplate {
+    const tpl = this.templates.find((t) => t.id === templateId);
+    if (!tpl) throw new Error('Template non trouvé');
+
+    if (tpl.buttons) {
+      const idx = tpl.buttons.findIndex((b) => b.id === buttonId);
+      if (idx !== -1) {
+        tpl.buttons[idx] = { ...tpl.buttons[idx], ...updates };
+      }
+    }
+    return tpl;
+  }
+
+  public deleteButtonFromTemplate(templateId: string, buttonId: string): BotMessageTemplate {
+    const tpl = this.templates.find((t) => t.id === templateId);
+    if (!tpl) throw new Error('Template non trouvé');
+
+    if (tpl.buttons) {
+      tpl.buttons = tpl.buttons.filter((b) => b.id !== buttonId);
+    }
+    return tpl;
   }
 
   public formatMessage(

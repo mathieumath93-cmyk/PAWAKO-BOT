@@ -40,12 +40,21 @@ export interface DiscordChannelConfig {
 
 export type QuestionType = 'multiple_choice' | 'single_choice' | 'true_false' | 'text';
 
+export type CandidateState =
+  | 'nouveau'
+  | 'bienvenue_validee'
+  | 'formation_commencee'
+  | 'module_en_cours'
+  | 'quiz_disponible'
+  | 'cooldown_actif'
+  | 'formation_terminee';
+
 export interface QuizQuestion {
   id: string;
   text: string;
   type?: QuestionType;
   options: string[];
-  correctAnswer: number; // 0-indexed option index or 0 for true/1 for false
+  correctAnswer: number; // 0-indexed option index
   points?: number;
   explanation?: string;
 }
@@ -55,17 +64,20 @@ export interface Quiz {
   moduleId: string;
   title: string;
   description: string;
-  minScore: number; // e.g. 16 or percentage 80
-  maxScore?: number; // e.g. 20
-  timeLimitMinutes?: number; // e.g. 15
-  maxAttempts: number; // e.g. 3
-  questions: QuizQuestion[];
+  minScore: number; // e.g. 16 out of 20 (80%)
+  maxScore?: number; // default 20
+  timeLimitMinutes?: number;
+  maxAttempts?: number;
+  cooldownMinutes: number; // e.g. 30, 60, 120 min configurable per quiz
+  delayMinutesBeforeQuiz?: number; // e.g. 10 min delay before quiz unlocks
+  sampleSize: number; // e.g. 20 randomly drawn questions from bank
+  questions: QuizQuestion[]; // Unlimited question bank
   successMessage?: string;
   failureMessage?: string;
   isActive?: boolean;
-  resultsChannelName?: string; // e.g. "#results" or "#quiz"
+  resultsChannelName?: string;
   resultsChannelId?: string;
-  createPrivateThread?: boolean; // default true
+  createPrivateThread?: boolean;
 }
 
 export interface QuizAttempt {
@@ -149,6 +161,11 @@ export interface Member {
   roles: string[]; // Role names or IDs
   joinedAt: string; // "17/08/2026 14:35"
   currentModuleId: string;
+  candidateState?: CandidateState;
+  cooldownUntilTimestamp?: number | null; // ms timestamp when cooldown expires
+  currentQuizAvailableAtTimestamp?: number | null; // ms timestamp when quiz unlocks (e.g. +10 min)
+  personalChannelId?: string;
+  personalChannelName?: string;
   progress: Record<string, MemberProgress>; // key is moduleId
   extraAttemptsGranted: Record<string, number>; // key is quizId
   isActive: boolean;
@@ -213,9 +230,27 @@ export interface AdminNotification {
   resolvedBy?: string;
 }
 
+export type ButtonActionType =
+  | 'join_training'
+  | 'start_module'
+  | 'launch_quiz'
+  | 'show_profile'
+  | 'assign_role'
+  | 'create_channel'
+  | 'redirect_url';
+
+export interface CustomButtonConfig {
+  id: string;
+  label: string;
+  style: 'Primary' | 'Secondary' | 'Success' | 'Danger' | 'Link';
+  customId: string;
+  actionType: ButtonActionType;
+  actionValue?: string; // e.g. URL for redirect_url, role name/ID for assign_role, moduleId for start_module
+}
+
 export interface BotMessageTemplate {
   id: string;
-  key: 'welcome' | 'module' | 'quiz' | 'success' | 'failure' | 'completion';
+  key: string;
   name: string;
   channelId: string;
   channelName: string;
@@ -223,6 +258,7 @@ export interface BotMessageTemplate {
   embedDescription: string;
   embedColor: string;
   buttonLabel?: string;
+  buttons?: CustomButtonConfig[];
   enabled: boolean;
 }
 

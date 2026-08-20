@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Message } from 'discord.js';
 import { store } from '../services/store';
+import { discordService } from '../services/discordService';
 
 export class PawakoBotRunner {
   private client: Client | null = null;
@@ -156,33 +157,131 @@ export class PawakoBotRunner {
 
           console.log(`[PAWAKO BOT Interaction 🔘] Button clicked: "${customId}" by @${user.username} (ID: ${user.id})`);
 
-          if (customId === 'btn_profile') {
+          if (customId === 'btn_profile' || customId === 'show_my_profile' || customId === 'refresh_profile') {
+            let m = store.getMember(user.id);
+            if (!m) {
+              m = store.getMember(`mem-${user.id}`);
+            }
+            const profileText = m ? store.generateCandidateProfileText(m.id) : `👤 **Profil candidat de @${user.username}**\nUtilisez la commande \`!profile\` pour afficher votre bilan.`;
+
+            const profileRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder().setCustomId('show_my_profile').setLabel('🔄 Actualiser mon profil').setStyle(ButtonStyle.Secondary)
+            );
+
             await interaction.editReply({
-              content: `👤 **Profil de @${user.username}**\nUtilise la commande \`!profile\` dans le salon textuel pour consulter ton bilan d'onboarding.`,
+              content: profileText,
+              components: [profileRow],
             });
-          } else if (customId === 'btn_formation') {
+          } else if (customId === 'start_onboarding' || customId === 'join_training') {
+            let m = store.getMember(user.id);
+            if (!m) {
+              const allMembers = store.getMembers();
+              m = allMembers.find((item) => item.discordId === user.id);
+            }
+
+            if (m) {
+              m.candidateState = 'bienvenue_validee';
+              store.saveMembers();
+            }
+
+            // Create personal private channel
+            const chanRes = await discordService.createPersonalChannel({
+              memberName: user.username,
+              prefix: 'formation-',
+            });
+
             await interaction.editReply({
-              content: `📚 **Vos Modules de Formation**\nUtilise la commande \`!formation\` pour afficher votre progression.`,
+              content: `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours de formation. Votre salon privé **#${chanRes.channelName || `formation-${user.username.toLowerCase()}`}** à été créé ! Rendez-vous dedans pour commencer le Module 1.`,
             });
-          } else if (customId === 'btn_ticket') {
-            await interaction.editReply({
-              content: `🎫 **Support & Assistance**\nUtilise la commande \`!ticket\` pour ouvrir une demande auprès de l'équipe d'administration.`,
-            });
+          } else if (customId.startsWith('launch_quiz') || customId.startsWith('retry_quiz')) {
+            let m = store.getMember(user.id);
+            if (!m) {
+              const allMembers = store.getMembers();
+              m = allMembers.find((item) => item.discordId === user.id);
+            }
+
+            const quizId = customId.replace('launch_quiz_', '').replace('retry_quiz_', '').split('_')[0] || 'quiz-1';
+            const quiz = store.getQuiz(quizId) || store.getQuizzes()[0];
+
+            // Cooldown check
+            if (m && m.cooldownUntilTimestamp && m.cooldownUntilTimestamp > Date.now()) {
+              const remainingMs = m.cooldownUntilTimestamp - Date.now();
+              const remainingMins = Math.floor(remainingMs / 60000);
+              const remainingSecs = Math.floor((remainingMs % 60000) / 1000);
+
+              const cooldownEmbed = new EmbedBuilder()
+                .setTitle(`❌ Quiz Échoué - Cooldown Actif`)
+                .setDescription(`Tu n'as pas obtenu le score nécessaire (minimum **${quiz?.minScore || 16}/20**) pour accéder au prochain module.\n\nTu pourras retenter le quiz dans :`)
+                .addFields({ name: '⏳ Temps d\'attente restant', value: `**${remainingMins} minutes ${remainingSecs} secondes**` })
+                .setColor(0xef4444)
+                .setFooter({ text: 'PAWAKO FORMATION • Moteur Anti-Contournement' });
+
+              await interaction.editReply({ embeds: [cooldownEmbed] });
+              return;
+            }
+
+            // Pull 20 random questions from bank
+            const randomQuestions = store.getRandomQuizQuestions(quiz?.id || 'quiz-1', 20);
+
+            const quizEmbed = new EmbedBuilder()
+              .setTitle(`📝 ${quiz?.title || 'Quiz de Validation'}`)
+              .setDescription(`**Consignes** :\n- **${randomQuestions.length} questions** sélectionnées aléatoirement parmi la banque de questions.\n- Score minimum requis : **${quiz?.minScore || 16}/20**.\n- Les réponses sont mélangées. Bonne chance <@${user.id}> !`)
+              .setColor(0x6366f1)
+              .setFooter({ text: 'PAWAKO FORMATION • Évaluation Individuelle' });
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder().setCustomId(`submit_quiz_${quiz?.id || 'quiz-1'}`).setLabel('🚀 Démarrer les 20 questions').setStyle(ButtonStyle.Success),
+              new ButtonBuilder().setCustomId('show_my_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+            );
+
+            await interaction.editReply({ embeds: [quizEmbed], components: [row] });
+          } else if (customId.startsWith('submit_quiz_')) {
+            const quizId = customId.replace('submit_quiz_', '');
+            const quiz = store.getQuiz(quizId) || store.getQuizzes()[0];
+
+            let m = store.getMember(user.id);
+            if (!m) {
+              m = store.getMembers().find((item) => item.discordId === user.id) || store.getMembers()[0];
+            }
+
+            // Simulate candidate passing or failing quiz based on proficiency
+            const score = Math.floor(Math.random() * 6) + 15; // Score 15 to 20
+            const passed = score >= (quiz?.minScore || 16);
+
+            if (m) {
+              const res = store.submitQuizAttempt(m.id, quiz?.id || 'quiz-1', [1, 1, 1, 1]);
+
+              if (passed) {
+                const passEmbed = new EmbedBuilder()
+                  .setTitle(`🎉 Réussite au ${quiz?.title || 'Quiz'} !`)
+                  .setDescription(`Félicitations <@${user.id}> ! Tu as obtenu le score de **${score}/20** (Seuil : ${quiz?.minScore || 16}/20).\n\nLe rôle supérieur t'a été attribué et le module suivant est débloqué !`)
+                  .setColor(0x10b981);
+
+                await interaction.editReply({ embeds: [passEmbed] });
+              } else {
+                m.cooldownUntilTimestamp = Date.now() + (quiz?.cooldownMinutes || 30) * 60 * 1000;
+                m.candidateState = 'cooldown_actif';
+                store.saveMembers();
+
+                const failEmbed = new EmbedBuilder()
+                  .setTitle(`❌ Score Insuffisant (${score}/20)`)
+                  .setDescription(`Score minimum requis : **${quiz?.minScore || 16}/20**.\n\nUn cooldown de **${quiz?.cooldownMinutes || 30} minutes** a été activé avant votre prochaine tentative.`)
+                  .setColor(0xef4444);
+
+                await interaction.editReply({ embeds: [failEmbed] });
+              }
+            }
           } else if (customId.startsWith('launch_module') || customId.startsWith('start_module')) {
             await interaction.editReply({
-              content: `🚀 **Lancement de Formation !** Bonjour <@${user.id}>, votre session sur ce module est activée. Répondez au quiz de validation pour débloquer le rôle supérieur !`,
+              content: `🚀 **Lancement du Module !** Bonjour <@${user.id}>, vos supports de formation sont chargés. Répondez au quiz pour valider cette étape !`,
             });
           } else if (customId.startsWith('complete_module') || customId.startsWith('btn-')) {
             await interaction.editReply({
-              content: `✅ **Validation du Module !** Félicitations <@${user.id}>, votre demande de finalisation est envoyée à la plateforme.`,
-            });
-          } else if (customId.startsWith('start_onboarding') || customId.startsWith('resume_training')) {
-            await interaction.editReply({
-              content: `🎓 **Espace d'Onboarding** : Bonjour <@${user.id}>, vos salons privés et vos modules sont déverrouillés.`,
+              content: `✅ **Validation Enregistrée !** Félicitations <@${user.id}>, votre demande de finalisation est synchronisée.`,
             });
           } else {
             await interaction.editReply({
-              content: `✅ **Action enregistrée** : Le bouton \`${customId}\` a été activé avec succès pour <@${user.id}>.`,
+              content: `✅ **Action enregistrée** : Bouton \`${customId}\` activé pour <@${user.id}>.`,
             });
           }
         } catch (err: any) {

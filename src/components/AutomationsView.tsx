@@ -389,7 +389,8 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
                         <option value="add_role">Ajouter un Rôle</option>
                         <option value="remove_role">Retirer un Rôle</option>
                         <option value="send_message">Envoyer un Message</option>
-                        <option value="create_thread">Créer un Fil Privé</option>
+                        <option value="unlock_module">Débloquer un Module</option>
+                        <option value="send_dm">Envoyer un Message Privé (MP)</option>
                       </select>
 
                       <button

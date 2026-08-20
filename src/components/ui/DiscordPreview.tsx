@@ -1,5 +1,6 @@
 import React from 'react';
-import { Bot, Check } from 'lucide-react';
+import { Bot, Check, ExternalLink } from 'lucide-react';
+import { CustomButtonConfig } from '../../types';
 
 interface DiscordPreviewProps {
   botName?: string;
@@ -8,6 +9,7 @@ interface DiscordPreviewProps {
   description: string;
   color?: string; // hex
   buttonLabel?: string;
+  buttons?: CustomButtonConfig[];
   channelName?: string;
   footerText?: string;
 }
@@ -19,9 +21,32 @@ export const DiscordPreview: React.FC<DiscordPreviewProps> = ({
   description,
   color = '#6366f1',
   buttonLabel,
+  buttons,
   channelName = '#formation',
-  footerText = 'Pawako Formation • Système Officiel',
+  footerText = 'Pawako Formation • Moteur d\'Onboarding',
 }) => {
+  const displayButtons = buttons && buttons.length > 0
+    ? buttons
+    : buttonLabel
+    ? [{ id: 'b1', label: buttonLabel, style: 'Primary', customId: 'btn', actionType: 'join_training' as const }]
+    : [];
+
+  const getButtonStyleClass = (style: string) => {
+    switch (style) {
+      case 'Success':
+        return 'bg-[#248046] hover:bg-[#1a6334] text-white';
+      case 'Secondary':
+        return 'bg-[#4E5058] hover:bg-[#6D6F78] text-white';
+      case 'Danger':
+        return 'bg-[#DA373C] hover:bg-[#A12828] text-white';
+      case 'Link':
+        return 'bg-[#4E5058] hover:bg-[#6D6F78] text-white';
+      case 'Primary':
+      default:
+        return 'bg-[#5865F2] hover:bg-[#4752C4] text-white';
+    }
+  };
+
   return (
     <div className="bg-[#313338] text-[#dbdee1] rounded-xl p-4 border border-[#1e1f22] font-sans text-xs space-y-3 shadow-xl select-none">
       {/* Header Channel context */}
@@ -82,15 +107,21 @@ export const DiscordPreview: React.FC<DiscordPreviewProps> = ({
             )}
           </div>
 
-          {/* Discord Component Button */}
-          {buttonLabel && (
-            <div className="pt-1 flex gap-2">
-              <button
-                type="button"
-                className="px-3.5 py-1.5 rounded bg-[#5865F2] hover:bg-[#4752C4] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-default"
-              >
-                <span>{buttonLabel}</span>
-              </button>
+          {/* Discord Component Buttons */}
+          {displayButtons.length > 0 && (
+            <div className="pt-1 flex flex-wrap gap-2">
+              {displayButtons.map((btn) => (
+                <button
+                  key={btn.id}
+                  type="button"
+                  className={`px-3.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-default ${getButtonStyleClass(btn.style)}`}
+                >
+                  <span>{btn.label}</span>
+                  {(btn.style === 'Link' || btn.actionType === 'redirect_url') && (
+                    <ExternalLink className="w-3 h-3 opacity-75" />
+                  )}
+                </button>
+              ))}
             </div>
           )}
         </div>

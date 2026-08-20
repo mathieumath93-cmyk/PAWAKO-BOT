@@ -9,10 +9,8 @@ import {
   Sparkles,
   Clock,
   RotateCcw,
-  Lock,
 } from 'lucide-react';
 import { Quiz, QuizQuestion, QuestionType, TrainingModule } from '../types';
-import { discordService } from '../services/discordService';
 
 interface QuizBuilderModalProps {
   isOpen: boolean;
@@ -31,19 +29,16 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const availableChannels = discordService.getChannels();
-
   const [title, setTitle] = useState(quizToEdit?.title || 'Quiz Onboarding');
   const [description, setDescription] = useState(quizToEdit?.description || 'Évaluez vos connaissances...');
   const [moduleId, setModuleId] = useState(quizToEdit?.moduleId || modules[0]?.id || 'mod-1');
   const [minScore, setMinScore] = useState(quizToEdit?.minScore || 16);
   const [maxScore, setMaxScore] = useState(quizToEdit?.maxScore || 20);
   const [maxAttempts, setMaxAttempts] = useState(quizToEdit?.maxAttempts || 3);
+  const [sampleSize, setSampleSize] = useState(quizToEdit?.sampleSize || 20);
+  const [cooldownMinutes, setCooldownMinutes] = useState(quizToEdit?.cooldownMinutes || 30);
+  const [delayMinutesBeforeQuiz, setDelayMinutesBeforeQuiz] = useState(quizToEdit?.delayMinutesBeforeQuiz || 10);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(quizToEdit?.timeLimitMinutes || 15);
-  const [resultsChannelName, setResultsChannelName] = useState(
-    quizToEdit?.resultsChannelName || (availableChannels[0] ? `#${availableChannels[0].name.replace(/^#/, '')}` : '#results')
-  );
-  const [createPrivateThread, setCreatePrivateThread] = useState(quizToEdit?.createPrivateThread ?? true);
   const [successMessage, setSuccessMessage] = useState(quizToEdit?.successMessage || 'Félicitations ! Vous avez validé le quiz.');
   const [failureMessage, setFailureMessage] = useState(quizToEdit?.failureMessage || 'Score insuffisant. Relisez le cours avant de recommencer.');
 
@@ -116,12 +111,13 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
       minScore: Number(minScore),
       maxScore: Number(maxScore),
       maxAttempts: Number(maxAttempts),
+      sampleSize: Number(sampleSize) || 20,
+      cooldownMinutes: Number(cooldownMinutes) || 30,
+      delayMinutesBeforeQuiz: Number(delayMinutesBeforeQuiz) || 10,
       timeLimitMinutes: Number(timeLimitMinutes),
       questions,
       successMessage,
       failureMessage,
-      resultsChannelName,
-      createPrivateThread,
     });
     onClose();
   };
@@ -183,73 +179,38 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Tentatives Max</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Qst. Présentées</label>
                 <input
                   type="number"
-                  value={maxAttempts}
-                  onChange={(e) => setMaxAttempts(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                  value={sampleSize}
+                  onChange={(e) => setSampleSize(Number(e.target.value))}
+                  placeholder="20"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
                 />
               </div>
             </div>
 
-            {/* Private Thread Discord Channel Options */}
-            <div className="pt-2 border-t border-slate-800 space-y-2">
-              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Salon Fil Privé Résultats</span>
-              </label>
-
-              {availableChannels.length > 0 ? (
-                <select
-                  value={resultsChannelName}
-                  onChange={(e) => setResultsChannelName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-                >
-                  {availableChannels.map((chan) => {
-                    const cName = `#${chan.name.replace(/^#/, '')}`;
-                    return (
-                      <option key={chan.id} value={cName}>
-                        {cName} ({chan.categoryName || 'DISCORD'})
-                      </option>
-                    );
-                  })}
-                  {!availableChannels.some((c) => `#${c.name.replace(/^#/, '')}` === resultsChannelName) && (
-                    <option value={resultsChannelName}>{resultsChannelName}</option>
-                  )}
-                </select>
-              ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Cooldown (Minutes)</label>
                 <input
-                  type="text"
-                  value={resultsChannelName}
-                  onChange={(e) => setResultsChannelName(e.target.value)}
-                  placeholder="#results"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  type="number"
+                  value={cooldownMinutes}
+                  onChange={(e) => setCooldownMinutes(Number(e.target.value))}
+                  placeholder="30"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
                 />
-              )}
-
-              <label className="flex items-center gap-2 cursor-pointer pt-1">
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Attente Pré-Quiz (Min)</label>
                 <input
-                  type="checkbox"
-                  checked={createPrivateThread}
-                  onChange={(e) => setCreatePrivateThread(e.target.checked)}
-                  className="rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-0"
+                  type="number"
+                  value={delayMinutesBeforeQuiz}
+                  onChange={(e) => setDelayMinutesBeforeQuiz(Number(e.target.value))}
+                  placeholder="10"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
                 />
-                <span className="text-[11px] text-slate-300 font-medium">
-                  Créer un fil privé Discord identifiable par le pseudo
-                </span>
-              </label>
-
-              {createPrivateThread && (
-                <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-[10px] text-indigo-300 space-y-1">
-                  <div className="font-bold flex items-center gap-1">
-                    <span>Format du nom de fil :</span>
-                  </div>
-                  <div className="font-mono bg-slate-950/80 p-1.5 rounded text-white border border-slate-800">
-                    🔒 quiz-{title.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 15)}-[pseudo-membre]
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Question Index Sidebar List */}

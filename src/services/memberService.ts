@@ -70,6 +70,14 @@ class MemberService {
   public updateRoles(memberId: string, roles: string[]): Member {
     return store.updateMemberRoles(memberId, roles);
   }
+
+  public resetCooldown(memberId: string): Member {
+    return store.resetCandidateCooldown(memberId);
+  }
+
+  public forceModule(memberId: string, moduleId: string): Member {
+    return store.forceCandidateModule(memberId, moduleId);
+  }
 }
 
 export const memberService = new MemberService();

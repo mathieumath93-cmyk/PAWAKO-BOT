@@ -10,6 +10,7 @@ import {
   MemberProgress,
   Quiz,
   QuizAttempt,
+  QuizQuestion,
   SystemHealth,
   Ticket,
   TicketMessage,
@@ -173,8 +174,11 @@ const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-1',
     title: 'Quiz 1 : Onboarding & Culture',
     description: 'Vérification des connaissances du Module 1.',
-    minScore: 80,
+    minScore: 16,
     maxAttempts: 3,
+    cooldownMinutes: 30,
+    sampleSize: 20,
+    delayMinutesBeforeQuiz: 10,
     questions: [
       {
         id: 'q1-1',
@@ -211,8 +215,11 @@ const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-2',
     title: 'Quiz 2 : Processus & Outils Internes',
     description: 'Évaluation de la maîtrise des outils et tickets.',
-    minScore: 80,
+    minScore: 16,
     maxAttempts: 3,
+    cooldownMinutes: 60,
+    sampleSize: 20,
+    delayMinutesBeforeQuiz: 10,
     questions: [
       {
         id: 'q2-1',
@@ -245,8 +252,11 @@ const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-3',
     title: 'Quiz 3 : Communication & Reporting',
     description: 'Test sur les standards de communication.',
-    minScore: 75,
+    minScore: 16,
     maxAttempts: 3,
+    cooldownMinutes: 120,
+    sampleSize: 20,
+    delayMinutesBeforeQuiz: 10,
     questions: [
       {
         id: 'q3-1',
@@ -266,8 +276,11 @@ const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-4',
     title: 'Quiz 4 : Gestion des Incidents',
     description: 'Questions sur la résilience et le rétablissement.',
-    minScore: 80,
+    minScore: 16,
     maxAttempts: 3,
+    cooldownMinutes: 120,
+    sampleSize: 20,
+    delayMinutesBeforeQuiz: 10,
     questions: [
       {
         id: 'q4-1',
@@ -287,8 +300,11 @@ const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-5',
     title: 'Quiz 5 : Examen de Certification Finale',
     description: 'Examen global synthétisant l\'ensemble du parcours PAWAKO.',
-    minScore: 80,
+    minScore: 16,
     maxAttempts: 2,
+    cooldownMinutes: 180,
+    sampleSize: 20,
+    delayMinutesBeforeQuiz: 10,
     questions: [
       {
         id: 'q5-1',
@@ -842,6 +858,158 @@ class StoreService {
     }
 
     return m;
+  }
+
+  // --- CANDIDATE ONBOARDING ENGINE & QUESTION BANK ---
+
+  /**
+   * Randomly selects questions from quiz question bank & shuffles answer options
+   */
+  public getRandomQuizQuestions(quizId: string, targetCount: number = 20): QuizQuestion[] {
+    const quiz = this.getQuiz(quizId);
+    if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+      return [];
+    }
+
+    const count = quiz.sampleSize || targetCount || 20;
+    const bank = [...quiz.questions];
+
+    // Fisher-Yates shuffle question bank
+    for (let i = bank.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bank[i], bank[j]] = [bank[j], bank[i]];
+    }
+
+    // Select up to `count` questions
+    const selected = bank.slice(0, count);
+
+    // If bank is smaller than count, duplicate with variation to reach 20 questions
+    while (selected.length < count && bank.length > 0) {
+      const baseQ = bank[selected.length % bank.length];
+      selected.push({
+        ...baseQ,
+        id: `${baseQ.id}-variation-${selected.length}`,
+      });
+    }
+
+    // Shuffle options for each question & update correctAnswer index
+    return selected.map((q, idx) => {
+      const originalOptions = [...q.options];
+      const correctText = originalOptions[q.correctAnswer] || originalOptions[0];
+
+      // Shuffle options
+      const shuffledOptions = [...originalOptions];
+      for (let i = shuffledOptions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+      }
+
+      const newCorrectIndex = shuffledOptions.indexOf(correctText);
+
+      return {
+        ...q,
+        id: `${q.id}-q${idx + 1}`,
+        options: shuffledOptions,
+        correctAnswer: newCorrectIndex >= 0 ? newCorrectIndex : 0,
+      };
+    });
+  }
+
+  /**
+   * Generate candidate personal profile text formatted for Discord
+   */
+  public generateCandidateProfileText(memberId: string): string {
+    const member = this.getMember(memberId);
+    if (!member) return '⚠️ Profil candidat non trouvé.';
+
+    const modules = this.getModules();
+    const totalModules = modules.length || 1;
+    const completedCount = Object.values(member.progress).filter((p) => p.status === 'valide').length;
+    const progressPercent = Math.round((completedCount / totalModules) * 100);
+
+    // Progress bar string e.g. ████████░░ 80%
+    const filledBlocks = Math.round(progressPercent / 10);
+    const emptyBlocks = 10 - filledBlocks;
+    const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+
+    const currentMod = modules.find((m) => m.id === member.currentModuleId);
+    const currentModTitle = currentMod ? currentMod.title : 'Formation Terminée';
+
+    // Quiz attempts list
+    const memberAttempts = this.quizAttempts.filter((att) => att.memberId === member.id || att.memberId === member.discordId);
+    let quizResultsText = 'Aucun quiz effectué pour le moment.';
+    if (memberAttempts.length > 0) {
+      quizResultsText = memberAttempts
+        .map((att) => `${att.quizTitle} → **${att.score}/20** ${att.passed ? '✅' : '❌'}`)
+        .join('\n');
+    }
+
+    // Cooldown status check
+    let statusText = member.candidateState === 'formation_terminee'
+      ? '🎉 Formation Terminée - Prêt à rejoindre l\'équipe !'
+      : `Formation en cours (${currentModTitle})`;
+
+    if (member.cooldownUntilTimestamp && member.cooldownUntilTimestamp > Date.now()) {
+      const remainingMinutes = Math.ceil((member.cooldownUntilTimestamp - Date.now()) / 60000);
+      statusText = `⏳ Cooldown actif (Prochaine tentative dans ${remainingMinutes} min)`;
+    }
+
+    return `━━━━━━━━━━━━━━━━━━━━
+       👤 MON PROFIL
+━━━━━━━━━━━━━━━━━━━━
+
+Candidat : **${member.username}**
+
+📊 **Progression**
+\`${progressBar}\` **${progressPercent}%**
+
+📚 **Modules terminés** : ${completedCount}/${totalModules}
+📖 **Module actuel** : ${currentModTitle}
+
+📝 **Résultats des quiz**
+${quizResultsText}
+
+🎯 **Statut** :
+${statusText}
+
+━━━━━━━━━━━━━━━━━━━━`;
+  }
+
+  /**
+   * Reset candidate cooldown timer
+   */
+  public resetCandidateCooldown(memberId: string): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+    member.cooldownUntilTimestamp = null;
+    member.candidateState = 'quiz_disponible';
+    this.saveMembers();
+    this.addLog('Anthony (Admin)', `Réinitialisation du cooldown pour ${member.username}`, 'member', member.username);
+    return member;
+  }
+
+  /**
+   * Force candidate to a specific module
+   */
+  public forceCandidateModule(memberId: string, moduleId: string): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+    const targetModule = this.getModule(moduleId);
+    if (!targetModule) throw new Error('Module non trouvé');
+
+    member.currentModuleId = moduleId;
+    member.candidateState = 'module_en_cours';
+    member.cooldownUntilTimestamp = null;
+
+    if (!member.progress[moduleId]) {
+      member.progress[moduleId] = { moduleId, status: 'en_cours', attemptsCount: 0 };
+    } else {
+      member.progress[moduleId].status = 'en_cours';
+    }
+
+    this.saveMembers();
+    this.addLog('Anthony (Admin)', `Passage forcé de ${member.username} au module "${targetModule.title}"`, 'member', member.username);
+    return member;
   }
 
   public resetMemberAttempts(memberId: string, quizId: string): Member {

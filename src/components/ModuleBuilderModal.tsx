@@ -17,12 +17,10 @@ import {
   Sparkles,
   Eye,
   Save,
-  Send,
+  Lock,
 } from 'lucide-react';
 import { TrainingModule, ModuleBlock, ModuleBlockType } from '../types';
 import { DiscordPreview } from './ui/DiscordPreview';
-import { discordService } from '../services/discordService';
-import { roleService } from '../services/roleService';
 
 interface ModuleBuilderModalProps {
   isOpen: boolean;
@@ -39,19 +37,9 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const availableChannels = discordService.getChannels();
-  const availableRoles = roleService.getRoles();
-
-  const initialChannel = moduleToEdit?.channelName || (availableChannels[0] ? `#${availableChannels[0].name.replace(/^#/, '')}` : '#formation');
-  const initialRoleInsc = moduleToEdit?.roleEnCoursName || (availableRoles[0]?.name || 'Trainee');
-  const initialRoleVal = moduleToEdit?.roleValidatedName || (availableRoles[1]?.name || 'Junior');
-
   const [title, setTitle] = useState(moduleToEdit?.title || 'Module de Formation');
   const [description, setDescription] = useState(moduleToEdit?.description || 'Description du module...');
   const [isActive, setIsActive] = useState(moduleToEdit?.isActive ?? true);
-  const [channelName, setChannelName] = useState(initialChannel);
-  const [roleEnCoursName, setRoleEnCoursName] = useState(initialRoleInsc);
-  const [roleValidatedName, setRoleValidatedName] = useState(initialRoleVal);
 
   const defaultBlocks: ModuleBlock[] = moduleToEdit?.blocks || [
     { id: 'blk-1', type: 'heading', title: 'Introduction', content: title },
@@ -115,21 +103,11 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
 
   const handleSaveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanChan = channelName.replace(/^#/, '').toLowerCase().trim();
-    const matchedChan = availableChannels.find(
-      (c) => c.name.replace(/^#/, '').toLowerCase().trim() === cleanChan || c.id === channelName
-    );
-    const resolvedChannelId = matchedChan?.id || moduleToEdit?.channelId || moduleToEdit?.discordChannelId || '';
-
     onSave({
       title,
       description,
       isActive,
-      channelName,
-      channelId: resolvedChannelId,
-      discordChannelId: resolvedChannelId,
-      roleEnCoursName,
-      roleValidatedName,
+      channelName: '#formation-privee',
       blocks,
       content: blocks.map((b) => b.content).join('\n\n'),
     });
@@ -146,9 +124,9 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-indigo-400" />
-              <span>{moduleToEdit ? 'Éditeur de Module — Pawako Builder' : 'Créer un Nouveau Module'}</span>
+              <span>{moduleToEdit ? 'Éditeur de Contenu du Module' : 'Créer un Nouveau Module'}</span>
             </h2>
-            <p className="text-xs text-slate-400">Assemblez des blocs visuels et prévisualisez le rendu Discord en direct.</p>
+            <p className="text-xs text-slate-400">Assemblez les leçons, textes, vidéos et consignes de ce module.</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
             <X className="w-5 h-5" />
@@ -165,101 +143,32 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold"
               />
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                Salon Discord de Destination
-              </label>
-              {availableChannels.length > 0 ? (
-                <select
-                  value={channelName}
-                  onChange={(e) => setChannelName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-                >
-                  {availableChannels.map((chan) => {
-                    const cName = `#${chan.name.replace(/^#/, '')}`;
-                    return (
-                      <option key={chan.id} value={cName}>
-                        {cName} ({chan.categoryName || 'SÉLECTION'})
-                      </option>
-                    );
-                  })}
-                  {!availableChannels.some((c) => `#${c.name.replace(/^#/, '')}` === channelName) && (
-                    <option value={channelName}>{channelName}</option>
-                  )}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={channelName}
-                  onChange={(e) => setChannelName(e.target.value)}
-                  placeholder="#formation"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              )}
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Description courte</label>
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Rôle Inscription
-                </label>
-                {availableRoles.length > 0 ? (
-                  <select
-                    value={roleEnCoursName}
-                    onChange={(e) => setRoleEnCoursName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-indigo-500 font-semibold"
-                  >
-                    {availableRoles.map((r) => (
-                      <option key={r.id} value={r.name}>
-                        {r.name}
-                      </option>
-                    ))}
-                    {!availableRoles.some((r) => r.name === roleEnCoursName) && (
-                      <option value={roleEnCoursName}>{roleEnCoursName}</option>
-                    )}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={roleEnCoursName}
-                    onChange={(e) => setRoleEnCoursName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-indigo-500"
-                  />
-                )}
+            {/* Delivery & Roles Sync Box */}
+            <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-[11px] text-indigo-300 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-white">
+                <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Diffusion en Salon Privé</span>
               </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Rôle Validé
-                </label>
-                {availableRoles.length > 0 ? (
-                  <select
-                    value={roleValidatedName}
-                    onChange={(e) => setRoleValidatedName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-indigo-300 focus:outline-none focus:border-indigo-500 font-semibold"
-                  >
-                    {availableRoles.map((r) => (
-                      <option key={r.id} value={r.name}>
-                        {r.name}
-                      </option>
-                    ))}
-                    {!availableRoles.some((r) => r.name === roleValidatedName) && (
-                      <option value={roleValidatedName}>{roleValidatedName}</option>
-                    )}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={roleValidatedName}
-                    onChange={(e) => setRoleValidatedName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-indigo-500"
-                  />
-                )}
-              </div>
+              <p className="text-[10px] text-indigo-200/80 leading-relaxed">
+                Ce contenu est transmis automatiquement dans le salon privé du candidat (<code>🔒-formation-[pseudo]</code>).
+              </p>
+              <p className="text-[10px] text-indigo-400 font-semibold pt-1.5 border-t border-indigo-500/20">
+                ⚙️ Rôles & progression configurés dans "Parcours Onboarding".
+              </p>
             </div>
 
             <div className="pt-2 border-t border-slate-800">
@@ -272,7 +181,7 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
                       key={item.type}
                       type="button"
                       onClick={() => handleAddBlock(item.type)}
-                      className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-300 text-[11px] font-medium flex items-center gap-2 transition-all text-left"
+                      className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-300 text-[11px] font-medium flex items-center gap-2 transition-all text-left cursor-pointer"
                     >
                       <Icon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                       <span className="truncate">{item.label}</span>
@@ -377,7 +286,7 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
             <DiscordPreview
               title={`🎓 ${title}`}
               description={`${description}\n\n${blocks.map((b) => (b.title ? `**${b.title}**\n${b.content}` : b.content)).join('\n\n')}`}
-              channelName={channelName}
+              channelName="🔒-formation-candidat"
               buttonLabel="📚 Lancer le Module"
               color="#6366f1"
             />

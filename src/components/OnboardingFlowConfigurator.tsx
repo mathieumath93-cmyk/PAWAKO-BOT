@@ -20,6 +20,7 @@ import { onboardingService } from '../services/onboardingService';
 import { discordSyncService, PreFlightValidationResult } from '../services/discordSyncService';
 import { discordService } from '../services/discordService';
 import { reminderService, CandidateReminderRule } from '../services/reminderService';
+import { moduleService } from '../services/moduleService';
 import { DiscordResourceSelect } from './DiscordResourceSelect';
 
 interface OnboardingFlowConfiguratorProps {
@@ -165,17 +166,41 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     const newConfig = { ...config, stepConfigs: steps };
     setConfig(newConfig);
     onboardingService.updateConfig(newConfig);
+
+    // Sync roles directly with Module object
+    if (updatedStep.roleOnStartName || updatedStep.roleOnPassName) {
+      moduleService.updateModule(updatedStep.moduleId, {
+        roleEnCoursName: updatedStep.roleOnStartName,
+        roleValidatedName: updatedStep.roleOnPassName,
+        roleEnCoursId: updatedStep.roleOnStartId,
+        roleValidatedId: updatedStep.roleOnPassId,
+      });
+    }
+
     onShowToast('Étape de Module Enregistrée', `Paramètres pour ${updatedStep.moduleTitle} mis à jour.`, 'info');
   };
 
-  const currentStep = config.stepConfigs.find((s) => s.moduleId === selectedModuleTab) || {
-    moduleId: selectedModuleTab,
-    moduleTitle: modules.find((m) => m.id === selectedModuleTab)?.title || 'Module de formation',
-    directivesText: 'Lisez les consignes avant de lancer le quiz.',
-    externalLinkUrl: 'https://docs.pawako.com/guide',
-    successMessage: '🎉 Félicitations tu as réussi avec un score de {score}/{maxScore} ! Tu as accès au module suivant ci-dessous.',
-    failureMessage: '❌ Vous n\'avez pas réussi (score : {score}/{maxScore}). Vous pouvez réessayer après {cooldown} minutes.',
-  };
+  const activeModuleObj = modules.find((m) => m.id === selectedModuleTab);
+  const foundStep = config.stepConfigs.find((s) => s.moduleId === selectedModuleTab);
+
+  const currentStep: ModuleStepConfig = foundStep
+    ? {
+        ...foundStep,
+        roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'Trainee',
+        roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Junior',
+      }
+    : {
+        moduleId: selectedModuleTab,
+        moduleTitle: activeModuleObj?.title || 'Module de formation',
+        directivesText: 'Lisez les consignes avant de lancer le quiz.',
+        externalLinkUrl: 'https://docs.pawako.com/guide',
+        roleOnStartId: activeModuleObj?.roleEnCoursId || '',
+        roleOnStartName: activeModuleObj?.roleEnCoursName || 'Trainee',
+        roleOnPassId: activeModuleObj?.roleValidatedId || '',
+        roleOnPassName: activeModuleObj?.roleValidatedName || 'Junior',
+        successMessage: '🎉 Félicitations tu as réussi avec un score de {score}/{maxScore} ! Tu as accès au module suivant ci-dessous.',
+        failureMessage: '❌ Vous n\'avez pas réussi (score : {score}/{maxScore}). Vous pouvez réessayer après {cooldown} minutes.',
+      };
 
   return (
     <div className="space-y-6">

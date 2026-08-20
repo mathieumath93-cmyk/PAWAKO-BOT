@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   BookOpen,
   Plus,
@@ -7,14 +7,11 @@ import {
   Copy,
   Edit,
   Trash2,
-  Sparkles,
-  Shield,
-  Award,
-  Send,
+  Lock,
+  Layers,
 } from 'lucide-react';
 import { TrainingModule } from '../types';
 import { moduleService } from '../services/moduleService';
-import { discordService } from '../services/discordService';
 
 interface ModulesViewProps {
   modules: TrainingModule[];
@@ -29,12 +26,10 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   onRefresh,
   onShowToast,
 }) => {
-  const [sendingId, setSendingId] = useState<string | null>(null);
-
   const handleDuplicate = (id: string) => {
     const dup = moduleService.duplicateModule(id);
     onRefresh();
-    onShowToast(`Module dupliqué : ${dup.title}`, 'Une copie au statut Draft a été créée', 'success');
+    onShowToast(`Module dupliqué : ${dup.title}`, 'Une copie au statut Brouillon a été créée', 'success');
   };
 
   const handleDelete = (id: string, title: string) => {
@@ -42,30 +37,6 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       moduleService.deleteModule(id);
       onRefresh();
       onShowToast(`Module supprimé`, title, 'info');
-    }
-  };
-
-  const handleSendEmbed = async (mod: TrainingModule) => {
-    setSendingId(mod.id);
-    const res = await discordService.sendModuleEmbed(mod);
-    setSendingId(null);
-    if (res.success) {
-      moduleService.updateModule(mod.id, {
-        isActive: true,
-        publishStatus: 'published',
-        discordMessageId: res.messageId,
-        discordChannelId: res.channelId,
-        discordGuildId: res.guildId,
-        publishedAt: new Date().toISOString(),
-      });
-      onRefresh();
-      onShowToast('Embed Publié sur Discord 🚀', res.message, 'success');
-    } else {
-      moduleService.updateModule(mod.id, {
-        publishStatus: 'publish_failed',
-      });
-      onRefresh();
-      onShowToast('Échec Publication Discord ❌', res.message, 'info');
     }
   };
 
@@ -79,7 +50,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
             <span>Modules de Formation</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Créez et gérez les modules d'apprentissage diffusés sur votre serveur Discord.
+            Créez et gérez le contenu pédagogique de vos cours (textes, vidéos, consignes). Tout le contenu est délivré automatiquement dans le <strong>salon privé du candidat</strong>.
           </p>
         </div>
 
@@ -88,7 +59,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
           className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all w-fit shrink-0"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Create Module</span>
+          <span>+ Créer un Module</span>
         </button>
       </div>
 
@@ -96,6 +67,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {modules.map((mod) => {
           const completion = mod.completionRate || 82;
+          const blockCount = mod.blocks?.length || 3;
 
           return (
             <div
@@ -106,17 +78,17 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                 {/* Header Badge */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider font-mono">
-                    Module {mod.order}
+                    Étape {mod.order}
                   </span>
                   {mod.isActive ? (
                     <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Published</span>
+                      <span>Actif</span>
                     </span>
                   ) : (
                     <span className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 text-[10px] font-semibold flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      <span>Draft</span>
+                      <span>Brouillon</span>
                     </span>
                   )}
                 </div>
@@ -135,27 +107,27 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                 <div className="space-y-2 text-[11px] bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-slate-500 block">Salon :</span>
-                      <span className="font-semibold text-slate-300 font-mono truncate block">{mod.channelName}</span>
+                      <span className="text-slate-500 block">Rôle Démarrage :</span>
+                      <span className="font-semibold text-slate-300 truncate block">{mod.roleEnCoursName || 'Trainee'}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Rôle Validé :</span>
-                      <span className="font-semibold text-indigo-300 truncate block">{mod.roleValidatedName}</span>
+                      <span className="font-semibold text-indigo-300 truncate block">{mod.roleValidatedName || 'Junior'}</span>
                     </div>
                   </div>
 
-                  {mod.discordMessageId && (
-                    <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono">
-                      <span className="text-slate-500">ID Message Discord:</span>
-                      <span className="text-emerald-400 font-semibold">{mod.discordMessageId}</span>
-                    </div>
-                  )}
+                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-500 flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-indigo-400" />
+                      <span>Contenu Pédagogique :</span>
+                    </span>
+                    <span className="text-slate-200 font-semibold font-mono">{blockCount} bloc(s)</span>
+                  </div>
 
-                  {mod.publishStatus === 'publish_failed' && (
-                    <div className="pt-1 text-[10px] text-rose-400 font-semibold flex items-center gap-1">
-                      ⚠️ Échec de publication récente
-                    </div>
-                  )}
+                  <div className="pt-1.5 flex items-center gap-1 text-[10px] text-indigo-300">
+                    <Lock className="w-3 h-3 text-indigo-400" />
+                    <span>Délivré dans : <strong>🔒-formation-[pseudo]</strong></span>
+                  </div>
                 </div>
 
                 {/* Progress bar */}
@@ -172,25 +144,13 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
 
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onOpenBuilder(mod)}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition-colors"
-                  >
-                    <Edit className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Éditer</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSendEmbed(mod)}
-                    disabled={sendingId === mod.id}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20"
-                    title="Envoyer ou publier l'embed directement sur Discord"
-                  >
-                    <Send className={`w-3.5 h-3.5 ${sendingId === mod.id ? 'animate-bounce' : ''}`} />
-                    <span>{sendingId === mod.id ? 'Envoi...' : 'Publier Embed'}</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => onOpenBuilder(mod)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <Edit className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Éditer le Contenu</span>
+                </button>
 
                 <div className="flex items-center gap-1">
                   <button

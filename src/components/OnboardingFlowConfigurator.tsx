@@ -410,40 +410,76 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
 
         {/* Section 2: Configuration par Module (Rôles & Progression) */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-            <BookOpen className="w-4 h-4 text-indigo-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              2. Configuration des Rôles Discord par Module
-            </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                2. Configuration des Rôles Discord par Module
+              </h3>
+            </div>
+
+            {/* Direct Module Dropdown Selector */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-slate-300 whitespace-nowrap">
+                Changer de module :
+              </label>
+              <select
+                value={selectedModuleTab}
+                onChange={(e) => setSelectedModuleTab(e.target.value)}
+                className="bg-slate-950 border border-indigo-500/40 hover:border-indigo-500 text-xs text-white font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                {modules.map((mod, idx) => (
+                  <option key={mod.id} value={mod.id}>
+                    Étape {idx + 1} : {mod.title}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-        {/* Module Tabs */}
-        <div className="flex border-b border-slate-800 overflow-x-auto gap-2">
-          {modules.map((mod, idx) => (
-            <button
-              key={mod.id}
-              type="button"
-              onClick={() => setSelectedModuleTab(mod.id)}
-              className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                selectedModuleTab === mod.id
-                  ? 'bg-indigo-600 text-white border-t border-x border-indigo-500'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-slate-200 border-b border-slate-800'
-              }`}
-            >
-              <span>Module {idx + 1}</span>
-              <ArrowRight className="w-3 h-3 text-slate-400" />
-            </button>
-          ))}
-        </div>
-
-        {/* Selected Module Config Form */}
-        <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <h4 className="text-sm font-bold text-indigo-300">
-              Paramètres pour : {currentStep.moduleTitle}
-            </h4>
-            <span className="text-[11px] font-mono text-slate-500">ID: {currentStep.moduleId}</span>
+          {/* Module Tabs with Full Titles */}
+          <div className="flex border-b border-slate-800 overflow-x-auto gap-2 pb-1">
+            {modules.map((mod, idx) => {
+              const isActive = selectedModuleTab === mod.id;
+              return (
+                <button
+                  key={mod.id}
+                  type="button"
+                  onClick={() => setSelectedModuleTab(mod.id)}
+                  className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'bg-indigo-600 text-white border-t border-x border-indigo-500 shadow-lg shadow-indigo-600/20'
+                      : 'bg-slate-950/60 text-slate-400 hover:text-slate-200 hover:bg-slate-900 border-b border-slate-800'
+                  }`}
+                >
+                  <span className="opacity-80 font-mono text-[11px]">Étape {idx + 1}</span>
+                  <span className="font-semibold">{mod.title}</span>
+                  {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 ml-1 shrink-0" />}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Selected Module Config Form */}
+          <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-mono font-bold">
+                    Étape {modules.findIndex((m) => m.id === selectedModuleTab) + 1} / {modules.length}
+                  </span>
+                  <h4 className="text-sm font-bold text-white">
+                    {currentStep.moduleTitle}
+                  </h4>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Définissez les rôles Discord attribués au démarrage et à la validation de ce module.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded border border-slate-800 shrink-0">
+                ID: {currentStep.moduleId}
+              </span>
+            </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Rôle attribué au démarrage du module */}

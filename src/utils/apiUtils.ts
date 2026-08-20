@@ -15,7 +15,13 @@ export async function safeFetchJson<T = any>(
   init?: RequestInit
 ): Promise<SafeFetchResult<T>> {
   try {
-    const res = await fetch(input, init);
+    let fetchInput = input;
+    if (typeof window === 'undefined' && typeof fetchInput === 'string' && fetchInput.startsWith('/')) {
+      const port = process.env.PORT || '3000';
+      fetchInput = `http://127.0.0.1:${port}${fetchInput}`;
+    }
+
+    const res = await fetch(fetchInput, init);
     const status = res.status;
     const contentType = res.headers.get('content-type') || '(aucun)';
     const text = await res.text();

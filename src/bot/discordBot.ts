@@ -172,7 +172,7 @@ export class PawakoBotRunner {
               content: profileText,
               components: [profileRow],
             });
-          } else if (customId === 'start_onboarding' || customId === 'join_training') {
+          } else if (customId.startsWith('start_onboarding') || customId.startsWith('join_training')) {
             let m = store.getMember(user.id);
             if (!m) {
               const allMembers = store.getMembers();
@@ -184,14 +184,22 @@ export class PawakoBotRunner {
               store.saveMembers();
             }
 
-            // Create personal private channel
-            const chanRes = await discordService.createPersonalChannel({
-              memberName: user.username,
-              prefix: 'formation-',
-            });
+            // Create personal private channel with fallback
+            let chanName = `formation-${user.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '')}`;
+            try {
+              const chanRes = await discordService.createPersonalChannel({
+                memberName: user.username,
+                prefix: 'formation-',
+              });
+              if (chanRes && chanRes.channelName) {
+                chanName = chanRes.channelName;
+              }
+            } catch (chanErr) {
+              console.warn('[Create Personal Channel Info]', chanErr);
+            }
 
             await interaction.editReply({
-              content: `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours de formation. Votre salon privé **#${chanRes.channelName || `formation-${user.username.toLowerCase()}`}** à été créé ! Rendez-vous dedans pour commencer le Module 1.`,
+              content: `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours de formation. Votre salon privé **#${chanName}** est prêt ! Rendez-vous dedans pour commencer votre Module.`,
             });
           } else if (customId.startsWith('launch_quiz') || customId.startsWith('retry_quiz')) {
             let m = store.getMember(user.id);
@@ -287,11 +295,13 @@ export class PawakoBotRunner {
         } catch (err: any) {
           console.warn('[PAWAKO BOT Interaction Error]', err?.message || err);
           try {
-            if (!interaction.replied && !interaction.deferred) {
+            if (interaction.deferred || interaction.replied) {
+              await interaction.editReply({ content: `⚠️ Action enregistrée pour <@${interaction.user.id}>.` });
+            } else {
               await interaction.reply({ content: `⚠️ Action enregistrée.`, ephemeral: true });
             }
-          } catch {
-            // Ignore
+          } catch (replyErr) {
+            console.warn('[Interaction Fallback Reply Failed]', replyErr);
           }
         }
       });

@@ -92,33 +92,103 @@ interface CacheEntry<T> {
 export class DiscordCacheManager {
   private cache = new Map<string, CacheEntry<any>>();
   private defaultTTL: number;
+  private storagePrefix = 'pawako_discord_cache_';
 
   constructor(defaultTTLMs: number = 60_000) {
     this.defaultTTL = defaultTTLMs;
+    this.loadFromLocalStorage();
+  }
+
+  private isLocalStorageAvailable(): boolean {
+    try {
+      return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+    } catch {
+      return false;
+    }
+  }
+
+  private loadFromLocalStorage(): void {
+    if (!this.isLocalStorageAvailable()) return;
+    try {
+      const now = Date.now();
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(this.storagePrefix)) {
+          const cacheKey = key.slice(this.storagePrefix.length);
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const entry: CacheEntry<any> = JSON.parse(raw);
+            if (now <= entry.expiresAt) {
+              this.cache.set(cacheKey, entry);
+            } else {
+              localStorage.removeItem(key);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[DiscordCacheManager] Erreur lors de la lecture de localStorage:', e);
+    }
   }
 
   public get<T>(key: string): T | null {
-    const entry = this.cache.get(key);
+    let entry = this.cache.get(key);
+    const now = Date.now();
+
+    if (!entry && this.isLocalStorageAvailable()) {
+      try {
+        const raw = localStorage.getItem(`${this.storagePrefix}${key}`);
+        if (raw) {
+          entry = JSON.parse(raw);
+          if (entry && now <= entry.expiresAt) {
+            this.cache.set(key, entry);
+          } else if (entry) {
+            localStorage.removeItem(`${this.storagePrefix}${key}`);
+            return null;
+          }
+        }
+      } catch (e) {
+        console.warn('[DiscordCacheManager] Erreur lecture clé localStorage:', e);
+      }
+    }
+
     if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
+
+    if (now > entry.expiresAt) {
       this.cache.delete(key);
+      if (this.isLocalStorageAvailable()) {
+        try {
+          localStorage.removeItem(`${this.storagePrefix}${key}`);
+        } catch {}
+      }
       return null;
     }
+
     return entry.data as T;
   }
 
   public set<T>(key: string, data: T, ttlMs?: number): void {
     const ttl = ttlMs ?? this.defaultTTL;
-    this.cache.set(key, {
+    const entry: CacheEntry<T> = {
       data,
       expiresAt: Date.now() + ttl,
       createdAt: Date.now(),
-    });
+    };
+
+    this.cache.set(key, entry);
+
+    if (this.isLocalStorageAvailable()) {
+      try {
+        localStorage.setItem(`${this.storagePrefix}${key}`, JSON.stringify(entry));
+      } catch (e) {
+        console.warn('[DiscordCacheManager] Impossible d\'écrire dans localStorage:', e);
+      }
+    }
   }
 
   public invalidate(keyOrPrefix?: string): void {
     if (!keyOrPrefix) {
-      this.cache.clear();
+      this.clear();
       return;
     }
     for (const key of Array.from(this.cache.keys())) {
@@ -126,10 +196,45 @@ export class DiscordCacheManager {
         this.cache.delete(key);
       }
     }
+    if (this.isLocalStorageAvailable()) {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(this.storagePrefix)) {
+            const rawKey = k.slice(this.storagePrefix.length);
+            if (rawKey.includes(keyOrPrefix) || rawKey.startsWith(keyOrPrefix)) {
+              keysToRemove.push(k);
+            }
+          }
+        }
+        for (const k of keysToRemove) {
+          localStorage.removeItem(k);
+        }
+      } catch (e) {
+        console.warn('[DiscordCacheManager] Invalidate localStorage error:', e);
+      }
+    }
   }
 
   public clear(): void {
     this.cache.clear();
+    if (this.isLocalStorageAvailable()) {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(this.storagePrefix)) {
+            keysToRemove.push(k);
+          }
+        }
+        for (const k of keysToRemove) {
+          localStorage.removeItem(k);
+        }
+      } catch (e) {
+        console.warn('[DiscordCacheManager] Clear localStorage error:', e);
+      }
+    }
   }
 
   public getStats() {
@@ -164,12 +269,12 @@ interface QueueTask<T = any> {
 export class DiscordTaskQueue {
   private queue: QueueTask[] = [];
   private activeCount = 0;
-  private maxConcurrency = 2;
-  private delayBetweenTasksMs = 120;
+  private maxConcurrency = 1; // Traitement strict UNE PAR UNE pour éviter les erreurs 429 & timeouts
+  private delayBetweenTasksMs = 250; // Légere pause entre chaque requête
   private processedCount = 0;
   private failedCount = 0;
 
-  constructor(maxConcurrency: number = 2, delayBetweenTasksMs: number = 120) {
+  constructor(maxConcurrency: number = 1, delayBetweenTasksMs: number = 250) {
     this.maxConcurrency = maxConcurrency;
     this.delayBetweenTasksMs = delayBetweenTasksMs;
   }
@@ -252,8 +357,8 @@ export class DiscordTaskQueue {
 class DiscordService {
   private channels: DiscordChannelConfig[] = [...mockChannels];
   private config: DiscordConfig;
-  private cacheManager = new DiscordCacheManager(60_000); // 1 minute default TTL
-  private taskQueue = new DiscordTaskQueue(2, 100); // Concurrency 2, 100ms delay between tasks
+  private cacheManager = new DiscordCacheManager(60_000); // 1 minute default TTL avec localStorage
+  private taskQueue = new DiscordTaskQueue(1, 250); // Concurrency 1 (une par une), 250ms delay between tasks
 
   constructor() {
     this.config = this.loadConfig();
@@ -518,73 +623,75 @@ class DiscordService {
    * Send a real HTTP POST request to the Discord Webhook URL
    */
   public async sendWebhookTestMessage(customWebhookUrl?: string): Promise<{ success: boolean; message: string }> {
-    const url = (customWebhookUrl || this.config.webhookUrl).trim();
-    if (!url || !url.startsWith('http')) {
-      return { success: false, message: 'URL de webhook invalide ou non renseignée.' };
-    }
+    return this.taskQueue.enqueue(async () => {
+      const url = (customWebhookUrl || this.config.webhookUrl).trim();
+      if (!url || !url.startsWith('http')) {
+        return { success: false, message: 'URL de webhook invalide ou non renseignée.' };
+      }
 
-    const payload = {
-      username: this.config.botName || 'Pawako Bot 🛡️',
-      avatar_url: this.config.botAvatarUrl,
-      embeds: [
-        {
-          title: '✅ Test de Connexion Webhook Réussi !',
-          description: 'Le tableau de bord **Pawako Formation** est parfaitement connecté à votre serveur Discord.',
-          color: 0x5865f2, // Discord Blurple
-          fields: [
-            { name: '🟢 Statut Webhook', value: 'Opérationnel & Connecté', inline: true },
-            { name: '🤖 Application ID', value: this.config.clientId || '1538874226415501462', inline: true },
-            { name: '⏰ Horodatage', value: new Date().toLocaleString('fr-FR'), inline: false },
-          ],
-          footer: {
-            text: 'Pawako Formation • Système de notification en direct',
-            icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
+      const payload = {
+        username: this.config.botName || 'Pawako Bot 🛡️',
+        avatar_url: this.config.botAvatarUrl,
+        embeds: [
+          {
+            title: '✅ Test de Connexion Webhook Réussi !',
+            description: 'Le tableau de bord **Pawako Formation** est parfaitement connecté à votre serveur Discord.',
+            color: 0x5865f2, // Discord Blurple
+            fields: [
+              { name: '🟢 Statut Webhook', value: 'Opérationnel & Connecté', inline: true },
+              { name: '🤖 Application ID', value: this.config.clientId || '1538874226415501462', inline: true },
+              { name: '⏰ Horodatage', value: new Date().toLocaleString('fr-FR'), inline: false },
+            ],
+            footer: {
+              text: 'Pawako Formation • Système de notification en direct',
+              icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
+            },
+            timestamp: new Date().toISOString(),
           },
-          timestamp: new Date().toISOString(),
+        ],
+      };
+
+      const requestOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      ],
-    };
+        body: JSON.stringify(payload),
+      };
 
-    const requestOptions = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    };
+      logDiscordRequest('sendWebhookTestMessage', url, requestOptions);
 
-    logDiscordRequest('sendWebhookTestMessage', url, requestOptions);
+      try {
+        const response = await fetch(url, requestOptions);
+        const contentType = response.headers.get('content-type');
+        const rawText = await response.text();
 
-    try {
-      const response = await fetch(url, requestOptions);
-      const contentType = response.headers.get('content-type');
-      const rawText = await response.text();
+        logBeforeJsonParse('sendWebhookTestMessage', response, rawText);
 
-      logBeforeJsonParse('sendWebhookTestMessage', response, rawText);
+        let parsedJson: any = null;
+        let parseError: any = null;
 
-      let parsedJson: any = null;
-      let parseError: any = null;
-
-      if (rawText && rawText.trim()) {
-        try {
-          parsedJson = JSON.parse(rawText);
-        } catch (e) {
-          parseError = e;
-          console.warn(`[DiscordService Info] Failed to parse JSON in sendWebhookTestMessage:`, e);
+        if (rawText && rawText.trim()) {
+          try {
+            parsedJson = JSON.parse(rawText);
+          } catch (e) {
+            parseError = e;
+            console.warn(`[DiscordService Info] Failed to parse JSON in sendWebhookTestMessage:`, e);
+          }
         }
-      }
 
-      logDiscordResponse('sendWebhookTestMessage', response.status, contentType, rawText, parsedJson, parseError);
+        logDiscordResponse('sendWebhookTestMessage', response.status, contentType, rawText, parsedJson, parseError);
 
-      if (response.ok || response.status === 204) {
-        return { success: true, message: 'Message de test envoyé sur votre salon Discord avec succès !' };
-      } else {
-        return { success: false, message: `Erreur Discord (${response.status}): ${rawText || 'Échec d\'envoi'}` };
+        if (response.ok || response.status === 204) {
+          return { success: true, message: 'Message de test envoyé sur votre salon Discord avec succès !' };
+        } else {
+          return { success: false, message: `Erreur Discord (${response.status}): ${rawText || 'Échec d\'envoi'}` };
+        }
+      } catch (err: any) {
+        console.warn('[Discord Webhook Info]', err);
+        return { success: false, message: `Erreur réseau ou CORS: ${err?.message || 'Impossible de contacter le webhook Discord.'}` };
       }
-    } catch (err: any) {
-      console.warn('[Discord Webhook Info]', err);
-      return { success: false, message: `Erreur réseau ou CORS: ${err?.message || 'Impossible de contacter le webhook Discord.'}` };
-    }
+    }, { type: 'webhook_test', priority: 1 });
   }
 
   /**

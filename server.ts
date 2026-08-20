@@ -1171,6 +1171,175 @@ async function startServer() {
     }
   });
 
+  // --- BATCH SYNC MEMBER ROLES ON DISCORD REST API ---
+  app.post('/api/discord/members/batch-roles', async (req: Request, res: Response) => {
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
+    const { updates, guildId: customGuildId } = req.body;
+    const guildId = customGuildId || activeGuildId;
+
+    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
+      return res.status(400).json({ success: false, error: 'guildId Discord requis. Synchronisez un serveur dans Discord Sync.' });
+    }
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'updates doit être un tableau de révisions non vide.' });
+    }
+
+    try {
+      // Fetch guild roles ONCE for all batch updates
+      const rolesRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+        headers: { Authorization: `Bot ${token}` },
+      });
+
+      if (!rolesRes.ok) {
+        const errText = await rolesRes.text();
+        return res.status(rolesRes.status).json({
+          success: false,
+          discordStatus: rolesRes.status,
+          error: `Impossible de récupérer les rôles du serveur (${guildId}) : ${errText}`,
+        });
+      }
+
+      const guildRoles: any[] = await rolesRes.json();
+      const results: any[] = [];
+
+      for (const update of updates) {
+        const rawDiscordId = update.discordId || '';
+        const cleanDiscordId = rawDiscordId.replace(/^mem-/, '');
+        const rolesList = update.roles || [];
+
+        if (!cleanDiscordId || !/^\d{17,20}$/.test(cleanDiscordId)) {
+          results.push({ discordId: rawDiscordId, success: false, error: 'ID Discord invalide' });
+          continue;
+        }
+
+        const targetRoleIds: string[] = [];
+        const assignedRoleNames: string[] = [];
+
+        for (const roleInput of rolesList) {
+          const cleanInput = String(roleInput).trim();
+          if (!cleanInput) continue;
+
+          if (/^\d{17,20}$/.test(cleanInput)) {
+            targetRoleIds.push(cleanInput);
+            const matched = guildRoles.find((r) => r.id === cleanInput);
+            if (matched) assignedRoleNames.push(matched.name);
+          } else {
+            let matchedRole = guildRoles.find(
+              (r) => r.name.toLowerCase().trim() === cleanInput.toLowerCase().trim()
+            );
+
+            if (!matchedRole && cleanInput !== 'Membre' && cleanInput !== 'Nouveau membre') {
+              const createRoleRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bot ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  name: cleanInput,
+                  color: 0x6366f1,
+                  mentionable: true,
+                }),
+              });
+
+              if (createRoleRes.ok) {
+                matchedRole = await createRoleRes.json();
+                guildRoles.push(matchedRole);
+              }
+            }
+
+            if (matchedRole) {
+              targetRoleIds.push(matchedRole.id);
+              assignedRoleNames.push(matchedRole.name);
+            }
+          }
+        }
+
+        const patchMemberRes = await fetchDiscordWithRetry(
+          `https://discord.com/api/v10/guilds/${guildId}/members/${cleanDiscordId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bot ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ roles: targetRoleIds }),
+          }
+        );
+
+        if (patchMemberRes.ok || patchMemberRes.status === 200 || patchMemberRes.status === 204) {
+          results.push({
+            discordId: cleanDiscordId,
+            success: true,
+            roles: assignedRoleNames,
+            roleIds: targetRoleIds,
+          });
+        } else {
+          results.push({
+            discordId: cleanDiscordId,
+            success: false,
+            error: `HTTP ${patchMemberRes.status}`,
+          });
+        }
+
+        // Small delay between member patches to keep Discord happy
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      const successCount = results.filter((r) => r.success).length;
+      store.addLog(
+        'Discord API',
+        `[BATCH_ROLES] Synchronisation des rôles par lots pour ${successCount}/${updates.length} membres effectuée`,
+        'role'
+      );
+
+      return res.json({
+        success: true,
+        processedCount: results.length,
+        successCount,
+        results,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, discordStatus: 500, error: err.message });
+    }
+  });
+
+  // --- BATCH SYNC MEMBER STATES ---
+  app.post('/api/discord/members/batch-sync', async (req: Request, res: Response) => {
+    const { updates } = req.body;
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'updates doit être un tableau non vide.' });
+    }
+
+    const members = store.getMembers();
+    let updatedCount = 0;
+
+    for (const update of updates) {
+      const target = members.find((m) => m.id === update.discordId || m.discordId === update.discordId);
+      if (target) {
+        if (update.status && target.progress[target.currentModuleId]) {
+          target.progress[target.currentModuleId].status = update.status;
+        }
+        if (update.roles && Array.isArray(update.roles)) {
+          target.roles = update.roles;
+        }
+        updatedCount++;
+      }
+    }
+
+    if (updatedCount > 0) {
+      store.saveMembers();
+    }
+
+    return res.json({
+      success: true,
+      updatedCount,
+      totalMembers: members.length,
+    });
+  });
+
   // Members Endpoints
   app.get('/api/members', (req: Request, res: Response) => {
     res.json(store.getMembers());

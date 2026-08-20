@@ -80,9 +80,180 @@ function logBeforeJsonParse(context: string, response: Response, rawText: string
   }
 }
 
+/**
+ * Local cache manager to reduce redundant network calls and prevent API timeouts
+ */
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+  createdAt: number;
+}
+
+export class DiscordCacheManager {
+  private cache = new Map<string, CacheEntry<any>>();
+  private defaultTTL: number;
+
+  constructor(defaultTTLMs: number = 60_000) {
+    this.defaultTTL = defaultTTLMs;
+  }
+
+  public get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  public set<T>(key: string, data: T, ttlMs?: number): void {
+    const ttl = ttlMs ?? this.defaultTTL;
+    this.cache.set(key, {
+      data,
+      expiresAt: Date.now() + ttl,
+      createdAt: Date.now(),
+    });
+  }
+
+  public invalidate(keyOrPrefix?: string): void {
+    if (!keyOrPrefix) {
+      this.cache.clear();
+      return;
+    }
+    for (const key of Array.from(this.cache.keys())) {
+      if (key.includes(keyOrPrefix) || key.startsWith(keyOrPrefix)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  public clear(): void {
+    this.cache.clear();
+  }
+
+  public getStats() {
+    let active = 0;
+    const now = Date.now();
+    for (const entry of Array.from(this.cache.values())) {
+      if (now <= entry.expiresAt) active++;
+    }
+    return {
+      totalEntries: this.cache.size,
+      activeEntries: active,
+      keys: Array.from(this.cache.keys()),
+    };
+  }
+}
+
+/**
+ * Asynchronous task queue for rate-limiting and preventing concurrent API overload
+ */
+interface QueueTask<T = any> {
+  id: string;
+  type: string;
+  priority: number;
+  fn: () => Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: any) => void;
+  retries: number;
+  maxRetries: number;
+  createdAt: number;
+}
+
+export class DiscordTaskQueue {
+  private queue: QueueTask[] = [];
+  private activeCount = 0;
+  private maxConcurrency = 2;
+  private delayBetweenTasksMs = 120;
+  private processedCount = 0;
+  private failedCount = 0;
+
+  constructor(maxConcurrency: number = 2, delayBetweenTasksMs: number = 120) {
+    this.maxConcurrency = maxConcurrency;
+    this.delayBetweenTasksMs = delayBetweenTasksMs;
+  }
+
+  public enqueue<T>(
+    taskFn: () => Promise<T>,
+    options?: { type?: string; priority?: number; maxRetries?: number }
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const task: QueueTask<T> = {
+        id: `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        type: options?.type || 'api_request',
+        priority: options?.priority ?? 1,
+        fn: taskFn,
+        resolve,
+        reject,
+        retries: 0,
+        maxRetries: options?.maxRetries ?? 2,
+        createdAt: Date.now(),
+      };
+
+      this.queue.push(task);
+      this.queue.sort((a, b) => b.priority - a.priority);
+
+      this.processQueue();
+    });
+  }
+
+  private async processQueue() {
+    if (this.activeCount >= this.maxConcurrency || this.queue.length === 0) {
+      return;
+    }
+
+    const task = this.queue.shift();
+    if (!task) return;
+
+    this.activeCount++;
+
+    try {
+      const result = await task.fn();
+      this.processedCount++;
+      task.resolve(result);
+    } catch (err: any) {
+      if (task.retries < task.maxRetries) {
+        task.retries++;
+        console.warn(`[DiscordTaskQueue 🔄] Retrying task ${task.id} (${task.type}) - Attempt ${task.retries}/${task.maxRetries}`);
+        await new Promise((r) => setTimeout(r, Math.pow(2, task.retries) * 400));
+        this.queue.unshift(task);
+      } else {
+        this.failedCount++;
+        console.error(`[DiscordTaskQueue ❌] Task ${task.id} (${task.type}) failed:`, err);
+        task.reject(err);
+      }
+    } finally {
+      this.activeCount--;
+      if (this.delayBetweenTasksMs > 0) {
+        await new Promise((r) => setTimeout(r, this.delayBetweenTasksMs));
+      }
+      this.processQueue();
+    }
+  }
+
+  public getStats() {
+    return {
+      pending: this.queue.length,
+      active: this.activeCount,
+      processed: this.processedCount,
+      failed: this.failedCount,
+    };
+  }
+
+  public clearQueue() {
+    for (const task of this.queue) {
+      task.reject(new Error('Task cancelled (queue cleared)'));
+    }
+    this.queue = [];
+  }
+}
+
 class DiscordService {
   private channels: DiscordChannelConfig[] = [...mockChannels];
   private config: DiscordConfig;
+  private cacheManager = new DiscordCacheManager(60_000); // 1 minute default TTL
+  private taskQueue = new DiscordTaskQueue(2, 100); // Concurrency 2, 100ms delay between tasks
 
   constructor() {
     this.config = this.loadConfig();
@@ -196,128 +367,143 @@ class DiscordService {
     return newChan;
   }
 
-  public async fetchAndSyncRealDiscordData(): Promise<{ success: boolean; message?: string; server?: any }> {
+  public async fetchAndSyncRealDiscordData(options?: { forceRefresh?: boolean }): Promise<{ success: boolean; message?: string; server?: any }> {
     const token = this.config.botToken;
-    const url = `/api/discord/sync-real-data?token=${encodeURIComponent(token)}`;
+    const cacheKey = `real_discord_data_${token.slice(0, 15)}`;
 
-    logDiscordRequest('fetchAndSyncRealDiscordData', url);
-
-    try {
-      const response = await fetch(url);
-      const statusCode = response.status;
-      const contentType = response.headers.get('content-type') || '(aucun)';
-
-      console.log(`[fetchAndSyncRealDiscordData 📡] Response received from ${url}`);
-      console.log(`  - Status Code: ${statusCode}`);
-      console.log(`  - Content-Type: ${contentType}`);
-
-      // 1. Verify content-type header BEFORE reading text or calling .json()
-      const isJsonContentType = contentType.toLowerCase().includes('json');
-      if (!isJsonContentType) {
-        const rawText = await response.text();
-        console.warn(`[fetchAndSyncRealDiscordData ⚠️] Content-Type non-JSON reçu: "${contentType}". Raw snippet: "${rawText.slice(0, 200)}"`);
-        logDiscordResponse(
-          'fetchAndSyncRealDiscordData',
-          statusCode,
-          contentType,
-          rawText,
-          null,
-          `Content-Type non valide (${contentType}), JSON attendu`
-        );
-        serverService.setServers([]);
-        return {
-          success: false,
-          message: `Le serveur a renvoyé un type de contenu invalide (${contentType || 'non spécifié'}) au lieu du format JSON.`,
-        };
+    if (!options?.forceRefresh) {
+      const cached = this.cacheManager.get<any>(cacheKey);
+      if (cached) {
+        console.log(`[DiscordService Cache Hit ⚡] Utilisation des données Discord synchronisées en cache local.`);
+        return cached;
       }
-
-      // 2. Read raw response text to verify non-empty body
-      const rawText = await response.text();
-      logBeforeJsonParse('fetchAndSyncRealDiscordData', response, rawText);
-
-      if (!rawText || !rawText.trim()) {
-        console.warn('[fetchAndSyncRealDiscordData ⚠️] Réponse vide reçue du serveur! Annulation du parsing JSON.');
-        logDiscordResponse(
-          'fetchAndSyncRealDiscordData',
-          statusCode,
-          contentType,
-          '',
-          null,
-          'Réponse vide reçue du serveur'
-        );
-        serverService.setServers([]);
-        return {
-          success: false,
-          message: `Le serveur a renvoyé une réponse vide (HTTP ${statusCode}).`,
-        };
-      }
-
-      // 3. Parse JSON safely now that content-type and body text are validated
-      let data: any;
-      try {
-        data = JSON.parse(rawText);
-      } catch (parseError) {
-        console.warn('[fetchAndSyncRealDiscordData Info] Échec de l\'analyse du JSON:', parseError);
-        logDiscordResponse(
-          'fetchAndSyncRealDiscordData',
-          statusCode,
-          contentType,
-          rawText,
-          null,
-          parseError
-        );
-        serverService.setServers([]);
-        return {
-          success: false,
-          message: `Format JSON invalide reçu du serveur: ${rawText.slice(0, 100)}`,
-        };
-      }
-
-      logDiscordResponse(
-        'fetchAndSyncRealDiscordData',
-        statusCode,
-        contentType,
-        rawText,
-        data,
-        response.ok ? null : data?.error || 'Erreur HTTP'
-      );
-
-      if (!response.ok || !data) {
-        serverService.setServers([]);
-        return { success: false, message: data?.error || data?.message || `Erreur lors de la synchronisation avec Discord (HTTP ${statusCode})` };
-      }
-
-      if (!data.success) {
-        serverService.setServers([]);
-        return { success: false, message: data.message || 'Aucun serveur trouvé' };
-      }
-
-      if (data.channels && Array.isArray(data.channels)) {
-        this.setChannels(data.channels);
-      }
-
-      if (data.roles && Array.isArray(data.roles)) {
-        roleService.setRoles(data.roles);
-      }
-
-      if (data.server) {
-        serverService.updateServerDetails(data.server);
-      }
-
-      if (data.members && Array.isArray(data.members)) {
-        store.setMembers(data.members);
-      }
-
-      return data;
-    } catch (err: any) {
-      console.warn('[Discord Sync Info]', err?.message || err);
-      serverService.setServers([]);
-      return { success: false, message: err.message };
     }
+
+    return this.taskQueue.enqueue(async () => {
+      const url = `/api/discord/sync-real-data?token=${encodeURIComponent(token)}`;
+
+      logDiscordRequest('fetchAndSyncRealDiscordData', url);
+
+      try {
+        const response = await fetch(url);
+        const statusCode = response.status;
+        const contentType = response.headers.get('content-type') || '(aucun)';
+
+        console.log(`[fetchAndSyncRealDiscordData 📡] Response received from ${url}`);
+        console.log(`  - Status Code: ${statusCode}`);
+        console.log(`  - Content-Type: ${contentType}`);
+
+        // 1. Verify content-type header BEFORE reading text or calling .json()
+        const isJsonContentType = contentType.toLowerCase().includes('json');
+        if (!isJsonContentType) {
+          const rawText = await response.text();
+          console.warn(`[fetchAndSyncRealDiscordData ⚠️] Content-Type non-JSON reçu: "${contentType}". Raw snippet: "${rawText.slice(0, 200)}"`);
+          logDiscordResponse(
+            'fetchAndSyncRealDiscordData',
+            statusCode,
+            contentType,
+            rawText,
+            null,
+            `Content-Type non valide (${contentType}), JSON attendu`
+          );
+          serverService.setServers([]);
+          return {
+            success: false,
+            message: `Le serveur a renvoyé un type de contenu invalide (${contentType || 'non spécifié'}) au lieu du format JSON.`,
+          };
+        }
+
+        // 2. Read raw response text to verify non-empty body
+        const rawText = await response.text();
+        logBeforeJsonParse('fetchAndSyncRealDiscordData', response, rawText);
+
+        if (!rawText || !rawText.trim()) {
+          console.warn('[fetchAndSyncRealDiscordData ⚠️] Réponse vide reçue du serveur! Annulation du parsing JSON.');
+          logDiscordResponse(
+            'fetchAndSyncRealDiscordData',
+            statusCode,
+            contentType,
+            '',
+            null,
+            'Réponse vide reçue du serveur'
+          );
+          serverService.setServers([]);
+          return {
+            success: false,
+            message: `Le serveur a renvoyé une réponse vide (HTTP ${statusCode}).`,
+          };
+        }
+
+        // 3. Parse JSON safely now that content-type and body text are validated
+        let data: any;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseError) {
+          console.warn('[fetchAndSyncRealDiscordData Info] Échec de l\'analyse du JSON:', parseError);
+          logDiscordResponse(
+            'fetchAndSyncRealDiscordData',
+            statusCode,
+            contentType,
+            rawText,
+            null,
+            parseError
+          );
+          serverService.setServers([]);
+          return {
+            success: false,
+            message: `Format JSON invalide reçu du serveur: ${rawText.slice(0, 100)}`,
+          };
+        }
+
+        logDiscordResponse(
+          'fetchAndSyncRealDiscordData',
+          statusCode,
+          contentType,
+          rawText,
+          data,
+          response.ok ? null : data?.error || 'Erreur HTTP'
+        );
+
+        if (!response.ok || !data) {
+          serverService.setServers([]);
+          return { success: false, message: data?.error || data?.message || `Erreur lors de la synchronisation avec Discord (HTTP ${statusCode})` };
+        }
+
+        if (!data.success) {
+          serverService.setServers([]);
+          return { success: false, message: data.message || 'Aucun serveur trouvé' };
+        }
+
+        if (data.channels && Array.isArray(data.channels)) {
+          this.setChannels(data.channels);
+        }
+
+        if (data.roles && Array.isArray(data.roles)) {
+          roleService.setRoles(data.roles);
+        }
+
+        if (data.server) {
+          serverService.updateServerDetails(data.server);
+        }
+
+        if (data.members && Array.isArray(data.members)) {
+          store.setMembers(data.members);
+        }
+
+        // Store in cache upon successful fetch (60 seconds TTL)
+        this.cacheManager.set(cacheKey, data, 60_000);
+
+        return data;
+      } catch (err: any) {
+        console.warn('[Discord Sync Info]', err?.message || err);
+        serverService.setServers([]);
+        return { success: false, message: err.message };
+      }
+    }, { type: 'sync_real_data', priority: 2 });
   }
 
-  public async syncDiscord(): Promise<{ success: boolean; channelsCount: number; rolesCount: number; message?: string }> {
-    const result = await this.fetchAndSyncRealDiscordData();
+  public async syncDiscord(forceRefresh: boolean = true): Promise<{ success: boolean; channelsCount: number; rolesCount: number; message?: string }> {
+    const result = await this.fetchAndSyncRealDiscordData({ forceRefresh });
     // Send a real sync event to Discord Webhook if available
     this.sendWebhookLog('Synchronisation des salons & rôles Discord', 'system', `Serveur ID: ${this.config.clientId} synchronisé avec succès.`);
     return {
@@ -862,48 +1048,161 @@ class DiscordService {
     roles: string[],
     guildId?: string
   ): Promise<{ success: boolean; message: string; roles?: string[]; error?: string }> {
-    const activeGuildId = guildId || discordSyncService.getActiveGuildId();
-    const endpoint = `/api/discord/members/${encodeURIComponent(discordId)}/roles`;
+    return this.taskQueue.enqueue(async () => {
+      const activeGuildId = guildId || discordSyncService.getActiveGuildId();
+      const endpoint = `/api/discord/members/${encodeURIComponent(discordId)}/roles`;
 
-    const requestBody = {
-      guildId: activeGuildId,
-      roles,
-    };
+      const requestBody = {
+        guildId: activeGuildId,
+        roles,
+      };
 
-    logDiscordRequest('assignDiscordRolesToMember', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
+      logDiscordRequest('assignDiscordRolesToMember', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
 
-    try {
-      const result = await safeFetchJson(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+      try {
+        const result = await safeFetchJson(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
 
-      logDiscordResponse(
-        'assignDiscordRolesToMember',
-        result.status,
-        'application/json',
-        JSON.stringify(result.data || {}),
-        result.data,
-        result.ok ? null : result.error
-      );
+        logDiscordResponse(
+          'assignDiscordRolesToMember',
+          result.status,
+          'application/json',
+          JSON.stringify(result.data || {}),
+          result.data,
+          result.ok ? null : result.error
+        );
 
-      if (result.ok && result.data && result.data.success) {
+        if (result.ok && result.data && result.data.success) {
+          this.cacheManager.invalidate('real_discord_data');
+          return {
+            success: true,
+            message: result.data.message || 'Rôles synchronisés sur Discord avec succès.',
+            roles: result.data.roles,
+          };
+        }
+        return {
+          success: false,
+          message: result.error || (result.data && result.data.error) || 'Échec de la synchronisation des rôles sur Discord.',
+          error: result.error || (result.data && result.data.error),
+        };
+      } catch (err: any) {
+        console.warn('[Discord assignDiscordRolesToMember Info]', err?.message || err);
+        return { success: false, message: err.message || 'Erreur réseau lors de la mise à jour des rôles.' };
+      }
+    }, { type: 'assign_roles', priority: 2 });
+  }
+
+  /**
+   * Batched role updates for multiple members in a single network call
+   */
+  public async batchAssignDiscordRoles(
+    updates: Array<{ discordId: string; roles: string[] }>,
+    guildId?: string
+  ): Promise<{ success: boolean; processedCount: number; successCount: number; results?: any[]; error?: string }> {
+    if (!updates || updates.length === 0) {
+      return { success: true, processedCount: 0, successCount: 0, results: [] };
+    }
+
+    return this.taskQueue.enqueue(async () => {
+      const activeGuildId = guildId || discordSyncService.getActiveGuildId();
+      const endpoint = '/api/discord/members/batch-roles';
+      const requestBody = { guildId: activeGuildId, updates };
+
+      logDiscordRequest('batchAssignDiscordRoles', endpoint, { method: 'POST', body: JSON.stringify(requestBody) });
+
+      try {
+        const result = await safeFetchJson(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        logDiscordResponse(
+          'batchAssignDiscordRoles',
+          result.status,
+          'application/json',
+          JSON.stringify(result.data || {}),
+          result.data,
+          result.ok ? null : result.error
+        );
+
+        if (result.ok && result.data && result.data.success) {
+          this.cacheManager.invalidate('real_discord_data');
+          return result.data;
+        }
+
+        // Fallback: If batch endpoint fails, process sequentially
+        console.warn('[batchAssignDiscordRoles] Échec du batch, exécution individuelle séquentielle...');
+        const fallbackResults: any[] = [];
+        let successCount = 0;
+
+        for (const update of updates) {
+          const res = await this.assignDiscordRolesToMember(update.discordId, update.roles, activeGuildId);
+          if (res.success) successCount++;
+          fallbackResults.push({ discordId: update.discordId, success: res.success, message: res.message });
+        }
+
+        this.cacheManager.invalidate('real_discord_data');
         return {
           success: true,
-          message: result.data.message || 'Rôles synchronisés sur Discord avec succès.',
-          roles: result.data.roles,
+          processedCount: updates.length,
+          successCount,
+          results: fallbackResults,
         };
+      } catch (err: any) {
+        console.warn('[batchAssignDiscordRoles Error]', err);
+        return { success: false, processedCount: 0, successCount: 0, error: err.message };
       }
-      return {
-        success: false,
-        message: result.error || (result.data && result.data.error) || 'Échec de la synchronisation des rôles sur Discord.',
-        error: result.error || (result.data && result.data.error),
-      };
-    } catch (err: any) {
-      console.warn('[Discord assignDiscordRolesToMember Info]', err?.message || err);
-      return { success: false, message: err.message || 'Erreur réseau lors de la mise à jour des rôles.' };
+    }, { type: 'batch_assign_roles', priority: 3 });
+  }
+
+  /**
+   * Batched state update for members (roles and/or progress status)
+   */
+  public async batchSyncMembersState(
+    updates: Array<{ discordId: string; status?: string; moduleId?: string; score?: number; roles?: string[] }>
+  ): Promise<{ success: boolean; updatedCount?: number; message?: string }> {
+    if (!updates || updates.length === 0) {
+      return { success: true, updatedCount: 0 };
     }
+
+    return this.taskQueue.enqueue(async () => {
+      const endpoint = '/api/discord/members/batch-sync';
+      try {
+        const result = await safeFetchJson(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates }),
+        });
+
+        if (result.ok && result.data && result.data.success) {
+          this.cacheManager.invalidate('real_discord_data');
+          return result.data;
+        }
+        return { success: false, updatedCount: 0, message: result.error || 'Échec de la synchronisation des états' };
+      } catch (err: any) {
+        return { success: false, updatedCount: 0, message: err.message };
+      }
+    }, { type: 'batch_sync_members', priority: 2 });
+  }
+
+  public getCacheStats() {
+    return this.cacheManager.getStats();
+  }
+
+  public getQueueStats() {
+    return this.taskQueue.getStats();
+  }
+
+  public clearCache() {
+    this.cacheManager.clear();
+  }
+
+  public clearQueue() {
+    this.taskQueue.clearQueue();
   }
 }
 

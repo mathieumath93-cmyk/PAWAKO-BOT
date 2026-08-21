@@ -182,27 +182,43 @@ export class PawakoBotRunner {
 
         try {
           // Defer reply or update IMMEDIATELY (<10ms) to prevent Discord timeout errors
+          const isStartOnboarding =
+            customId === 'start_onboarding_process' ||
+            customId.startsWith('start_onboarding') ||
+            customId.startsWith('join_training');
+
           if (customId.startsWith('qa:')) {
             if (!interaction.deferred && !interaction.replied) {
               await interaction.deferUpdate().catch((e) => console.warn('[DeferUpdate Warning]', e?.message || e));
             }
           } else {
             if (!interaction.deferred && !interaction.replied) {
-              await interaction.deferReply().catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
+              // Ephemeral MUST be true for start_onboarding in public channels so public chat isn't flooded!
+              await interaction.deferReply({ ephemeral: isStartOnboarding }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
             }
           }
 
           console.log(`[PAWAKO BOT Interaction 🔘] Button clicked: "${customId}" by @${user.username} (ID: ${user.id})`);
 
           // --- 1. START ONBOARDING & PERSONAL CHANNEL CREATION ---
-          if (
-            customId === 'start_onboarding_process' ||
-            customId.startsWith('start_onboarding') ||
-            customId.startsWith('join_training')
-          ) {
+          if (isStartOnboarding) {
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
             member.candidateState = 'formation_commencee';
             member.lastActiveAt = store.getFormattedNow();
+
+            const cfg = onboardingService.getConfig();
+
+            // Assign roles configured by the admin in Onboarding settings
+            const step1Cfg = cfg.stepConfigs?.[0];
+            const initialRoleName = cfg.initialRoleName;
+            const step1RoleOnStart = step1Cfg?.roleOnStartName;
+
+            const configuredInitialRoles = Array.from(
+              new Set([initialRoleName, step1RoleOnStart].filter(Boolean) as string[])
+            );
+            if (configuredInitialRoles.length > 0) {
+              member.roles = Array.from(new Set([...(member.roles || []), ...configuredInitialRoles]));
+            }
 
             const cleanName = user.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 20) || 'membre';
             const expectedChanName = `🔒-formation-${cleanName}`;
@@ -218,7 +234,6 @@ export class PawakoBotRunner {
                 createdChannel = existing;
               } else {
                 try {
-                  const cfg = onboardingService.getConfig();
                   const categoryId = cfg.personalCategoryId;
 
                   const overwrites: any[] = [
@@ -276,6 +291,11 @@ export class PawakoBotRunner {
 
             store.saveMembers();
             firebaseSyncService.saveMember(member).catch(() => {});
+
+            // Trigger Discord API role assignment in background
+            discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
+              console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
+            });
 
             // Send Module 1 message into personal channel if channel exists
             if (createdChannel) {
@@ -596,11 +616,29 @@ export class PawakoBotRunner {
                   const delayMins = nextQuiz?.delayMinutesBeforeQuiz || 10;
                   member.currentQuizAvailableAtTimestamp = Date.now() + delayMins * 60 * 1000;
 
-                  // Assign Discord roles for validated and new module
-                  const rolesToAssign = [currentMod.roleValidatedName, nextMod.roleEnCoursName].filter(Boolean);
-                  discordService.assignDiscordRolesToMember(user.id, rolesToAssign).catch(() => {});
+                  // Assign Discord roles for validated module and new module according to step configs
+                  const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
+                  const nextStepCfg = nextMod ? onboardingService.getStepConfigForModule(nextMod.id) : null;
+
+                  const passRoleName = stepCfg?.roleOnPassName || currentMod?.roleValidatedName;
+                  const nextStartRoleName = nextStepCfg?.roleOnStartName || nextMod?.roleEnCoursName;
+
+                  let updatedRoles = [...(member.roles || [])];
+                  if (passRoleName) updatedRoles.push(passRoleName);
+                  if (nextMod && nextStartRoleName) updatedRoles.push(nextStartRoleName);
+
+                  member.roles = Array.from(new Set(updatedRoles));
+                  discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
+                    console.warn('[Quiz Pass Role Sync Warning]', roleErr?.message || roleErr);
+                  });
                 } else {
                   member.candidateState = 'formation_terminee';
+                  const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
+                  const passRoleName = stepCfg?.roleOnPassName || currentMod?.roleValidatedName;
+                  if (passRoleName) {
+                    member.roles = Array.from(new Set([...(member.roles || []), passRoleName]));
+                  }
+                  discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
                 }
 
                 store.saveMembers();

@@ -1057,37 +1057,16 @@ async function startServer() {
           const matched = guildRoles.find((r) => r.id === cleanInput);
           if (matched) assignedRoleNames.push(matched.name);
         } else {
-          // Find by role name
-          let matchedRole = guildRoles.find(
+          // Find by role name in existing guild roles
+          const matchedRole = guildRoles.find(
             (r) => r.name.toLowerCase().trim() === cleanInput.toLowerCase().trim()
           );
-
-          // If role does not exist on Discord yet, create it on Discord automatically!
-          if (!matchedRole && cleanInput !== 'Membre' && cleanInput !== 'Nouveau membre') {
-            console.log(`[Role Creation 🛡️] Creating missing Discord role "${cleanInput}" on guild ${guildId}...`);
-            const createRoleRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bot ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                name: cleanInput,
-                color: 0x6366f1, // Indigo
-                mentionable: true,
-              }),
-            });
-
-            if (createRoleRes.ok) {
-              matchedRole = await createRoleRes.json();
-              guildRoles.push(matchedRole);
-              console.log(`[Role Creation ✅] Created Discord role "${matchedRole.name}" (ID: ${matchedRole.id})`);
-            }
-          }
 
           if (matchedRole) {
             targetRoleIds.push(matchedRole.id);
             assignedRoleNames.push(matchedRole.name);
+          } else {
+            console.warn(`[Role Assignment ⚠️] Le rôle "${cleanInput}" configuré n'existe pas sur le serveur Discord (${guildId}). Aucune création automatique.`);
           }
         }
       }
@@ -1195,33 +1174,15 @@ async function startServer() {
             const matched = guildRoles.find((r) => r.id === cleanInput);
             if (matched) assignedRoleNames.push(matched.name);
           } else {
-            let matchedRole = guildRoles.find(
+            const matchedRole = guildRoles.find(
               (r) => r.name.toLowerCase().trim() === cleanInput.toLowerCase().trim()
             );
-
-            if (!matchedRole && cleanInput !== 'Membre' && cleanInput !== 'Nouveau membre') {
-              const createRoleRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bot ${token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  name: cleanInput,
-                  color: 0x6366f1,
-                  mentionable: true,
-                }),
-              });
-
-              if (createRoleRes.ok) {
-                matchedRole = await createRoleRes.json();
-                guildRoles.push(matchedRole);
-              }
-            }
 
             if (matchedRole) {
               targetRoleIds.push(matchedRole.id);
               assignedRoleNames.push(matchedRole.name);
+            } else {
+              console.warn(`[Batch Role Assignment ⚠️] Le rôle "${cleanInput}" n'existe pas sur Discord (${guildId}).`);
             }
           }
         }

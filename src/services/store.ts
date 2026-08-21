@@ -93,22 +93,10 @@ class StoreService {
   private loadFromLocalStorage() {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
     try {
-      // Force clear any old demo/mock data key structures
-      const clearedFlag = localStorage.getItem('pawako_blank_slate_migration_v4');
-      if (!clearedFlag) {
-        localStorage.removeItem('pawako_modules');
-        localStorage.removeItem('pawako_quizzes');
-        localStorage.removeItem('pawako_members');
-        localStorage.removeItem('pawako_onboarding_flow_config');
-        localStorage.removeItem('pawako_automation_rules');
-        localStorage.setItem('pawako_blank_slate_migration_v4', 'true');
-      }
-
       const storedMods = localStorage.getItem('pawako_modules');
       if (storedMods) {
         const parsed = JSON.parse(storedMods);
-        // Filter out legacy demo items if any remain
-        this.modules = Array.isArray(parsed) ? parsed.filter((m: any) => m && m.id && !m.id.startsWith('mod-')) : [];
+        this.modules = Array.isArray(parsed) ? parsed : [];
       } else {
         this.modules = [];
       }
@@ -116,7 +104,7 @@ class StoreService {
       const storedQuizzes = localStorage.getItem('pawako_quizzes');
       if (storedQuizzes) {
         const parsed = JSON.parse(storedQuizzes);
-        this.quizzes = Array.isArray(parsed) ? parsed.filter((q: any) => q && q.id && !q.id.startsWith('quiz-')) : [];
+        this.quizzes = Array.isArray(parsed) ? parsed : [];
       } else {
         this.quizzes = [];
       }
@@ -124,13 +112,22 @@ class StoreService {
       const storedMembers = localStorage.getItem('pawako_members');
       if (storedMembers) {
         const parsed = JSON.parse(storedMembers);
-        this.members = Array.isArray(parsed) ? parsed.filter((mem: any) => mem && mem.id && !mem.id.startsWith('mem-admin')) : [];
+        this.members = Array.isArray(parsed) ? parsed : [];
       } else {
         this.members = [];
       }
 
       const storedLinks = localStorage.getItem('pawako_usefullinks');
-      if (storedLinks) this.usefulLinks = JSON.parse(storedLinks);
+      if (storedLinks) {
+        const parsed = JSON.parse(storedLinks);
+        this.usefulLinks = Array.isArray(parsed) ? parsed : [...defaultUsefulLinks];
+      }
+
+      const storedBranding = localStorage.getItem('pawako_branding');
+      if (storedBranding) {
+        const parsed = JSON.parse(storedBranding);
+        this.branding = { ...defaultBranding, ...parsed };
+      }
     } catch (e) {
       console.warn('Error loading store from localStorage:', e);
     }
@@ -153,6 +150,17 @@ class StoreService {
     });
   }
 
+  public saveBranding(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_branding', JSON.stringify(this.branding));
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
+  }
+
   public saveModules(): void {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       try {
@@ -165,7 +173,7 @@ class StoreService {
   }
 
   public setModules(modules: TrainingModule[]): void {
-    if (Array.isArray(modules) && modules.length > 0) {
+    if (Array.isArray(modules)) {
       this.modules = modules;
       this.saveModules();
     }
@@ -183,7 +191,7 @@ class StoreService {
   }
 
   public setQuizzes(quizzes: Quiz[]): void {
-    if (Array.isArray(quizzes) && quizzes.length > 0) {
+    if (Array.isArray(quizzes)) {
       this.quizzes = quizzes;
       this.saveQuizzes();
     }
@@ -200,6 +208,13 @@ class StoreService {
     this.notify();
   }
 
+  public setMembers(members: Member[]): void {
+    if (Array.isArray(members)) {
+      this.members = members;
+      this.saveMembers();
+    }
+  }
+
   public saveUsefulLinks(): void {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       try {
@@ -212,7 +227,7 @@ class StoreService {
   }
 
   public setUsefulLinks(links: UsefulLink[]): void {
-    if (Array.isArray(links) && links.length > 0) {
+    if (Array.isArray(links)) {
       this.usefulLinks = links;
       this.saveUsefulLinks();
     }

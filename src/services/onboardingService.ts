@@ -1,6 +1,7 @@
 import { OnboardingFlowConfig, ModuleStepConfig, Quiz, QuizQuestion } from '../types';
 import { roleService } from './roleService';
 import { discordService } from './discordService';
+import { store } from './store';
 
 const STORAGE_KEY = 'pawako_onboarding_flow_config';
 const COOLDOWN_STORAGE_KEY = 'pawako_member_quiz_cooldowns';
@@ -103,15 +104,29 @@ class OnboardingService {
 
   public getStepConfigForModule(moduleId: string): ModuleStepConfig {
     const existing = this.config.stepConfigs.find((s) => s.moduleId === moduleId);
-    if (existing) return existing;
+    const mod = store.getModule(moduleId);
+    const quiz = mod ? store.getQuiz(mod.quizId || '') : undefined;
+
+    if (existing) {
+      return {
+        ...existing,
+        moduleTitle: mod?.title || existing.moduleTitle,
+        directivesText: mod?.content || existing.directivesText || 'Lisez les consignes attentivement avant de passer le quiz.',
+        roleOnStartName: mod?.roleEnCoursName || existing.roleOnStartName || 'Trainee',
+        roleOnPassName: mod?.roleValidatedName || existing.roleOnPassName || 'Junior',
+        successMessage: quiz?.successMessage || existing.successMessage || '🎉 Félicitations, tu as réussi !',
+        failureMessage: quiz?.failureMessage || existing.failureMessage || '❌ Score insuffisant. Réessaie après le cooldown.',
+      };
+    }
 
     return {
       moduleId,
-      moduleTitle: 'Module de Formation',
-      roleOnStartName: 'Trainee',
-      roleOnPassName: 'Junior',
-      successMessage: '🎉 Félicitations, tu as réussi avec un score de {score}/{maxScore} !',
-      failureMessage: '❌ Score insuffisant ({score}/{maxScore}). Réessaie dans {cooldown} minutes.',
+      moduleTitle: mod?.title || 'Module de Formation',
+      directivesText: mod?.content || 'Lisez les consignes attentivement avant de passer le quiz.',
+      roleOnStartName: mod?.roleEnCoursName || 'Trainee',
+      roleOnPassName: mod?.roleValidatedName || 'Junior',
+      successMessage: quiz?.successMessage || '🎉 Félicitations, tu as réussi !',
+      failureMessage: quiz?.failureMessage || '❌ Score insuffisant. Réessaie après le cooldown.',
     };
   }
 
@@ -124,6 +139,23 @@ class OnboardingService {
       steps.push(step);
     }
     this.updateConfig({ stepConfigs: steps });
+
+    // Bi-directional sync with store module and quiz
+    const mod = store.getModule(step.moduleId);
+    if (mod) {
+      store.updateModule(step.moduleId, {
+        title: step.moduleTitle,
+        content: step.directivesText || mod.content,
+        roleEnCoursName: step.roleOnStartName || mod.roleEnCoursName,
+        roleValidatedName: step.roleOnPassName || mod.roleValidatedName,
+      });
+      if (mod.quizId) {
+        store.updateQuiz(mod.quizId, {
+          successMessage: step.successMessage,
+          failureMessage: step.failureMessage,
+        });
+      }
+    }
   }
 
   /**

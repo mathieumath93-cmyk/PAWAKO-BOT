@@ -297,32 +297,97 @@ export class PawakoBotRunner {
               console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
             });
 
-            // Send Module 1 message into personal channel if channel exists
+            // Send Welcome message with "Lancer la formation" button in personal channel
             if (createdChannel) {
-              const modEmbed = new EmbedBuilder()
-                .setTitle(`📚 ${mod1?.title || 'Module 1 : Onboarding & Culture PAWAKO'}`)
-                .setDescription(`${mod1?.content || 'Bienvenue dans ton espace de formation !'}\n\n⏱️ **Information Quiz** : Le **Quiz 1** sera débloqué dans **${delayMins} minutes** dans ce salon !`)
+              const startBtnLabel = cfg.startTrainingButtonLabel || '🚀 Lancer la formation';
+              const welcomeEmbed = new EmbedBuilder()
+                .setTitle(`👋 Content de te voir, ${user.username} !`)
+                .setDescription(
+                  `Bienvenue dans ton espace de formation privé.\n\nPour débloquer ton premier rôle et accéder aux consignes du **Module 1**, clique sur le bouton ci-dessous :`
+                )
                 .setColor(0x6366f1)
-                .setFooter({ text: 'PAWAKO FORMATION • Parcours Individuel' })
-                .setTimestamp();
+                .setFooter({ text: 'PAWAKO FORMATION • Accès Privé' });
 
-              const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder().setCustomId(`launch_quiz_${quiz1?.id || 'quiz-1'}`).setLabel('📝 Lancer le Quiz 1').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+              const welcomeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId('start_training_module_1')
+                  .setLabel(startBtnLabel)
+                  .setStyle(ButtonStyle.Success)
               );
 
-              await createdChannel.send({
-                content: `👋 Bienvenue <@${user.id}> dans ton salon privé de formation ! Voici ton premier module :`,
-                embeds: [modEmbed],
-                components: [row],
-              }).catch((msgErr) => console.warn('[Post Mod1 Msg Error]', msgErr));
+              await createdChannel
+                .send({
+                  content: `👋 Bienvenue <@${user.id}> dans ton salon privé de formation !`,
+                  embeds: [welcomeEmbed],
+                  components: [welcomeRow],
+                })
+                .catch((msgErr) => console.warn('[Post Welcome Msg Error]', msgErr));
             }
 
             const confirmMsg = createdChannel
-              ? `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}>. Ton salon de formation privé **<#${createdChannel.id}>** a été créé ! Accède-y dès maintenant pour consulter le Module 1.`
+              ? `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}>. Ton salon de formation privé **<#${createdChannel.id}>** a été créé ! Rends-toi dedans et clique sur **"${cfg.startTrainingButtonLabel || '🚀 Lancer la formation'}"** pour débloquer ton premier rôle.`
               : `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours de formation. Ton salon privé **#${expectedChanName}** est en cours d'attribution.`;
 
             await interaction.editReply({ content: confirmMsg });
+            return;
+          }
+
+          // --- 1b. LAUNCH TRAINING (INSIDE PERSONAL CHANNEL) ---
+          if (customId === 'start_training_module_1' || customId.startsWith('start_training')) {
+            const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+            member.candidateState = 'formation_commencee';
+            member.lastActiveAt = store.getFormattedNow();
+
+            const cfg = onboardingService.getConfig();
+
+            // Assign initial roles configured by admin
+            const step1Cfg = cfg.stepConfigs?.[0];
+            const initialRoleName = cfg.initialRoleName;
+            const step1RoleOnStart = step1Cfg?.roleOnStartName;
+
+            const configuredInitialRoles = Array.from(
+              new Set([initialRoleName, step1RoleOnStart].filter(Boolean) as string[])
+            );
+            if (configuredInitialRoles.length > 0) {
+              member.roles = Array.from(new Set([...(member.roles || []), ...configuredInitialRoles]));
+            }
+
+            // Setup Module 1 & Quiz availability
+            const mod1 = store.getModule('mod-1') || store.getModules()[0];
+            const quiz1 = store.getQuiz(mod1?.quizId || 'quiz-1') || store.getQuizzes()[0];
+            const delayMins = quiz1?.delayMinutesBeforeQuiz || 10;
+            member.currentQuizAvailableAtTimestamp = Date.now() + delayMins * 60 * 1000;
+
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            // Trigger Discord API role assignment in background
+            discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
+              console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
+            });
+
+            const modEmbed = new EmbedBuilder()
+              .setTitle(`📚 ${mod1?.title || 'Module 1 : Onboarding & Culture PAWAKO'}`)
+              .setDescription(
+                `${mod1?.content || 'Bienvenue dans ton espace de formation !'}\n\n⏱️ **Information Quiz** : Le **Quiz 1** sera débloqué dans **${delayMins} minutes** dans ce salon !`
+              )
+              .setColor(0x6366f1)
+              .setFooter({ text: 'PAWAKO FORMATION • Parcours Individuel' })
+              .setTimestamp();
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`launch_quiz_${quiz1?.id || 'quiz-1'}`)
+                .setLabel('📝 Lancer le Quiz 1')
+                .setStyle(ButtonStyle.Success),
+              new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+            );
+
+            await interaction.editReply({
+              content: `🚀 **Formation Lancée !** Ton rôle **@${member.roles[0] || initialRoleName || 'Trainee'}** a été attribué avec succès. Voici ton premier module :`,
+              embeds: [modEmbed],
+              components: [row],
+            });
             return;
           }
 

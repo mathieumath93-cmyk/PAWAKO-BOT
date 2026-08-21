@@ -58,6 +58,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
 
   // Cooldown State
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
+  const [showProfile, setShowProfile] = useState<boolean>(false);
 
   // Handle Cooldown Timer Ticking
   useEffect(() => {
@@ -86,6 +87,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
       rulesMessage: config.welcomeRulesMessage,
     });
 
+    addLog(`Salon privé "${chanName}" créé avec succès ! Message de bienvenue envoyé.`);
     setStep('personal_channel_created');
   };
 
@@ -93,7 +95,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
   const handleLaunchTraining = () => {
     const roleName = config.initialRoleName || 'Trainee';
     if (!assignedRoles.includes(roleName)) {
-      setAssignedRoles([...assignedRoles, roleName]);
+      setAssignedRoles((prev) => [...prev, roleName]);
     }
 
     addLog(`Attribution du rôle initial "@${roleName}" à ${memberName}.`);
@@ -287,7 +289,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
 
                     <button
                       onClick={handleStartOnboarding}
-                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
+                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all cursor-pointer"
                     >
                       <Play className="w-4 h-4" />
                       <span>{config.welcomeButtonLabel}</span>
@@ -322,12 +324,37 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
 
                     <button
                       onClick={handleLaunchTraining}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all"
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all cursor-pointer"
                     >
                       <Shield className="w-4 h-4" />
-                      <span>{config.startTrainingButtonLabel}</span>
+                      <span>{config.startTrainingButtonLabel || '🚀 Lancer la formation'}</span>
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Candidate Profile Overlay View */}
+            {showProfile && (
+              <div className="p-5 rounded-2xl bg-indigo-950/90 border border-indigo-500/40 space-y-3 animate-in fade-in text-xs font-mono">
+                <div className="flex items-center justify-between border-b border-indigo-500/30 pb-2">
+                  <span className="font-bold text-indigo-200 text-sm flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-indigo-400" />
+                    <span>👤 MON PROFIL CANDIDAT (Aperçu Discord Staff & Membre)</span>
+                  </span>
+                  <button
+                    onClick={() => setShowProfile(false)}
+                    className="p-1 rounded bg-indigo-900/50 hover:bg-indigo-800 text-indigo-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-slate-200 leading-relaxed whitespace-pre-line bg-slate-950/80 p-4 rounded-xl border border-indigo-500/20">
+                  <p>Candidat : <strong className="text-white">{memberName}</strong></p>
+                  <p>📊 <strong>Progression :</strong> {step === 'module2_active' ? '████████░░ 80%' : '████░░░░░░ 40%'}</p>
+                  <p>📚 <strong>Module actuel :</strong> {step === 'module2_active' ? (modules[1]?.title || 'Module 2') : (modules[0]?.title || 'Module 1')}</p>
+                  <p>🏷️ <strong>Rôles Discord actuels :</strong> {assignedRoles.map(r => `@${r}`).join(', ') || '@Trainee'}</p>
+                  <p>⏱️ <strong>Statut Cooldown :</strong> {cooldownSeconds > 0 ? `⏳ Actif (${Math.floor(cooldownSeconds/60)}m)` : '✅ Disponible'}</p>
                 </div>
               </div>
             )}
@@ -337,13 +364,13 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 animate-in fade-in">
                 <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Rôle <strong>@{config.initialRoleName || 'Trainee'}</strong> attribué avec succès !</span>
+                  <span>Rôle <strong>@{assignedRoles[0] || config.initialRoleName || 'Trainee'}</strong> attribué avec succès !</span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
-                  <h4 className="font-bold text-white text-sm">📘 Module 1 : Onboarding & Directives</h4>
+                  <h4 className="font-bold text-white text-sm">📘 {modules[0]?.title || 'Module 1 : Onboarding & Culture PAWAKO'}</h4>
                   <p className="text-slate-300 leading-relaxed">
-                    Consultez la documentation externe et lisez les consignes attentivement avant d'ouvrir l'évaluation.
+                    {modules[0]?.content || 'Consultez la documentation externe et lisez les consignes attentivement avant d\'ouvrir l\'évaluation.'}
                   </p>
 
                   <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
@@ -359,13 +386,23 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                     </a>
                   </div>
 
-                  <button
-                    onClick={() => handleStartQuiz('mod-1')}
-                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all"
-                  >
-                    <HelpCircle className="w-4 h-4 text-amber-300" />
-                    <span>Démarrer le Quiz (Mode Aléatoire QuizBot)</span>
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    <button
+                      onClick={() => handleStartQuiz('mod-1')}
+                      className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <HelpCircle className="w-4 h-4 text-amber-300" />
+                      <span>📝 Lancer le Quiz 1</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowProfile(!showProfile)}
+                      className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4 text-indigo-400" />
+                      <span>👤 Mon profil</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -510,22 +547,32 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 animate-in fade-in">
                 <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
-                  <span>Module 2 Débloqué ! Rôle <strong>@Junior</strong> actif.</span>
+                  <span>Module 2 Débloqué ! Rôle <strong>@{assignedRoles.find(r => r === 'Junior' || r === 'Senior' || r === 'Certified') || 'Junior'}</strong> actif.</span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
-                  <h4 className="font-bold text-white text-sm">🛠️ Module 2 : Outils & Processus Internes</h4>
+                  <h4 className="font-bold text-white text-sm">🛠️ {modules[1]?.title || 'Module 2 : Outils & Processus Internes'}</h4>
                   <p className="text-slate-300 leading-relaxed">
-                    Voici les directives du Module 2. Vous pouvez désormais vous former aux workflows internes et aux tickets de support.
+                    {modules[1]?.content || 'Voici les directives du Module 2. Vous pouvez désormais vous former aux workflows internes et aux tickets de support.'}
                   </p>
 
-                  <button
-                    onClick={() => handleStartQuiz('mod-2')}
-                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all"
-                  >
-                    <HelpCircle className="w-4 h-4 text-amber-300" />
-                    <span>Démarrer le Quiz du Module 2</span>
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    <button
+                      onClick={() => handleStartQuiz('mod-2')}
+                      className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <HelpCircle className="w-4 h-4 text-amber-300" />
+                      <span>📝 Lancer le Quiz 2</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowProfile(!showProfile)}
+                      className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4 text-indigo-400" />
+                      <span>👤 Mon profil</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

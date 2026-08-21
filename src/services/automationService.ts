@@ -2,36 +2,7 @@ import { AutomationRule } from '../types';
 import { discordService } from './discordService';
 import { store } from './store';
 
-export const initialAutomations: AutomationRule[] = [
-  {
-    id: 'auto-1',
-    name: 'Validation Automatique Module 1',
-    description: 'Attribue le rôle Junior, envoie un message dans #resultats-certifications et débloque le Module 2 quand le Quiz 1 est réussi.',
-    enabled: true,
-    trigger: 'quiz_completed',
-    condition: 'score_gte',
-    conditionValue: 16,
-    actions: [
-      { type: 'add_role', target: 'Junior', payload: 'role-junior' },
-      { type: 'send_message', target: '#resultats-certifications', payload: '🎉 Félicitations {user} pour le Module 1 !' },
-      { type: 'unlock_module', target: 'Module 2 — Outils & Processus', payload: 'mod-2' },
-      { type: 'log_event', target: 'System Logs', payload: 'Passage réussi au Module 2' },
-    ],
-  },
-  {
-    id: 'auto-2',
-    name: 'Onboarding Nouveau Membre',
-    description: 'Attribue le rôle Trainee et envoie un message privé d\'accueil lors de l\'arrivée d\'un nouveau membre.',
-    enabled: true,
-    trigger: 'member_joined',
-    condition: 'always',
-    actions: [
-      { type: 'add_role', target: 'Trainee', payload: 'role-trainee' },
-      { type: 'send_dm', target: 'User DM', payload: 'Bienvenue sur le serveur Pawako Formation ! Rends-toi dans #formation pour débuter.' },
-      { type: 'unlock_module', target: 'Module 1 — Onboarding', payload: 'mod-1' },
-    ],
-  },
-];
+export const initialAutomations: AutomationRule[] = [];
 
 class AutomationService {
   private rules: AutomationRule[] = [];
@@ -44,12 +15,16 @@ class AutomationService {
     try {
       const stored = localStorage.getItem('pawako_automation_rules');
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          // Filter out legacy demo rules
+          return parsed.filter((r: any) => r && r.id && !r.id.startsWith('auto-'));
+        }
       }
     } catch {
       // Fallback
     }
-    return [...initialAutomations];
+    return [];
   }
 
   private saveRules(): void {
@@ -130,7 +105,7 @@ class AutomationService {
           details.push(`Message envoyé (${targetChan})`);
         }
       } else if (act.type === 'add_role' || act.type === 'remove_role') {
-        const roleName = act.target || 'Junior';
+        const roleName = act.target || 'Membre';
         discordService.sendWebhookLog(
           'Attribution de Rôle',
           'role',

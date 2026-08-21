@@ -6,66 +6,16 @@ import { store } from './store';
 const STORAGE_KEY = 'pawako_onboarding_flow_config';
 const COOLDOWN_STORAGE_KEY = 'pawako_member_quiz_cooldowns';
 
-const defaultStepConfigs: ModuleStepConfig[] = [
-  {
-    moduleId: 'mod-1',
-    moduleTitle: 'Module 1 : Onboarding & Culture',
-    roleOnStartId: 'role-trainee',
-    roleOnStartName: 'Trainee',
-    roleOnPassId: 'role-junior',
-    roleOnPassName: 'Junior',
-    nextModuleId: 'mod-2',
-    nextModuleTitle: 'Module 2 : Outils & Processus Internes',
-    directivesText: 'Bienvenue dans le Module 1 ! Veuillez lire attentivement le guide complet ci-dessous et consulter la documentation externe.',
-    externalLinkUrl: 'https://docs.pawako.com/onboarding-guide',
-    successMessage: '🎉 Félicitations, tu as réussi le Quiz 1 avec un score de {score}/{maxScore} ! Tu as désormais accès au Module 2.',
-    failureMessage: '❌ Score insuffisant ({score}/{maxScore}). Tu pourras faire une nouvelle tentative après un délai de {cooldown} minutes.',
-  },
-  {
-    moduleId: 'mod-2',
-    moduleTitle: 'Module 2 : Outils & Processus Internes',
-    roleOnStartId: 'role-junior',
-    roleOnStartName: 'Junior',
-    roleOnPassId: 'role-senior',
-    roleOnPassName: 'Senior',
-    nextModuleId: 'mod-3',
-    nextModuleTitle: 'Module 3 : Communication & Reporting',
-    directivesText: 'Module 2 — Analyse des workflows internes et de la gestion des tickets. Consultez les règles de sécurité.',
-    externalLinkUrl: 'https://docs.pawako.com/sec-guide',
-    successMessage: '🎉 Félicitations, tu as validé le Module 2 avec le score de {score}/{maxScore} ! Clique ci-dessous pour lancer le Module 3.',
-    failureMessage: '❌ Tu as obtenu {score}/{maxScore}. Révise les fiches sécurité puis réessaye dans {cooldown} minutes.',
-  },
-  {
-    moduleId: 'mod-3',
-    moduleTitle: 'Module 3 : Communication & Reporting',
-    roleOnStartId: 'role-senior',
-    roleOnStartName: 'Senior',
-    roleOnPassId: 'role-certified',
-    roleOnPassName: 'Certified',
-    nextModuleId: 'mod-4',
-    nextModuleTitle: 'Module 4 : Certification',
-    directivesText: 'Module 3 — Bonnes pratiques de communication et reporting.',
-    externalLinkUrl: 'https://docs.pawako.com/reporting',
-    successMessage: '🎉 Excellent travail ! Score : {score}/{maxScore}. Passage au Module 4 débloqué.',
-    failureMessage: '❌ Échec au quiz ({score}/{maxScore}). Cooldown de {cooldown} minutes activé.',
-  },
-];
+const defaultStepConfigs: ModuleStepConfig[] = [];
 
 const defaultConfig: OnboardingFlowConfig = {
   welcomeChannelName: '#bienvenue',
   welcomeButtonLabel: 'Commencer la formation',
   personalChannelPrefix: 'formation-',
-  welcomeRulesMessage: `👋 **Bienvenue sur le serveur officiel PAWAKO FORMATION !**
-
-Veuillez prendre connaissance des règles fondamentales avant de commencer :
-1. 🤝 **Bienveillance & Entraide** : Respectez chaque membre de la communauté.
-2. 🔒 **Confidentialité** : Ne divulguez pas d'informations sensibles.
-3. ⚡ **Assiduité** : Complétez les modules à votre rythme.
-
-Cliquez sur le bouton ci-dessous pour lancer le **Module 1** de votre formation !`,
+  welcomeRulesMessage: `👋 Bienvenue sur notre serveur !\n\nVeuillez prendre connaissance des informations ci-dessous avant de cliquer sur le bouton pour lancer votre parcours.`,
   startTrainingButtonLabel: 'Lancer la formation',
-  initialRoleId: 'role-trainee',
-  initialRoleName: 'Trainee',
+  initialRoleId: '',
+  initialRoleName: 'Nouveau membre',
   cooldownMinutes: 15,
   randomizeQuestions: true,
   hideQuizSolutions: true,
@@ -102,6 +52,30 @@ class OnboardingService {
     return { ...this.config };
   }
 
+  public resetToBlankSlate(): OnboardingFlowConfig {
+    const blankConfig: OnboardingFlowConfig = {
+      welcomeChannelName: '#bienvenue',
+      welcomeButtonLabel: 'Commencer la formation',
+      personalChannelPrefix: 'formation-',
+      welcomeRulesMessage: `👋 Bienvenue sur notre serveur !\n\nVeuillez prendre connaissance des informations ci-dessous avant de cliquer sur le bouton pour lancer votre parcours.`,
+      startTrainingButtonLabel: 'Lancer la formation',
+      initialRoleId: '',
+      initialRoleName: 'Nouveau membre',
+      cooldownMinutes: 15,
+      randomizeQuestions: true,
+      hideQuizSolutions: true,
+      stepConfigs: [],
+    };
+    this.config = blankConfig;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(blankConfig));
+      localStorage.removeItem(COOLDOWN_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+    return { ...this.config };
+  }
+
   public getStepConfigForModule(moduleId: string): ModuleStepConfig {
     const existing = this.config.stepConfigs.find((s) => s.moduleId === moduleId);
     const mod = store.getModule(moduleId);
@@ -112,8 +86,8 @@ class OnboardingService {
         ...existing,
         moduleTitle: mod?.title || existing.moduleTitle,
         directivesText: mod?.content || existing.directivesText || 'Lisez les consignes attentivement avant de passer le quiz.',
-        roleOnStartName: mod?.roleEnCoursName || existing.roleOnStartName || 'Trainee',
-        roleOnPassName: mod?.roleValidatedName || existing.roleOnPassName || 'Junior',
+        roleOnStartName: mod?.roleEnCoursName || existing.roleOnStartName || 'En cours',
+        roleOnPassName: mod?.roleValidatedName || existing.roleOnPassName || 'Validé',
         successMessage: quiz?.successMessage || existing.successMessage || '🎉 Félicitations, tu as réussi !',
         failureMessage: quiz?.failureMessage || existing.failureMessage || '❌ Score insuffisant. Réessaie après le cooldown.',
       };
@@ -123,8 +97,8 @@ class OnboardingService {
       moduleId,
       moduleTitle: mod?.title || 'Module de Formation',
       directivesText: mod?.content || 'Lisez les consignes attentivement avant de passer le quiz.',
-      roleOnStartName: mod?.roleEnCoursName || 'Trainee',
-      roleOnPassName: mod?.roleValidatedName || 'Junior',
+      roleOnStartName: mod?.roleEnCoursName || 'En cours',
+      roleOnPassName: mod?.roleValidatedName || 'Validé',
       successMessage: quiz?.successMessage || '🎉 Félicitations, tu as réussi !',
       failureMessage: quiz?.failureMessage || '❌ Score insuffisant. Réessaie après le cooldown.',
     };

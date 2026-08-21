@@ -132,11 +132,11 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <span className="text-slate-500 block">Rôle Démarrage :</span>
-                      <span className="font-semibold text-slate-300 truncate block">{mod.roleEnCoursName || 'Trainee'}</span>
+                      <span className="font-semibold text-slate-300 truncate block">{mod.roleEnCoursName || 'En cours'}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Rôle Validé :</span>
-                      <span className="font-semibold text-indigo-300 truncate block">{mod.roleValidatedName || 'Junior'}</span>
+                      <span className="font-semibold text-indigo-300 truncate block">{mod.roleValidatedName || 'Validé'}</span>
                     </div>
                   </div>
 

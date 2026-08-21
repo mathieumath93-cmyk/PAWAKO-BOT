@@ -197,13 +197,13 @@ class MessageService {
     }
   ): string {
     let result = text || '';
-    result = result.replace(/\{user\}/g, vars.user || '@Anthony');
-    result = result.replace(/\{username\}/g, vars.username || 'Anthony');
-    result = result.replace(/\{server\}/g, vars.server || 'Pawako Formation');
-    result = result.replace(/\{module\}/g, vars.module || 'Module 1 — Onboarding');
-    result = result.replace(/\{score\}/g, String(vars.score ?? 17));
+    result = result.replace(/\{user\}/g, vars.user || '@Membre');
+    result = result.replace(/\{username\}/g, vars.username || 'Membre');
+    result = result.replace(/\{server\}/g, vars.server || 'Serveur Formation');
+    result = result.replace(/\{module\}/g, vars.module || 'Module de formation');
+    result = result.replace(/\{score\}/g, String(vars.score ?? 0));
     result = result.replace(/\{max_score\}/g, String(vars.max_score ?? 20));
-    result = result.replace(/\{next_module\}/g, vars.next_module || 'Module 2 — Outils & Processus');
+    result = result.replace(/\{next_module\}/g, vars.next_module || 'Module suivant');
     return result;
   }
 }

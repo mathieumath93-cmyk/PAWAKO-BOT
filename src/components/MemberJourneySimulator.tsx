@@ -93,13 +93,21 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
 
   // Step 2 -> Step 3: Clic sur "Lancer la formation"
   const handleLaunchTraining = () => {
-    const roleName = config.initialRoleName || 'Trainee';
+    if (modules.length === 0) {
+      onShowToast(
+        'Aucun Module Configuré ⚠️',
+        'Veuillez d\'abord ajouter votre premier module dans l\'onglet Configurateur.',
+        'info'
+      );
+      return;
+    }
+    const roleName = config.initialRoleName || 'Nouveau membre';
     if (!assignedRoles.includes(roleName)) {
       setAssignedRoles((prev) => [...prev, roleName]);
     }
 
     addLog(`Attribution du rôle initial "@${roleName}" à ${memberName}.`);
-    addLog(`Affichage des directives du Module 1 et du lien de formation.`);
+    addLog(`Affichage des directives du ${modules[0]?.title || 'Module'} et du lien de formation.`);
 
     setStep('module1_active');
   };
@@ -153,8 +161,8 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
     setQuizPassed(passed);
 
     if (passed) {
-      const step1Config = config.stepConfigs.find((s) => s.moduleId === 'mod-1');
-      const passRole = step1Config?.roleOnPassName || 'Junior';
+      const stepConfig = config.stepConfigs.find((s) => s.moduleId === currentQuiz.moduleId) || config.stepConfigs[0];
+      const passRole = stepConfig?.roleOnPassName || modules.find((m) => m.id === currentQuiz.moduleId)?.roleValidatedName || 'Membre Validé';
       if (!assignedRoles.includes(passRole)) {
         setAssignedRoles([...assignedRoles, passRole]);
       }
@@ -352,25 +360,25 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                 <div className="space-y-2 text-slate-200 leading-relaxed whitespace-pre-line bg-slate-950/80 p-4 rounded-xl border border-indigo-500/20">
                   <p>Candidat : <strong className="text-white">{memberName}</strong></p>
                   <p>📊 <strong>Progression :</strong> {step === 'module2_active' ? '████████░░ 80%' : '████░░░░░░ 40%'}</p>
-                  <p>📚 <strong>Module actuel :</strong> {step === 'module2_active' ? (modules[1]?.title || 'Module 2') : (modules[0]?.title || 'Module 1')}</p>
-                  <p>🏷️ <strong>Rôles Discord actuels :</strong> {assignedRoles.map(r => `@${r}`).join(', ') || '@Trainee'}</p>
+                  <p>📚 <strong>Module actuel :</strong> {step === 'module2_active' ? (modules[1]?.title || 'Module suivant') : (modules[0]?.title || 'Module de formation')}</p>
+                  <p>🏷️ <strong>Rôles Discord actuels :</strong> {assignedRoles.map(r => `@${r}`).join(', ') || '@Nouveau membre'}</p>
                   <p>⏱️ <strong>Statut Cooldown :</strong> {cooldownSeconds > 0 ? `⏳ Actif (${Math.floor(cooldownSeconds/60)}m)` : '✅ Disponible'}</p>
                 </div>
               </div>
             )}
 
-            {/* Step 3: Module 1 Directives & Quiz Start */}
+            {/* Step 3: Module Directives & Quiz Start */}
             {step === 'module1_active' && (
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 animate-in fade-in">
                 <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Rôle <strong>@{assignedRoles[0] || config.initialRoleName || 'Trainee'}</strong> attribué avec succès !</span>
+                  <span>Rôle <strong>@{assignedRoles[0] || config.initialRoleName || 'Nouveau membre'}</strong> attribué avec succès !</span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
-                  <h4 className="font-bold text-white text-sm">📘 {modules[0]?.title || 'Module 1 : Onboarding & Culture PAWAKO'}</h4>
+                  <h4 className="font-bold text-white text-sm">📘 {modules[0]?.title || 'Module de Formation'}</h4>
                   <p className="text-slate-300 leading-relaxed">
-                    {modules[0]?.content || 'Consultez la documentation externe et lisez les consignes attentivement avant d\'ouvrir l\'évaluation.'}
+                    {modules[0]?.content || 'Consultez les consignes attentivement avant d\'ouvrir l\'évaluation.'}
                   </p>
 
                   <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
@@ -388,11 +396,11 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <button
-                      onClick={() => handleStartQuiz('mod-1')}
+                      onClick={() => handleStartQuiz(modules[0]?.id || '')}
                       className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
                       <HelpCircle className="w-4 h-4 text-amber-300" />
-                      <span>📝 Lancer le Quiz 1</span>
+                      <span>📝 Lancer le Quiz</span>
                     </button>
 
                     <button
@@ -482,19 +490,19 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                     </div>
 
                     <p className="text-xs text-slate-200 leading-relaxed">
-                      Tu as obtenu le score de <strong>{quizScore}/20</strong> ! Rôle <strong>@Junior</strong> attribué avec succès.
+                      Tu as obtenu le score de <strong>{quizScore}/20</strong> ! Rôle <strong>@{assignedRoles[assignedRoles.length - 1] || 'Validé'}</strong> attribué avec succès.
                     </p>
 
                     <button
                       onClick={handleAccessModule2}
                       className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all"
                     >
-                      <span>Accéder au Module 2</span>
+                      <span>Accéder au Module Suivant</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
-                  /* FAILURE SCREEN WITH 15 MIN COOLDOWN */
+                  /* FAILURE SCREEN WITH COOLDOWN */
                   <div className="p-5 rounded-xl bg-rose-950/40 border border-rose-500/40 space-y-3 text-rose-200">
                     <div className="flex items-center gap-2 font-bold text-sm text-rose-400">
                       <XCircle className="w-5 h-5" />
@@ -520,7 +528,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                     <div className="flex items-center gap-2 pt-2">
                       <button
                         disabled={cooldownSeconds > 0}
-                        onClick={() => handleStartQuiz('mod-1')}
+                        onClick={() => handleStartQuiz(modules[0]?.id || '')}
                         className="px-4 py-2 rounded-xl bg-slate-800 disabled:opacity-50 text-white text-xs font-bold"
                       >
                         Réessayer le Quiz
@@ -529,8 +537,8 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                       <button
                         onClick={() => {
                           setCooldownSeconds(0);
-                          onboardingService.resetCooldown(memberName, currentQuiz?.id || 'quiz-1');
-                          onShowToast('Override Admin ⚡', 'Cooldown de 15 minutes réinitialisé pour le test.', 'info');
+                          onboardingService.resetCooldown(memberName, currentQuiz?.id || 'quiz');
+                          onShowToast('Override Admin ⚡', 'Cooldown réinitialisé pour le test.', 'info');
                         }}
                         className="px-3 py-2 rounded-xl bg-indigo-950 text-indigo-300 text-[11px] font-mono border border-indigo-500/30 hover:bg-indigo-900"
                       >
@@ -542,23 +550,23 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
               </div>
             )}
 
-            {/* Step 6: Module 2 Active */}
+            {/* Step 6: Next Module Active */}
             {step === 'module2_active' && (
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 animate-in fade-in">
                 <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
-                  <span>Module 2 Débloqué ! Rôle <strong>@{assignedRoles.find(r => r === 'Junior' || r === 'Senior' || r === 'Certified') || 'Junior'}</strong> actif.</span>
+                  <span>Module Suivant Débloqué ! Rôle <strong>@{assignedRoles[assignedRoles.length - 1] || 'Validé'}</strong> actif.</span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
-                  <h4 className="font-bold text-white text-sm">🛠️ {modules[1]?.title || 'Module 2 : Outils & Processus Internes'}</h4>
+                  <h4 className="font-bold text-white text-sm">🛠️ {modules[1]?.title || 'Module Suivant'}</h4>
                   <p className="text-slate-300 leading-relaxed">
-                    {modules[1]?.content || 'Voici les directives du Module 2. Vous pouvez désormais vous former aux workflows internes et aux tickets de support.'}
+                    {modules[1]?.content || 'Consultez les consignes de ce module.'}
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <button
-                      onClick={() => handleStartQuiz('mod-2')}
+                      onClick={() => handleStartQuiz(modules[1]?.id || '')}
                       className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
                       <HelpCircle className="w-4 h-4 text-amber-300" />

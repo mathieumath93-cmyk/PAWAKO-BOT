@@ -24,41 +24,41 @@ export const initialReminderRules: CandidateReminderRule[] = [
   {
     id: 'relance-not-started',
     delayHours: 2,
-    label: 'Relance Démarrage (N\'a pas ouvert le Module 1)',
+    label: 'Relance Démarrage (N\'a pas démarré)',
     stageCondition: 'not_started',
     stageLabel: 'N\'a pas encore démarré',
     enabled: true,
-    messageText: '👋 Coucou {membre} ! Tu es inscrit à la formation PAWAKO mais tu n\'as pas encore ouvert le Module 1. Ton accès est disponible dans ton salon privé !',
+    messageText: '👋 Coucou {membre} ! N\'hésite pas à débuter ta formation. Ton accès est disponible dans ton salon privé !',
     targetChannel: 'personal_channel',
   },
   {
     id: 'relance-in-progress',
     delayHours: 6,
-    label: 'Rappel Module en Cours (Bloqué sur un Module)',
+    label: 'Rappel Module en Cours (En cours de lecture)',
     stageCondition: 'in_progress_module',
     stageLabel: 'Module en cours de lecture',
     enabled: true,
-    messageText: '📌 Rappel {membre} : Tu as entamé la lecture de ton module. Il ne te reste que quelques sections pour débloquer le Quiz de validation !',
+    messageText: '📌 Rappel {membre} : Tu as entamé la lecture de ton module. Complète les étapes pour débloquer le Quiz de validation !',
     targetChannel: 'personal_channel',
   },
   {
     id: 'relance-quiz-failed',
     delayHours: 12,
-    label: 'Relance Révision & Retente Quiz (Quiz Échoué)',
+    label: 'Relance Révision (Quiz à repasser)',
     stageCondition: 'quiz_failed',
     stageLabel: 'Quiz non validé / À repasser',
     enabled: true,
-    messageText: '⚡ {membre}, ton résultat au Quiz nécessite une petite révision ! Relis les points clés du module et retente ta chance pour débloquer ton rôle Discord.',
+    messageText: '⚡ {membre}, relis les points clés de ton module et retente ta chance au Quiz pour débloquer ton rôle Discord !',
     targetChannel: 'personal_channel',
   },
   {
     id: 'relance-pending-role',
     delayHours: 24,
-    label: 'Notification Attribution de Rôle (En Attente)',
+    label: 'Notification Attribution de Rôle',
     stageCondition: 'pending_role',
     stageLabel: 'Quiz réussi / En attente de rôle',
     enabled: true,
-    messageText: '🎉 Bravo {membre} ! Tu as brillamment réussi ton évaluation. Un administrateur valide l\'attribution de tes nouveaux rôles sur Discord !',
+    messageText: '🎉 Bravo {membre} ! Tu as réussi ton évaluation. Tes nouveaux accès et rôles sont en cours d\'attribution !',
     targetChannel: 'personal_channel',
   },
 ];
@@ -95,6 +95,15 @@ class ReminderService {
     this.rules = rules;
     try {
       localStorage.setItem('pawako_candidate_reminder_rules', JSON.stringify(rules));
+    } catch {
+      // Ignore
+    }
+  }
+
+  public resetToBlankSlate(): void {
+    this.rules = [];
+    try {
+      localStorage.setItem('pawako_candidate_reminder_rules', JSON.stringify([]));
     } catch {
       // Ignore
     }

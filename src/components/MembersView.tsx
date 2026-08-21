@@ -201,7 +201,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     {/* Role */}
                     <td className="p-4">
                       <span className="px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-semibold text-[11px]">
-                        {member.roles[0] || 'Trainee'}
+                        {member.roles[0] || 'Nouveau membre'}
                       </span>
                     </td>
 
@@ -219,11 +219,11 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     </td>
 
                     {/* Modules Completed */}
-                    <td className="p-4 font-mono text-slate-300">{completedCount} / 5</td>
+                    <td className="p-4 font-mono text-slate-300">{completedCount} / {store.getModules().length || 1}</td>
 
                     {/* Average Score */}
                     <td className="p-4 font-mono font-bold text-emerald-400">
-                      {member.averageScore || 17.4} / 20
+                      {member.averageScore !== undefined ? `${member.averageScore} / 20` : '-'}
                     </td>
 
                     {/* Candidate State & Status */}
@@ -294,7 +294,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                         <button
                           onClick={() => {
-                            const target = prompt(`Forcer le passage au module pour ${member.username} (ex: mod-1, mod-2, mod-3) :`, member.currentModuleId);
+                            const target = prompt(`Forcer le passage au module pour ${member.username} (saisir l'ID du module) :`, member.currentModuleId);
                             if (target) {
                               memberService.forceModule(member.id, target);
                               onRefresh();

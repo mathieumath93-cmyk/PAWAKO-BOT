@@ -64,60 +64,10 @@ export function App() {
   const [isBotTokenModalOpen, setIsBotTokenModalOpen] = useState(false);
 
   // System Notifications
-  const [notifications, setNotifications] = useState<AdminNotification[]>([
-    {
-      id: 'notif-1',
-      title: 'Bot Discord Gateway Synchronisé',
-      message: '1,248 membres et 12 salons textuels ont été mis à jour.',
-      date: 'Il y a 5 min',
-      level: 'info',
-      status: 'non_lue',
-    },
-    {
-      id: 'notif-2',
-      title: 'Nouveau quiz complété par John',
-      message: 'John a obtenu un score de 18/20 au Quiz 1.',
-      date: 'Il y a 12 min',
-      level: 'info',
-      status: 'non_lue',
-    },
-  ]);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
 
   // System Logs
-  const [logs, setLogs] = useState<AdminLog[]>([
-    {
-      id: 'log-1',
-      action: 'Module Complété',
-      level: 'succes',
-      userName: 'John',
-      details: 'John a validé le Module 1 avec 18/20',
-      date: '14:32:10',
-    },
-    {
-      id: 'log-2',
-      action: 'Quiz Réussi',
-      level: 'succes',
-      userName: 'Sarah',
-      details: 'Sarah a obtenu le rôle Senior après réussite du Quiz 2',
-      date: '14:18:02',
-    },
-    {
-      id: 'log-3',
-      action: 'Nouveau Membre',
-      level: 'info',
-      userName: 'Mike',
-      details: 'Rôle Trainee attribué automatiquement à Mike',
-      date: '14:05:44',
-    },
-    {
-      id: 'log-4',
-      action: 'Échec Quiz',
-      level: 'avertissement',
-      userName: 'Emma',
-      details: 'Score 12/20 au Quiz 4 (requis 16/20)',
-      date: '13:50:11',
-    },
-  ]);
+  const [logs, setLogs] = useState<AdminLog[]>([]);
 
   const refreshData = () => {
     setModules([...moduleService.getModules()]);

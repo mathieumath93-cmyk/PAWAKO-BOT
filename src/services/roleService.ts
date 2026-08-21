@@ -11,12 +11,7 @@ export interface ModuleRoleMapping {
 
 class RoleService {
   private roles: DiscordRole[] = this.loadRoles();
-  private mappings: ModuleRoleMapping[] = [
-    { moduleId: 'mod-1', moduleTitle: 'Module 1 — Onboarding & Culture', roleId: 'role-trainee', roleName: 'Trainee', nextRoleId: 'role-junior', nextRoleName: 'Junior' },
-    { moduleId: 'mod-2', moduleTitle: 'Module 2 — Outils & Processus Internes', roleId: 'role-junior', roleName: 'Junior', nextRoleId: 'role-senior', nextRoleName: 'Senior' },
-    { moduleId: 'mod-3', moduleTitle: 'Module 3 — Communication & Reporting', roleId: 'role-senior', roleName: 'Senior', nextRoleId: 'role-certified', nextRoleName: 'Certified' },
-    { moduleId: 'mod-4', moduleTitle: 'Module 4 — Sécurité & Confidentialité', roleId: 'role-certified', roleName: 'Certified', nextRoleId: 'role-formateur', nextRoleName: 'Formateur' },
-  ];
+  private mappings: ModuleRoleMapping[] = [];
 
   private loadRoles(): DiscordRole[] {
     try {

@@ -31,323 +31,11 @@ const defaultBranding: BrandingSettings = {
   mainWelcomeMessage: 'Bienvenue sur la plateforme PAWAKO FORMATION 🤖 ! Clique sur "Commencer la formation" pour débuter ton parcours.',
 };
 
-const defaultModules: TrainingModule[] = [
-  {
-    id: 'mod-1',
-    order: 1,
-    title: 'Module 1 : Onboarding & Culture PAWAKO',
-    description: 'Présentation de l\'écosystème, des valeurs et des outils fondamentaux de l\'équipe.',
-    content: `## 🚀 Bienvenue dans l'équipe PAWAKO !
+const defaultModules: TrainingModule[] = [];
 
-Ce premier module a pour objectif de te faire découvrir les bases de notre organisation, nos valeurs et le fonctionnement du serveur.
+const defaultQuizzes: Quiz[] = [];
 
-### 📌 Ce que tu vas apprendre :
-1. **La vision PAWAKO** : Innovation, entraide et rigueur SaaS.
-2. **L'organisation des salons Discord** : Comprendre le rôle du bot Jarvis et la structure.
-3. **Les règles d'or de la communauté** : Bienveillance, confidentialité et réactivité.
-
-Prends le temps de lire attentivement le guide avant de valider ce module !`,
-    channelId: 'chan-mod-1',
-    channelName: '#module-1',
-    roleValidatedId: 'role-mod-1-valide',
-    roleValidatedName: 'Module 1 Validé',
-    roleEnCoursId: 'role-mod-1-encours',
-    roleEnCoursName: 'Module 1 En cours',
-    quizId: 'quiz-1',
-    isActive: true,
-    resources: [
-      { id: 'res-1', title: 'Guide d\'accueil PAWAKO.pdf', url: 'https://example.com/guide.pdf', type: 'pdf' },
-      { id: 'res-2', title: 'Vidéo d\'introduction (5 min)', url: 'https://example.com/intro-video', type: 'video' },
-    ],
-    buttons: [
-      { id: 'btn-1', label: '✅ J\'ai terminé le module', action: 'complete' },
-    ],
-  },
-  {
-    id: 'mod-2',
-    order: 2,
-    title: 'Module 2 : Outils & Processus Internes',
-    description: 'Prise en main des workflows, de la gestion des tickets et de la sécurité.',
-    content: `## 🛠️ Outils & Processus Internes
-
-Dans ce module, nous abordons la gestion quotidienne de tes tâches et l'utilisation des tickets Discord.
-
-### 🔑 Points clés :
-* **Les Tickets** : Comment ouvrir un ticket d'aide et interagir avec les administrateurs.
-* **La Sécurité** : Ne jamais partager de clés API ni d'identifiants confidentiels.
-* **Le suivi de progression** : Jarvis synchronise automatiquement tes rôles et tes accès.`,
-    channelId: 'chan-mod-2',
-    channelName: '#module-2',
-    roleValidatedId: 'role-mod-2-valide',
-    roleValidatedName: 'Module 2 Validé',
-    roleEnCoursId: 'role-mod-2-encours',
-    roleEnCoursName: 'Module 2 En cours',
-    quizId: 'quiz-2',
-    isActive: true,
-    resources: [
-      { id: 'res-3', title: 'Doc Sécurité & Authentification', url: 'https://example.com/sec.pdf', type: 'document' },
-    ],
-    buttons: [
-      { id: 'btn-2', label: '✅ J\'ai terminé le module', action: 'complete' },
-    ],
-  },
-  {
-    id: 'mod-3',
-    order: 3,
-    title: 'Module 3 : Communication & Reporting',
-    description: 'Gestion des notifications, retours d\'expérience et bonnes pratiques de synthèse.',
-    content: `## 📊 Communication & Reporting
-
-Apprends à synthétiser tes avancées et à rédiger des compte-rendus efficaces.
-
-### 📝 Principes :
-* **Clarté** : Des messages synthétiques et structurés.
-* **Proactivité** : Prévenir en cas de blocage ou d'anomalie.
-* **Système d'alertes** : Découvre le fonctionnement des notifications admin.`,
-    channelId: 'chan-mod-3',
-    channelName: '#module-3',
-    roleValidatedId: 'role-mod-3-valide',
-    roleValidatedName: 'Module 3 Validé',
-    roleEnCoursId: 'role-mod-3-encours',
-    roleEnCoursName: 'Module 3 En cours',
-    quizId: 'quiz-3',
-    isActive: true,
-    resources: [],
-    buttons: [
-      { id: 'btn-3', label: '✅ J\'ai terminé le module', action: 'complete' },
-    ],
-  },
-  {
-    id: 'mod-4',
-    order: 4,
-    title: 'Module 4 : Gestion des Incident & System Health',
-    description: 'Comprenant la résilience du bot, les retries automatiques et l\'idempotence.',
-    content: `## 🚨 Gestion des Incidents & Résilience
-
-PAWAKO FORMATION intègre une architecture résiliente. Ce module explique comment le bot gère les incidents.
-
-### ⚙️ Principes techniques :
-* **Idempotence** : Évite les doublons d'attribution de rôle ou de progression.
-* **Incident / Rétablissement** : Envoi de notifications 🔴 INCIDENT puis 🟢 RÉTABLI.
-* **Heartbeat & Monitor** : Suivi permanent de la santé Supabase et Gateway.`,
-    channelId: 'chan-mod-4',
-    channelName: '#module-4',
-    roleValidatedId: 'role-mod-4-valide',
-    roleValidatedName: 'Module 4 Validé',
-    roleEnCoursId: 'role-mod-4-encours',
-    roleEnCoursName: 'Module 4 En cours',
-    quizId: 'quiz-4',
-    isActive: true,
-    resources: [],
-    buttons: [
-      { id: 'btn-4', label: '✅ J\'ai terminé le module', action: 'complete' },
-    ],
-  },
-  {
-    id: 'mod-5',
-    order: 5,
-    title: 'Module 5 : Certification Finale PAWAKO',
-    description: 'Évaluation globale de validation du parcours de formation interne.',
-    content: `## 🎓 Certification Finale PAWAKO
-
-Félicitations pour ton parcours jusqu'ici ! Ce dernier module valide la totalité de tes compétences acquises.
-
-Une fois ce quiz réussi avec un score minimum de 80%, tu obtiendras la certification officielle et le rôle final !`,
-    channelId: 'chan-mod-5',
-    channelName: '#module-5',
-    roleValidatedId: 'role-mod-5-valide',
-    roleValidatedName: 'Module 5 Validé',
-    roleEnCoursId: 'role-mod-5-encours',
-    roleEnCoursName: 'Module 5 En cours',
-    quizId: 'quiz-5',
-    isActive: true,
-    resources: [],
-    buttons: [
-      { id: 'btn-5', label: '✅ J\'ai terminé le module', action: 'complete' },
-    ],
-  },
-];
-
-const defaultQuizzes: Quiz[] = [
-  {
-    id: 'quiz-1',
-    moduleId: 'mod-1',
-    title: 'Quiz 1 : Onboarding & Culture',
-    description: 'Vérification des connaissances du Module 1.',
-    minScore: 16,
-    maxAttempts: 3,
-    cooldownMinutes: 30,
-    sampleSize: 20,
-    delayMinutesBeforeQuiz: 10,
-    questions: [
-      {
-        id: 'q1-1',
-        text: 'Quel est le salon principal d\'interaction avec le bot PAWAKO ?',
-        options: ['#general', '#🤖-jarvis', '#annonces', '#tickets'],
-        correctAnswer: 1,
-        explanation: 'Le salon #🤖-jarvis rassemble toutes les commandes interactives par boutons.',
-      },
-      {
-        id: 'q1-2',
-        text: 'Quel rôle reçoit automatiquement tout nouveau membre ?',
-        options: ['Stagiaire', 'Nouveau membre', 'Invité', 'Membre Validé'],
-        correctAnswer: 1,
-        explanation: 'Le rôle "Nouveau membre" est attribué à l\'arrivée.',
-      },
-      {
-        id: 'q1-3',
-        text: 'Que se passe-t-il après avoir validé le Quiz du Module 1 ?',
-        options: [
-          'Le rôle Nouveau membre est conservé et aucun autre accès n\'est donné',
-          'Le rôle Nouveau membre est retiré, le rôle Module 1 Validé et Module 2 En cours sont ajoutés',
-          'Tous les modules sont débloqués d\'un coup',
-          'Rien du tout',
-        ],
-        correctAnswer: 1,
-        explanation: 'Le module 1 passe en lecture seule, et le module 2 passe en cours.',
-      },
-    ],
-    successMessage: 'Bravo ! Tu as validé le Module 1 ! Accès au Module 2 débloqué.',
-    failureMessage: 'Score insuffisant. Relis attentivement le Module 1 puis réessaie.',
-  },
-  {
-    id: 'quiz-2',
-    moduleId: 'mod-2',
-    title: 'Quiz 2 : Processus & Outils Internes',
-    description: 'Évaluation de la maîtrise des outils et tickets.',
-    minScore: 16,
-    maxAttempts: 3,
-    cooldownMinutes: 60,
-    sampleSize: 20,
-    delayMinutesBeforeQuiz: 10,
-    questions: [
-      {
-        id: 'q2-1',
-        text: 'Comment demander l\'aide d\'un Admin en cas de problème ?',
-        options: [
-          'Envoyer un MP au créateur du serveur',
-          'Cliquer sur "🎫 Mes tickets" dans #🤖-jarvis',
-          'Poster un message dans #general avec @everyone',
-          'Ne rien faire',
-        ],
-        correctAnswer: 1,
-      },
-      {
-        id: 'q2-2',
-        text: 'Où sont stockés les transcripts des tickets fermés ?',
-        options: [
-          'Uniquement dans le cache du navigateur',
-          'Dans Supabase PostgreSQL sous forme de texte/JSON',
-          'Ils sont supprimés immédiatement',
-          'Sur un drive externe privé',
-        ],
-        correctAnswer: 1,
-      },
-    ],
-    successMessage: 'Module 2 validé avec succès !',
-    failureMessage: 'Quiz non validé. Révise les notions et effectue une nouvelle tentative.',
-  },
-  {
-    id: 'quiz-3',
-    moduleId: 'mod-3',
-    title: 'Quiz 3 : Communication & Reporting',
-    description: 'Test sur les standards de communication.',
-    minScore: 16,
-    maxAttempts: 3,
-    cooldownMinutes: 120,
-    sampleSize: 20,
-    delayMinutesBeforeQuiz: 10,
-    questions: [
-      {
-        id: 'q3-1',
-        text: 'Quels sont les 3 niveaux de notifications admin ?',
-        options: [
-          'Rouge, Jaune, Vert',
-          '🔴 Critique, 🟠 Important, 🔵 Information',
-          'Élevé, Moyen, Faible',
-          'Urgent, Normal, Optionnel',
-        ],
-        correctAnswer: 1,
-      },
-    ],
-  },
-  {
-    id: 'quiz-4',
-    moduleId: 'mod-4',
-    title: 'Quiz 4 : Gestion des Incidents',
-    description: 'Questions sur la résilience et le rétablissement.',
-    minScore: 16,
-    maxAttempts: 3,
-    cooldownMinutes: 120,
-    sampleSize: 20,
-    delayMinutesBeforeQuiz: 10,
-    questions: [
-      {
-        id: 'q4-1',
-        text: 'Pourquoi l\'idempotence est-elle essentielle pour les actions critiques ?',
-        options: [
-          'Pour accélérer l\'affichage des images',
-          'Pour empêcher la duplication de rôle, de progression ou de ticket',
-          'Pour limiter l\'accès aux salons',
-          'Elle n\'est pas utile',
-        ],
-        correctAnswer: 1,
-      },
-    ],
-  },
-  {
-    id: 'quiz-5',
-    moduleId: 'mod-5',
-    title: 'Quiz 5 : Examen de Certification Finale',
-    description: 'Examen global synthétisant l\'ensemble du parcours PAWAKO.',
-    minScore: 16,
-    maxAttempts: 2,
-    cooldownMinutes: 180,
-    sampleSize: 20,
-    delayMinutesBeforeQuiz: 10,
-    questions: [
-      {
-        id: 'q5-1',
-        text: 'Si un administrateur retire manuellement un rôle de module sur Discord, que se passe-t-il ?',
-        options: [
-          'Le bot réattribue le rôle immédiatement par force',
-          'Le rôle Discord fait foi : le module redevient verrouillé et la progression s\'ajuste',
-          'La base de données écrase Discord',
-          'Le compte est banni',
-        ],
-        correctAnswer: 1,
-      },
-      {
-        id: 'q5-2',
-        text: 'Combien de temps dure la rotation des sauvegardes automatiques ?',
-        options: ['1 jour', '7 jours', '30 jours', 'Indéfiniment'],
-        correctAnswer: 1,
-      },
-    ],
-  },
-];
-
-const defaultMembers: Member[] = [
-  {
-    id: 'mem-admin',
-    discordId: '1538874226415501462',
-    username: 'Administrateur (Vous)',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-    roles: ['Admin', 'Fondateur'],
-    joinedAt: '17/08/2026 05:00',
-    currentModuleId: 'mod-1',
-    progress: {
-      'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
-      'mod-2': { moduleId: 'mod-2', status: 'verrouille', attemptsCount: 0 },
-      'mod-3': { moduleId: 'mod-3', status: 'verrouille', attemptsCount: 0 },
-      'mod-4': { moduleId: 'mod-4', status: 'verrouille', attemptsCount: 0 },
-      'mod-5': { moduleId: 'mod-5', status: 'verrouille', attemptsCount: 0 },
-    },
-    extraAttemptsGranted: {},
-    isActive: true,
-    lastActiveAt: '17/08/2026 05:30',
-  },
-];
+const defaultMembers: Member[] = [];
 
 const defaultUsefulLinks: UsefulLink[] = [
   { id: 'link-1', name: 'Documentation PAWAKO', url: 'https://pawako.io/docs', icon: 'BookOpen', order: 1, isActive: true },
@@ -357,29 +45,9 @@ const defaultUsefulLinks: UsefulLink[] = [
 
 const defaultTickets: Ticket[] = [];
 
-const defaultAdminLogs: AdminLog[] = [
-  {
-    id: 'log-1',
-    adminName: 'Système Discord',
-    action: 'Initialisation Application & Connexion Bot ID 1538874226415501462',
-    category: 'system',
-    date: '17/08/2026 05:00',
-    result: 'effectué',
-  },
-];
+const defaultAdminLogs: AdminLog[] = [];
 
-const defaultNotifications: AdminNotification[] = [
-  {
-    id: 'notif-1',
-    level: 'information',
-    title: 'Bot Discord Connecté',
-    message: 'L\'application est synchronisée avec le Bot App ID 1538874226415501462.',
-    event: 'bot_reconnect',
-    status: 'non_lue',
-    date: '17/08/2026 05:00',
-    mentionAdmin: false,
-  },
-];
+const defaultNotifications: AdminNotification[] = [];
 
 const defaultHealth: SystemHealth = {
   botConnected: true,
@@ -402,24 +70,7 @@ const defaultHealth: SystemHealth = {
   ],
 };
 
-const defaultBackups: BackupRecord[] = [
-  {
-    id: 'bak-1',
-    filename: 'pawako_backup_20260817.json',
-    sizeKb: 42,
-    createdAt: '17/08/2026 04:00',
-    status: 'succes',
-    itemsCount: { members: 3, modules: 5, quizzes: 5, tickets: 2, logs: 3 },
-  },
-  {
-    id: 'bak-2',
-    filename: 'pawako_backup_20260816.json',
-    sizeKb: 40,
-    createdAt: '16/08/2026 04:00',
-    status: 'succes',
-    itemsCount: { members: 2, modules: 5, quizzes: 5, tickets: 1, logs: 2 },
-  },
-];
+const defaultBackups: BackupRecord[] = [];
 
 class StoreService {
   private branding: BrandingSettings = { ...defaultBranding };
@@ -442,14 +93,41 @@ class StoreService {
   private loadFromLocalStorage() {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
     try {
+      // Force clear any old demo/mock data key structures
+      const clearedFlag = localStorage.getItem('pawako_blank_slate_migration_v4');
+      if (!clearedFlag) {
+        localStorage.removeItem('pawako_modules');
+        localStorage.removeItem('pawako_quizzes');
+        localStorage.removeItem('pawako_members');
+        localStorage.removeItem('pawako_onboarding_flow_config');
+        localStorage.removeItem('pawako_automation_rules');
+        localStorage.setItem('pawako_blank_slate_migration_v4', 'true');
+      }
+
       const storedMods = localStorage.getItem('pawako_modules');
-      if (storedMods) this.modules = JSON.parse(storedMods);
+      if (storedMods) {
+        const parsed = JSON.parse(storedMods);
+        // Filter out legacy demo items if any remain
+        this.modules = Array.isArray(parsed) ? parsed.filter((m: any) => m && m.id && !m.id.startsWith('mod-')) : [];
+      } else {
+        this.modules = [];
+      }
 
       const storedQuizzes = localStorage.getItem('pawako_quizzes');
-      if (storedQuizzes) this.quizzes = JSON.parse(storedQuizzes);
+      if (storedQuizzes) {
+        const parsed = JSON.parse(storedQuizzes);
+        this.quizzes = Array.isArray(parsed) ? parsed.filter((q: any) => q && q.id && !q.id.startsWith('quiz-')) : [];
+      } else {
+        this.quizzes = [];
+      }
 
       const storedMembers = localStorage.getItem('pawako_members');
-      if (storedMembers) this.members = JSON.parse(storedMembers);
+      if (storedMembers) {
+        const parsed = JSON.parse(storedMembers);
+        this.members = Array.isArray(parsed) ? parsed.filter((mem: any) => mem && mem.id && !mem.id.startsWith('mem-admin')) : [];
+      } else {
+        this.members = [];
+      }
 
       const storedLinks = localStorage.getItem('pawako_usefullinks');
       if (storedLinks) this.usefulLinks = JSON.parse(storedLinks);
@@ -831,18 +509,24 @@ class StoreService {
   public getOrCreateCandidate(discordUserId: string, username: string, avatarUrl?: string): Member {
     let m = this.members.find((item) => item.discordId === discordUserId || item.id === discordUserId || item.id === `mem-${discordUserId}`);
     if (!m) {
+      const firstMod = this.modules[0];
+      const firstModId = firstMod?.id || '';
+      const initialRole = firstMod?.roleEnCoursName || 'En cours';
+
       m = {
         id: `mem-${discordUserId}`,
         discordId: discordUserId,
         username: username || `Candidat-${discordUserId.slice(-4)}`,
         avatarUrl: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-        roles: ['Nouveau membre', 'Module 1 En cours'],
+        roles: ['Nouveau membre', initialRole],
         joinedAt: this.getFormattedNow(),
-        currentModuleId: 'mod-1',
+        currentModuleId: firstModId,
         candidateState: 'nouveau',
-        progress: {
-          'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
-        },
+        progress: firstModId
+          ? {
+              [firstModId]: { moduleId: firstModId, status: 'en_cours', attemptsCount: 0 },
+            }
+          : {},
         extraAttemptsGranted: {},
         isActive: true,
         lastActiveAt: this.getFormattedNow(),
@@ -883,11 +567,12 @@ class StoreService {
   public resetMemberProgress(memberId: string): Member {
     const m = this.getMember(memberId);
     if (!m) throw new Error('Membre non trouvé');
-    m.progress = {
-      'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
-    };
-    m.currentModuleId = 'mod-1';
-    m.roles = ['Nouveau membre', 'Module 1 En cours'];
+    const firstModId = this.modules[0]?.id || '';
+    m.progress = firstModId
+      ? { [firstModId]: { moduleId: firstModId, status: 'en_cours', attemptsCount: 0 } }
+      : {};
+    m.currentModuleId = firstModId;
+    m.roles = ['Nouveau membre'];
     this.saveMembers();
     this.addLog('Anthony (Admin)', `Réinitialisation de la progression de ${m.username}`, 'member', m.username, undefined, undefined, 'effectué');
 
@@ -1288,19 +973,32 @@ ${statusText}
   }
 
   // --- Backups & Data Reset ---
-  public resetAllData(): void {
+  public saveToLocalStorage(): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem('pawako_modules', JSON.stringify(this.modules));
+      localStorage.setItem('pawako_quizzes', JSON.stringify(this.quizzes));
+      localStorage.setItem('pawako_members', JSON.stringify(this.members));
+      localStorage.setItem('pawako_usefullinks', JSON.stringify(this.usefulLinks));
+    } catch (e) {
+      console.warn('Error saving store to localStorage:', e);
+    }
+  }
+
+  public resetToBlankSlate(): void {
+    this.modules = [];
+    this.quizzes = [];
+    this.members = [];
+    this.tickets = [];
     this.adminLogs = [];
     this.notifications = [];
-    this.tickets = [];
-    this.members = defaultMembers.map((m) => ({
-      ...m,
-      modulesCompleted: [],
-      quizzesPassed: [],
-      attempts: [],
-      currentModuleId: 'mod-1',
-      score: 0,
-      totalQuizzesTaken: 0,
-    }));
+    this.quizAttempts = [];
+    this.saveToLocalStorage();
+    this.notify();
+  }
+
+  public resetAllData(): void {
+    this.resetToBlankSlate();
     this.addLog('Anthony (Admin)', 'Nettoyage complet des données effectué avec succès.', 'system');
   }
 

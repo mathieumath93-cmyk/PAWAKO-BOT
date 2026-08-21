@@ -321,10 +321,6 @@ class DiscordSyncService {
       { id: 'role-initial', discord_role_id: 'role-initial', guild_id: targetGuildId, name: 'Nouveau membre', color: '#6366f1', position: 1, managed: false, mentionable: false, canAssignByBot: true },
       { id: 'role-admin', discord_role_id: 'role-admin', guild_id: targetGuildId, name: 'Lead Admin', color: '#f59e0b', position: 10, managed: false, mentionable: false, canAssignByBot: true },
       { id: 'role-valide', discord_role_id: 'role-valide', guild_id: targetGuildId, name: 'Membre Validé', color: '#10b981', position: 5, managed: false, mentionable: false, canAssignByBot: true },
-      { id: 'role-mod-1-encours', discord_role_id: 'role-mod-1-encours', guild_id: targetGuildId, name: 'Module 1 En cours', color: '#3b82f6', position: 2, managed: false, mentionable: false, canAssignByBot: true },
-      { id: 'role-mod-1-valide', discord_role_id: 'role-mod-1-valide', guild_id: targetGuildId, name: 'Module 1 Validé', color: '#10b981', position: 3, managed: false, mentionable: false, canAssignByBot: true },
-      { id: 'role-mod-2-encours', discord_role_id: 'role-mod-2-encours', guild_id: targetGuildId, name: 'Module 2 En cours', color: '#3b82f6', position: 4, managed: false, mentionable: false, canAssignByBot: true },
-      { id: 'role-mod-2-valide', discord_role_id: 'role-mod-2-valide', guild_id: targetGuildId, name: 'Module 2 Validé', color: '#10b981', position: 5, managed: false, mentionable: false, canAssignByBot: true },
     ];
   }
 
@@ -341,9 +337,6 @@ class DiscordSyncService {
       { id: 'chan-general', discord_channel_id: 'chan-general', guild_id: targetGuildId, name: 'general', type: 0, position: 1 },
       { id: 'chan-formation', discord_channel_id: 'chan-formation', guild_id: targetGuildId, name: 'formation', type: 0, position: 2 },
       { id: 'chan-logs', discord_channel_id: 'chan-logs', guild_id: targetGuildId, name: 'logs-formation', type: 0, position: 3 },
-      { id: 'chan-mod-1', discord_channel_id: 'chan-mod-1', guild_id: targetGuildId, name: 'module-1', type: 0, position: 4 },
-      { id: 'chan-mod-2', discord_channel_id: 'chan-mod-2', guild_id: targetGuildId, name: 'module-2', type: 0, position: 5 },
-      { id: 'chan-mod-3', discord_channel_id: 'chan-mod-3', guild_id: targetGuildId, name: 'module-3', type: 0, position: 6 },
     ];
   }
 

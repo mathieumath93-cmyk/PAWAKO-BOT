@@ -32,9 +32,7 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
   const [conditionValue, setConditionValue] = useState<string | number>(16);
 
   // Form State for Actions
-  const [actions, setActions] = useState<AutomationAction[]>([
-    { type: 'add_role', target: 'Junior', payload: 'role-junior' },
-  ]);
+  const [actions, setActions] = useState<AutomationAction[]>([]);
 
   const handleTestRule = async (rule: AutomationRule) => {
     setTestingRuleId(rule.id);
@@ -108,7 +106,7 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
     // Reset Form
     setName('');
     setDescription('');
-    setActions([{ type: 'add_role', target: 'Junior', payload: 'role-junior' }]);
+    setActions([]);
     onShowToast('Automatisation Créée', `La règle "${newRule.name}" est active.`, 'success');
   };
 
@@ -404,7 +402,7 @@ export const AutomationsView: React.FC<AutomationsViewProps> = ({
 
                     <input
                       type="text"
-                      placeholder="Cible (ex: @Junior ou #general)"
+                      placeholder="Cible (ex: Rôle ou #general)"
                       value={act.target || ''}
                       onChange={(e) => handleUpdateAction(idx, 'target', e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-white"

@@ -29,9 +29,9 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [title, setTitle] = useState(quizToEdit?.title || 'Quiz Onboarding');
-  const [description, setDescription] = useState(quizToEdit?.description || 'Évaluez vos connaissances...');
-  const [moduleId, setModuleId] = useState(quizToEdit?.moduleId || modules[0]?.id || 'mod-1');
+  const [title, setTitle] = useState(quizToEdit?.title || '');
+  const [description, setDescription] = useState(quizToEdit?.description || '');
+  const [moduleId, setModuleId] = useState(quizToEdit?.moduleId || modules[0]?.id || '');
   const [minScore, setMinScore] = useState(quizToEdit?.minScore || 16);
   const [maxScore, setMaxScore] = useState(quizToEdit?.maxScore || 20);
   const [maxAttempts, setMaxAttempts] = useState(quizToEdit?.maxAttempts || 3);
@@ -42,27 +42,7 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
   const [successMessage, setSuccessMessage] = useState(quizToEdit?.successMessage || 'Félicitations ! Vous avez validé le quiz.');
   const [failureMessage, setFailureMessage] = useState(quizToEdit?.failureMessage || 'Score insuffisant. Relisez le cours avant de recommencer.');
 
-  const defaultQuestions: QuizQuestion[] = quizToEdit?.questions || [
-    {
-      id: 'q-1',
-      text: 'Quelle est la première étape obligatoire pour débuter la formation ?',
-      type: 'single_choice',
-      options: ['Consulter le règlement', 'Lancer la première leçon', 'Envoyer un message', 'Fermer le serveur'],
-      correctAnswer: 0,
-      points: 1,
-      explanation: 'Consulter le règlement dans #formation garantit la bonne compréhension du programme.',
-    },
-    {
-      id: 'q-2',
-      text: 'Combien de tentatives sont accordées par défaut pour chaque quiz ?',
-      type: 'single_choice',
-      options: ['1 seule', '3 tentatives', 'Illimité', '5 tentatives'],
-      correctAnswer: 1,
-      points: 1,
-      explanation: '3 tentatives sont accordées par défaut.',
-    },
-  ];
-
+  const defaultQuestions: QuizQuestion[] = quizToEdit?.questions || [];
   const [questions, setQuestions] = useState<QuizQuestion[]>(defaultQuestions);
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
 

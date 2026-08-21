@@ -50,7 +50,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   );
 
   const [selectedModuleTab, setSelectedModuleTab] = useState<string>(
-    localModules[0]?.id || 'mod-1'
+    localModules[0]?.id || ''
   );
 
   const [validationResult, setValidationResult] = useState<PreFlightValidationResult | null>(null);
@@ -78,8 +78,8 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         ...foundStep,
         moduleTitle: activeModuleObj?.title || foundStep.moduleTitle,
         directivesText: activeModuleObj?.content || foundStep.directivesText,
-        roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'Trainee',
-        roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Junior',
+        roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'En cours',
+        roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Validé',
       }
     : {
         moduleId: selectedModuleTab,
@@ -87,23 +87,46 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         directivesText: activeModuleObj?.content || 'Lisez les consignes avant de lancer le quiz.',
         externalLinkUrl: 'https://docs.pawako.com/guide',
         roleOnStartId: activeModuleObj?.roleEnCoursId || '',
-        roleOnStartName: activeModuleObj?.roleEnCoursName || 'Trainee',
+        roleOnStartName: activeModuleObj?.roleEnCoursName || 'En cours',
         roleOnPassId: activeModuleObj?.roleValidatedId || '',
-        roleOnPassName: activeModuleObj?.roleValidatedName || 'Junior',
+        roleOnPassName: activeModuleObj?.roleValidatedName || 'Validé',
         successMessage: activeQuizObj?.successMessage || '🎉 Félicitations tu as réussi ! Accède au module suivant.',
         failureMessage: activeQuizObj?.failureMessage || '❌ Score insuffisant. Tu peux réessayer après le cooldown.',
       };
 
+  const handleResetToBlankSlate = () => {
+    if (
+      confirm(
+        "⚠️ SUPPRESSION TOTALE DE TOUTES LES PRÉ-PROGRAMMATIONS\n\nVoulez-vous vraiment effacer tous les modules exemples, quiz exemples, textes pré-définis et règles de relance ?\n\nVotre environnement deviendra 100% vierge pour un paramétrage de A à Z sans aide ni modèles pré-remplis."
+      )
+    ) {
+      store.resetToBlankSlate();
+      const blankCfg = onboardingService.resetToBlankSlate();
+      reminderService.resetToBlankSlate();
+
+      setConfig(blankCfg);
+      setLocalModules([]);
+      setReminderRules([]);
+      setSelectedModuleTab('');
+
+      onShowToast(
+        'Environnement Vierge (A à Z) 🗑️',
+        'Toutes les pré-programmations ont été effacées. Vous pouvez maintenant créer vos propres modules et quiz de zéro !',
+        'success'
+      );
+    }
+  };
+
   const handleAddNewModule = () => {
     const nextOrder = localModules.length + 1;
     const newMod = moduleService.addModule({
-      title: `Module ${nextOrder} : Nouveau Module`,
-      description: `Description et objectifs pédagogiques du Module ${nextOrder}.`,
-      content: `## 📘 Module ${nextOrder} : Consignes Pédagogiques\n\nBienvenue dans le Module ${nextOrder} ! Lisez les documents avant de passer le quiz.`,
+      title: `Module ${nextOrder}`,
+      description: `Description du Module ${nextOrder}`,
+      content: `## 📘 Consignes du Module ${nextOrder}\n\nSaisissez ici les consignes destinées au candidat.`,
       channelId: `chan-mod-${nextOrder}`,
       channelName: `#module-${nextOrder}`,
-      roleEnCoursName: `Étape ${nextOrder} En cours`,
-      roleValidatedName: `Étape ${nextOrder} Validée`,
+      roleEnCoursName: `Module ${nextOrder} En cours`,
+      roleValidatedName: `Module ${nextOrder} Validé`,
       roleEnCoursId: '',
       roleValidatedId: '',
       resources: [],
@@ -114,41 +137,36 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     const newQuiz = quizService.addQuiz({
       moduleId: newMod.id,
       title: `Quiz du Module ${nextOrder}`,
-      description: `Évaluation de validation du Module ${nextOrder}.`,
-      minScore: 16,
-      maxScore: 20,
+      description: `Évaluation de validation du Module ${nextOrder}`,
+      minScore: 1,
+      maxScore: 1,
       timeLimitMinutes: 15,
       maxAttempts: 3,
-      cooldownMinutes: 30,
-      delayMinutesBeforeQuiz: 10,
-      sampleSize: 5,
+      cooldownMinutes: 15,
+      delayMinutesBeforeQuiz: 0,
+      sampleSize: 1,
       questions: [
         {
           id: `q-${Date.now()}-1`,
-          text: `Question 1 du Module ${nextOrder} : Choisis la bonne réponse ?`,
-          options: ['Réponse A (Correcte)', 'Réponse B', 'Réponse C', 'Réponse D'],
+          text: `Question 1 du Module ${nextOrder} ?`,
+          options: ['Réponse A (Correcte)', 'Réponse B'],
           correctAnswer: 0,
           points: 1,
-          explanation: 'Explication pédagogique de la réponse correcte.',
+          explanation: '',
         },
       ],
       successMessage: `🎉 Félicitations ! Tu as validé le Module ${nextOrder}.`,
-      failureMessage: `❌ Score insuffisant au Quiz ${nextOrder}. Réessaie après le délai.`,
+      failureMessage: `❌ Score insuffisant. Tu peux réessayer après le délai.`,
     });
 
     moduleService.updateModule(newMod.id, { quizId: newQuiz.id });
     const updatedMods = refreshModulesState();
     setSelectedModuleTab(newMod.id);
 
-    onShowToast('Nouveau Module Créé 🚀', `Le Module ${nextOrder} a été ajouté au parcours d'onboarding.`, 'success');
+    onShowToast('Nouveau Module Créé 🚀', `Le Module ${nextOrder} a été ajouté.`, 'success');
   };
 
   const handleDeleteCurrentModule = () => {
-    if (localModules.length <= 1) {
-      onShowToast('Action Impossible', 'Le parcours d\'onboarding doit contenir au moins 1 module.', 'error');
-      return;
-    }
-
     if (confirm(`Voulez-vous vraiment supprimer "${activeModuleObj?.title}" et son quiz associé ?`)) {
       if (activeModuleObj) {
         moduleService.deleteModule(activeModuleObj.id);
@@ -157,7 +175,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         }
       }
       const updatedMods = refreshModulesState();
-      const nextActive = updatedMods[0]?.id || 'mod-1';
+      const nextActive = updatedMods[0]?.id || '';
       setSelectedModuleTab(nextActive);
 
       // Remove from stepConfigs
@@ -166,7 +184,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
       setConfig(newConfig);
       onboardingService.updateConfig(newConfig);
 
-      onShowToast('Module Supprimé', 'Le module et ses questions ont été retirés.', 'info');
+      onShowToast('Module Supprimé 🗑️', 'Le module et son quiz ont été supprimés.', 'info');
     }
   };
 
@@ -389,6 +407,16 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
             <span>{isValidating ? 'Vérification...' : '✓ Tester la Config'}</span>
           </button>
 
+          <button
+            type="button"
+            onClick={handleResetToBlankSlate}
+            className="px-3.5 py-2.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-700/60 font-bold text-xs shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Effacer toutes les pré-programmations et textes modèles (A à Z)"
+          >
+            <Trash2 className="w-4 h-4 text-rose-400" />
+            <span>Réinitialiser Vierge (A à Z)</span>
+          </button>
+
           {onOpenSimulator && (
             <button
               type="button"
@@ -568,27 +596,51 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </div>
 
           {/* Module Tabs */}
-          <div className="flex border-b border-slate-800 overflow-x-auto gap-2 pb-1">
-            {localModules.map((mod, idx) => {
-              const isActive = selectedModuleTab === mod.id;
-              return (
-                <button
-                  key={mod.id}
-                  type="button"
-                  onClick={() => setSelectedModuleTab(mod.id)}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                    isActive
-                      ? 'bg-indigo-600 text-white border-t border-x border-indigo-500 shadow-lg shadow-indigo-600/20'
-                      : 'bg-slate-950/60 text-slate-400 hover:text-slate-200 hover:bg-slate-900 border-b border-slate-800'
-                  }`}
-                >
-                  <span className="opacity-80 font-mono text-[11px]">Étape {idx + 1}</span>
-                  <span className="font-semibold">{mod.title}</span>
-                  {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 ml-1 shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
+          {localModules.length > 0 && (
+            <div className="flex border-b border-slate-800 overflow-x-auto gap-2 pb-1">
+              {localModules.map((mod, idx) => {
+                const isActive = selectedModuleTab === mod.id;
+                return (
+                  <button
+                    key={mod.id}
+                    type="button"
+                    onClick={() => setSelectedModuleTab(mod.id)}
+                    className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-indigo-600 text-white border-t border-x border-indigo-500 shadow-lg shadow-indigo-600/20'
+                        : 'bg-slate-950/60 text-slate-400 hover:text-slate-200 hover:bg-slate-900 border-b border-slate-800'
+                    }`}
+                  >
+                    <span className="opacity-80 font-mono text-[11px]">Étape {idx + 1}</span>
+                    <span className="font-semibold">{mod.title}</span>
+                    {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 ml-1 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {localModules.length === 0 && (
+            <div className="bg-slate-950 p-8 rounded-2xl border border-dashed border-slate-800 text-center space-y-4">
+              <div className="p-3 bg-slate-900 text-slate-400 rounded-full w-fit mx-auto border border-slate-800">
+                <BookOpen className="w-8 h-8" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Aucun module configuré (Environnement Vierge)</h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                  Votre parcours est actuellement vide de toute pré-programmation. Vous pouvez créer votre tout premier module de A à Z !
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddNewModule}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 inline-flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Créer le Premier Module</span>
+              </button>
+            </div>
+          )}
 
           {/* Selected Module & Quiz Unified Editor Panel */}
           {activeModuleObj && (

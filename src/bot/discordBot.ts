@@ -284,8 +284,8 @@ export class PawakoBotRunner {
             }
 
             // Setup Module 1 & Quiz availability
-            const mod1 = store.getModule('mod-1') || store.getModules()[0];
-            const quiz1 = store.getQuiz(mod1?.quizId || 'quiz-1') || store.getQuizzes()[0];
+            const mod1 = store.getModules()[0];
+            const quiz1 = mod1 ? store.getQuiz(mod1.quizId || '') || store.getQuizzes()[0] : store.getQuizzes()[0];
             const delayMins = quiz1?.delayMinutesBeforeQuiz || 10;
             member.currentQuizAvailableAtTimestamp = Date.now() + delayMins * 60 * 1000;
 
@@ -303,7 +303,7 @@ export class PawakoBotRunner {
               const welcomeEmbed = new EmbedBuilder()
                 .setTitle(`👋 Content de te voir, ${user.username} !`)
                 .setDescription(
-                  `Bienvenue dans ton espace de formation privé.\n\nPour débloquer ton premier rôle et accéder aux consignes du **Module 1**, clique sur le bouton ci-dessous :`
+                  `Bienvenue dans ton espace de formation privé.\n\nPour débloquer ton premier rôle et accéder aux consignes de ta formation, clique sur le bouton ci-dessous :`
                 )
                 .setColor(0x6366f1)
                 .setFooter({ text: 'PAWAKO FORMATION • Accès Privé' });
@@ -353,10 +353,17 @@ export class PawakoBotRunner {
             }
 
             // Setup Module 1 & Quiz availability
-            const mod1 = store.getModule('mod-1') || store.getModules()[0];
-            const quiz1 = store.getQuiz(mod1?.quizId || 'quiz-1') || store.getQuizzes()[0];
-            const delayMins = quiz1?.delayMinutesBeforeQuiz || 10;
-            member.currentQuizAvailableAtTimestamp = Date.now() + delayMins * 60 * 1000;
+            const mod1 = store.getModules()[0];
+            if (!mod1) {
+              await interaction.editReply({
+                content: '⚠️ Aucun module n\'est encore configuré par l\'administrateur sur cette plateforme.',
+              });
+              return;
+            }
+
+            const quiz1 = store.getQuiz(mod1.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod1.id) || store.getQuizzes()[0];
+            const delayMins = quiz1?.delayMinutesBeforeQuiz !== undefined ? quiz1.delayMinutesBeforeQuiz : 0;
+            member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
 
             store.saveMembers();
             firebaseSyncService.saveMember(member).catch(() => {});
@@ -366,25 +373,28 @@ export class PawakoBotRunner {
               console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
             });
 
+            const brandingName = store.getBranding().trainingName || 'Espace de Formation';
+            const delayNotice = delayMins > 0
+              ? `\n\n⏱️ **Information Quiz** : Le quiz de ce module sera débloqué dans **${delayMins} minute(s)** dans ce salon !`
+              : `\n\n⏱️ **Information Quiz** : Le quiz est débloqué et disponible immédiatement ci-dessous !`;
+
             const modEmbed = new EmbedBuilder()
-              .setTitle(`📚 ${mod1?.title || 'Module 1 : Onboarding & Culture PAWAKO'}`)
-              .setDescription(
-                `${mod1?.content || 'Bienvenue dans ton espace de formation !'}\n\n⏱️ **Information Quiz** : Le **Quiz 1** sera débloqué dans **${delayMins} minutes** dans ce salon !`
-              )
+              .setTitle(`📚 ${mod1.title}`)
+              .setDescription(`${mod1.content}${delayNotice}`)
               .setColor(0x6366f1)
-              .setFooter({ text: 'PAWAKO FORMATION • Parcours Individuel' })
+              .setFooter({ text: `${brandingName} • Parcours Individuel` })
               .setTimestamp();
 
             const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
               new ButtonBuilder()
-                .setCustomId(`launch_quiz_${quiz1?.id || 'quiz-1'}`)
-                .setLabel('📝 Lancer le Quiz 1')
+                .setCustomId(`launch_quiz_${quiz1?.id || ''}`)
+                .setLabel(`📝 Lancer le Quiz (${quiz1?.title || mod1.title})`)
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
             );
 
             await interaction.editReply({
-              content: `🚀 **Formation Lancée !** Ton rôle **@${member.roles[0] || initialRoleName || 'Trainee'}** a été attribué avec succès. Voici ton premier module :`,
+              content: `🚀 **Formation Lancée !** Ton rôle **@${member.roles[0] || initialRoleName || 'Nouveau membre'}** a été attribué avec succès. Voici ton premier module :`,
               embeds: [modEmbed],
               components: [row],
             });
@@ -770,17 +780,41 @@ export class PawakoBotRunner {
           // --- 5. START / CONTINUE MODULE ---
           if (customId.startsWith('start_module') || customId.startsWith('launch_module')) {
             const modId = customId.replace('start_module_', '').replace('launch_module_', '');
-            const mod = store.getModule(modId) || store.getModules()[0];
-            const quiz = store.getQuiz(mod.quizId || 'quiz-1') || store.getQuizzes()[0];
+            const mod = store.getModule(modId) || store.getModules().find((m) => m.id === modId) || store.getModules()[0];
+
+            if (!mod) {
+              await interaction.editReply({ content: '⚠️ Ce module n\'existe pas ou a été retiré.' });
+              return;
+            }
+
+            const quiz = store.getQuiz(mod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod.id);
+            const delayMins = quiz?.delayMinutesBeforeQuiz !== undefined ? quiz.delayMinutesBeforeQuiz : 0;
+
+            const stepCfg = onboardingService.getStepConfigForModule(mod.id);
+            if (stepCfg?.roleOnStartName) {
+              const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+              member.roles = Array.from(new Set([...(member.roles || []), stepCfg.roleOnStartName]));
+              store.saveMembers();
+              discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
+            }
+
+            const brandingName = store.getBranding().trainingName || 'Espace de Formation';
+            const delayNotice = delayMins > 0
+              ? `\n\n⏱️ **Information Quiz** : Le quiz de ce module sera débloqué dans **${delayMins} minute(s)** !`
+              : `\n\n⏱️ **Information Quiz** : Le quiz est disponible immédiatement ci-dessous !`;
 
             const embed = new EmbedBuilder()
               .setTitle(`📚 ${mod.title}`)
-              .setDescription(`${mod.content}\n\n📝 Réponds au quiz de validation ci-dessous pour débloquer l'étape suivante.`)
+              .setDescription(`${mod.content}${delayNotice}`)
               .setColor(0x6366f1)
-              .setFooter({ text: 'PAWAKO FORMATION • Parcours de Formation' });
+              .setFooter({ text: `${brandingName} • Parcours de Formation` })
+              .setTimestamp();
 
             const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder().setCustomId(`launch_quiz_${quiz.id}`).setLabel('📝 Lancer le Quiz').setStyle(ButtonStyle.Success),
+              new ButtonBuilder()
+                .setCustomId(`launch_quiz_${quiz?.id || 'quiz-1'}`)
+                .setLabel(`📝 Lancer le Quiz (${quiz?.title || mod.title})`)
+                .setStyle(ButtonStyle.Success),
               new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
             );
 

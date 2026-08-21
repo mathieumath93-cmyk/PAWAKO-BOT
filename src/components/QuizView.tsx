@@ -38,7 +38,7 @@ export const QuizView: React.FC<QuizViewProps> = ({
   const [isCreating, setIsCreating] = useState(false);
 
   const [formData, setFormData] = useState<Omit<Quiz, 'id'>>({
-    moduleId: modules[0]?.id || 'mod-1',
+    moduleId: modules[0]?.id || '',
     title: '',
     description: '',
     minScore: 80,
@@ -58,7 +58,7 @@ export const QuizView: React.FC<QuizViewProps> = ({
 
   const handleOpenCreate = () => {
     setFormData({
-      moduleId: modules[0]?.id || 'mod-1',
+      moduleId: modules[0]?.id || '',
       title: 'Quiz : Titre du Quiz',
       description: 'Évaluation des connaissances acquises.',
       minScore: 80,

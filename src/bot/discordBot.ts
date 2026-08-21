@@ -188,7 +188,7 @@ export class PawakoBotRunner {
             }
           } else {
             if (!interaction.deferred && !interaction.replied) {
-              await interaction.deferReply({ ephemeral: true }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
+              await interaction.deferReply().catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
             }
           }
 
@@ -308,7 +308,23 @@ export class PawakoBotRunner {
 
           // --- 2. CANDIDATE PROFILE ---
           if (customId === 'btn_profile' || customId === 'show_my_profile' || customId === 'refresh_profile') {
-            const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+            // Find target candidate for this channel if viewed in a personal channel
+            let targetMember: Member | undefined = store.getMembers().find(
+              (m) => m.personalChannelId === interaction.channelId
+            );
+
+            if (!targetMember && interaction.channel && 'name' in interaction.channel) {
+              const chanName = (interaction.channel as TextChannel).name;
+              targetMember = store.getMembers().find(
+                (m) =>
+                  m.personalChannelName === chanName ||
+                  (chanName.startsWith('🔒-formation-') &&
+                    m.username &&
+                    chanName.includes(m.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 15)))
+              );
+            }
+
+            const member = targetMember || store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
             const modules = store.getModules();
             const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
 
@@ -320,21 +336,27 @@ export class PawakoBotRunner {
               cooldownNotice = `⚠️ Cooldown actif (${mins}m ${secs}s restantes)`;
             }
 
+            const isStaffViewer = user.id !== member.discordId && user.id !== member.id.replace('mem-', '');
+
             const embed = new EmbedBuilder()
-              .setTitle(`👤 Profil Candidat — ${user.username}`)
+              .setTitle(`👤 Profil Candidat — ${member.username}`)
               .setColor(0x06b6d4)
-              .setThumbnail(user.displayAvatarURL())
+              .setThumbnail(member.avatarUrl || user.displayAvatarURL())
               .addFields(
-                { name: '🆔 Identifiant Discord', value: `<@${user.id}>`, inline: true },
+                { name: '🆔 Identifiant Discord', value: `<@${member.discordId || member.id.replace('mem-', '')}>`, inline: true },
                 { name: '📊 Progression', value: `**${validatedCount} / ${modules.length}** modules validés`, inline: true },
                 { name: '⏳ Statut Cooldown', value: cooldownNotice, inline: false },
                 { name: '📜 Rôles Discord', value: member.roles.join(', ') || 'Nouveau membre', inline: false }
               )
-              .setFooter({ text: 'PAWAKO FORMATION • Suivi Individuel Sécurisé' })
+              .setFooter({
+                text: isStaffViewer
+                  ? `PAWAKO FORMATION • Consulté par le staff @${user.username}`
+                  : 'PAWAKO FORMATION • Suivi Individuel Sécurisé',
+              })
               .setTimestamp();
 
             const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder().setCustomId('show_my_profile').setLabel('🔄 Actualiser mon profil').setStyle(ButtonStyle.Secondary)
+              new ButtonBuilder().setCustomId('show_my_profile').setLabel('🔄 Actualiser le profil').setStyle(ButtonStyle.Secondary)
             );
 
             await interaction.editReply({ embeds: [embed], components: [row] });
@@ -462,7 +484,6 @@ export class PawakoBotRunner {
             if (!session) {
               await interaction.followUp({
                 content: '⚠️ Cette session de quiz n\'existe plus ou a expiré. Veuillez relancer le quiz.',
-                ephemeral: true,
               }).catch(() => {});
               return;
             }
@@ -471,7 +492,6 @@ export class PawakoBotRunner {
             if (interaction.user.id !== session.discordUserId) {
               await interaction.followUp({
                 content: '❌ Seul le candidat ayant démarré ce quiz peut répondre à ces questions !',
-                ephemeral: true,
               }).catch(() => {});
               return;
             }
@@ -675,7 +695,7 @@ export class PawakoBotRunner {
             if (interaction.deferred || interaction.replied) {
               await interaction.editReply({ content: `⚠️ Action enregistrée pour <@${interaction.user.id}>.` });
             } else {
-              await interaction.reply({ content: `⚠️ Action enregistrée.`, ephemeral: true });
+              await interaction.reply({ content: `⚠️ Action enregistrée.` });
             }
           } catch (replyErr) {
             console.warn('[Interaction Fallback Reply Failed]', replyErr);

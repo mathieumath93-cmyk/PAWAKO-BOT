@@ -21,7 +21,7 @@ async function startServer() {
   if (botTokenEnv) {
     console.log('[PAWAKO BOT] Initialisation automatique de la Gateway Discord...');
     process.env.DISCORD_BOT_TOKEN = botTokenEnv;
-    pawakoBot.connectWithToken(botTokenEnv);
+    pawakoBot.initAndConnect();
   }
 
   app.use(express.json());
@@ -97,23 +97,17 @@ async function startServer() {
   }
 
   function getBotTokenOrError(req: Request, res: Response): string | null {
-    const rawParamToken = (req.query.token as string) || (req.body && req.body.token);
-    let token = sanitizeBotToken(rawParamToken || process.env.DISCORD_BOT_TOKEN || '');
+    let token = sanitizeBotToken(process.env.DISCORD_BOT_TOKEN || '');
 
     if (!token) {
       res.status(401).json({
         success: false,
         discordStatus: 401,
-        error: 'Token Bot Discord non configuré. Veuillez saisir votre Token de Bot dans l\'onglet Synchronisation Discord.',
+        error: 'Token Bot Discord non configuré. Veuillez vérifier la variable d\'environnement DISCORD_BOT_TOKEN.',
       });
       return null;
     }
 
-    process.env.DISCORD_BOT_TOKEN = token;
-    if (!pawakoBot.getIsConnected()) {
-      console.log('[PAWAKO BOT] Connexion à la Gateway Discord via le Token reçu dans la requête API...');
-      pawakoBot.connectWithToken(token);
-    }
     return token;
   }
 
@@ -180,42 +174,17 @@ async function startServer() {
     res.json({ activeGuildId });
   });
 
-  // --- DISCORD INTERACTIONS WEBHOOK ENDPOINT (Instant Response to Prevent Timeout) ---
+  // --- DISCORD INTERACTIONS WEBHOOK ENDPOINT (PING ONLY for Gateway-only architecture) ---
   app.post('/api/discord/interactions', (req: Request, res: Response) => {
-    const { type, data, member, user } = req.body || {};
+    const { type } = req.body || {};
 
-    // 1. PING verification for Discord Developer Portal
+    // PING verification for Discord Developer Portal
     if (type === 1) {
       return res.status(200).json({ type: 1 });
     }
 
-    const customId = data?.custom_id || '';
-    const username = member?.user?.username || user?.username || 'Membre';
-
-    // 2. Instant response (type 4 = CHANNEL_MESSAGE_WITH_SOURCE) with Ephemeral Flag (flags: 64)
-    let responseText = `👋 Bonjour **@${username}** ! Votre demande a bien été prise en compte par le système PAWAKO.`;
-
-    if (customId.startsWith('start_onboarding') || customId.startsWith('launch_module') || customId === 'start_onboarding_process') {
-      const chanName = `🔒-formation-${username.toLowerCase().replace(/[^a-z0-9_\-]/g, '')}`;
-      responseText = `🚀 **Bienvenue @${username} !** Votre session de formation est activée. Votre salon privé **#${chanName}** est en cours de préparation dans le serveur !`;
-      
-      // Asynchronously trigger private channel creation in background
-      discordService.createPersonalChannel({
-        memberName: username,
-        prefix: 'formation-',
-      }).catch((err) => console.warn('[Interactions Webhook Async Channel Error]', err));
-    } else if (customId.startsWith('resume_training')) {
-      responseText = `📚 **Reprise de Formation !** Bonjour @${username}, vous pouvez poursuivre vos cours et votre évaluation.`;
-    }
-
-    // Return instant response (<10ms) so Discord NEVER displays "L'application n'a pas répondu à temps"
-    return res.status(200).json({
-      type: 4,
-      data: {
-        content: responseText,
-        flags: 64, // Ephemeral message (visible only to the user who clicked)
-      },
-    });
+    // All button interactions are handled directly via discord.js Gateway event client.on('interactionCreate')
+    return res.status(200).json({ type: 1 });
   });
 
   app.all(['/api/discord/guild/:guildId/sync', '/api/discord/sync-real-data'], async (req: Request, res: Response) => {
@@ -1520,7 +1489,7 @@ async function startServer() {
       const cleanToken = sanitizeBotToken(token);
       process.env.DISCORD_BOT_TOKEN = cleanToken;
       try {
-        pawakoBot.connectWithToken(cleanToken);
+        pawakoBot.initAndConnect();
       } catch (err) {
         console.warn('[Bot Connect Warning]', err);
       }
@@ -1561,12 +1530,11 @@ async function startServer() {
 
   app.post('/api/bot/connect', (req: Request, res: Response) => {
     const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ error: 'Token requis' });
+    if (token) {
+      const cleanToken = sanitizeBotToken(token);
+      process.env.DISCORD_BOT_TOKEN = cleanToken;
     }
-    const cleanToken = sanitizeBotToken(token);
-    process.env.DISCORD_BOT_TOKEN = cleanToken;
-    pawakoBot.connectWithToken(cleanToken);
+    pawakoBot.initAndConnect();
     res.json({ success: true, message: 'Connexion du bot Discord initiée.' });
   });
 

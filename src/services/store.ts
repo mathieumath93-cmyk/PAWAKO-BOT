@@ -741,7 +741,6 @@ class StoreService {
     this.quizAttempts.push(attempt);
 
     if (passed) {
-      prog.status = 'valide';
       prog.validatedAt = this.getFormattedNow();
       prog.quizPassed = true;
       prog.score = score;
@@ -804,6 +803,15 @@ class StoreService {
     return { passed, score, attempt };
   }
 
+  public addQuizAttempt(attempt: QuizAttempt): void {
+    this.quizAttempts.push(attempt);
+    this.saveMembers();
+  }
+
+  public getQuizAttempts(): QuizAttempt[] {
+    return this.quizAttempts;
+  }
+
   // --- Members ---
   public getMembers(): Member[] {
     return this.members;
@@ -818,6 +826,40 @@ class StoreService {
 
   public getMember(id: string): Member | undefined {
     return this.members.find((m) => m.id === id || m.discordId === id);
+  }
+
+  public getOrCreateCandidate(discordUserId: string, username: string, avatarUrl?: string): Member {
+    let m = this.members.find((item) => item.discordId === discordUserId || item.id === discordUserId || item.id === `mem-${discordUserId}`);
+    if (!m) {
+      m = {
+        id: `mem-${discordUserId}`,
+        discordId: discordUserId,
+        username: username || `Candidat-${discordUserId.slice(-4)}`,
+        avatarUrl: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+        roles: ['Nouveau membre', 'Module 1 En cours'],
+        joinedAt: this.getFormattedNow(),
+        currentModuleId: 'mod-1',
+        candidateState: 'nouveau',
+        progress: {
+          'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
+        },
+        extraAttemptsGranted: {},
+        isActive: true,
+        lastActiveAt: this.getFormattedNow(),
+      };
+      this.members.push(m);
+      this.saveMembers();
+    } else {
+      if (username && m.username !== username) {
+        m.username = username;
+      }
+      if (avatarUrl && m.avatarUrl !== avatarUrl) {
+        m.avatarUrl = avatarUrl;
+      }
+      m.lastActiveAt = this.getFormattedNow();
+      this.saveMembers();
+    }
+    return m;
   }
 
   public updateMemberRoles(memberId: string, roles: string[]): Member {

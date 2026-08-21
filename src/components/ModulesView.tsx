@@ -16,6 +16,7 @@ import { moduleService } from '../services/moduleService';
 interface ModulesViewProps {
   modules: TrainingModule[];
   onOpenBuilder: (module?: TrainingModule | null) => void;
+  onNavigate?: (tab: string) => void;
   onRefresh: () => void;
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
 }
@@ -23,6 +24,7 @@ interface ModulesViewProps {
 export const ModulesView: React.FC<ModulesViewProps> = ({
   modules,
   onOpenBuilder,
+  onNavigate,
   onRefresh,
   onShowToast,
 }) => {
@@ -42,6 +44,28 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Centralized Config Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-indigo-950/50 border border-indigo-500/30 rounded-2xl p-4 shadow-lg">
+        <div className="flex items-center gap-3">
+          <BookOpen className="w-5 h-5 text-indigo-400 shrink-0" />
+          <div className="text-xs">
+            <span className="font-bold text-white block">💡 Gestion Centralisée Disponibles !</span>
+            <span className="text-indigo-200">
+              Vous pouvez configurer les modules, leurs consignes, les rôles Discord et les quiz associés au même endroit dans <strong>Parcours Onboarding & Rôles Serveur</strong>.
+            </span>
+          </div>
+        </div>
+
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('automations')}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+          >
+            <span>Éditer dans Parcours Onboarding →</span>
+          </button>
+        )}
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 shadow-xl">
         <div>

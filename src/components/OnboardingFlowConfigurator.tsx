@@ -14,13 +14,23 @@ import {
   XCircle,
   Play,
   FileText,
+  Plus,
+  Trash2,
+  HelpCircle,
+  Edit3,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Award,
 } from 'lucide-react';
-import { OnboardingFlowConfig, ModuleStepConfig, TrainingModule } from '../types';
+import { OnboardingFlowConfig, ModuleStepConfig, TrainingModule, Quiz, QuizQuestion } from '../types';
 import { onboardingService } from '../services/onboardingService';
 import { discordSyncService, PreFlightValidationResult } from '../services/discordSyncService';
 import { discordService } from '../services/discordService';
 import { reminderService, CandidateReminderRule } from '../services/reminderService';
 import { moduleService } from '../services/moduleService';
+import { quizService } from '../services/quizService';
+import { store } from '../services/store';
 import { DiscordResourceSelect } from './DiscordResourceSelect';
 
 interface OnboardingFlowConfiguratorProps {
@@ -30,17 +40,182 @@ interface OnboardingFlowConfiguratorProps {
 }
 
 export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProps> = ({
-  modules,
+  modules: initialModules,
   onShowToast,
   onOpenSimulator,
 }) => {
   const [config, setConfig] = useState<OnboardingFlowConfig>(onboardingService.getConfig());
-  const [selectedModuleTab, setSelectedModuleTab] = useState<string>(modules[0]?.id || 'mod-1');
+  const [localModules, setLocalModules] = useState<TrainingModule[]>(
+    initialModules.length > 0 ? initialModules : store.getModules()
+  );
+
+  const [selectedModuleTab, setSelectedModuleTab] = useState<string>(
+    localModules[0]?.id || 'mod-1'
+  );
+
   const [validationResult, setValidationResult] = useState<PreFlightValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState<boolean>(false);
-
   const [isLaunchingOnboarding, setIsLaunchingOnboarding] = useState(false);
   const [reminderRules, setReminderRules] = useState<CandidateReminderRule[]>(reminderService.getRules());
+  const [isEvaluatingAutoReminders, setIsEvaluatingAutoReminders] = useState(false);
+
+  // Expanded questions accordion state
+  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
+
+  const refreshModulesState = () => {
+    const updated = store.getModules();
+    setLocalModules([...updated]);
+    return updated;
+  };
+
+  const activeModuleObj = localModules.find((m) => m.id === selectedModuleTab) || localModules[0];
+  const activeQuizObj = activeModuleObj ? store.getQuiz(activeModuleObj.quizId || '') || quizService.getQuizzes().find(q => q.moduleId === activeModuleObj.id) : undefined;
+
+  const foundStep = config.stepConfigs.find((s) => s.moduleId === selectedModuleTab);
+
+  const currentStep: ModuleStepConfig = foundStep
+    ? {
+        ...foundStep,
+        moduleTitle: activeModuleObj?.title || foundStep.moduleTitle,
+        directivesText: activeModuleObj?.content || foundStep.directivesText,
+        roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'Trainee',
+        roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Junior',
+      }
+    : {
+        moduleId: selectedModuleTab,
+        moduleTitle: activeModuleObj?.title || 'Module de formation',
+        directivesText: activeModuleObj?.content || 'Lisez les consignes avant de lancer le quiz.',
+        externalLinkUrl: 'https://docs.pawako.com/guide',
+        roleOnStartId: activeModuleObj?.roleEnCoursId || '',
+        roleOnStartName: activeModuleObj?.roleEnCoursName || 'Trainee',
+        roleOnPassId: activeModuleObj?.roleValidatedId || '',
+        roleOnPassName: activeModuleObj?.roleValidatedName || 'Junior',
+        successMessage: activeQuizObj?.successMessage || '🎉 Félicitations tu as réussi ! Accède au module suivant.',
+        failureMessage: activeQuizObj?.failureMessage || '❌ Score insuffisant. Tu peux réessayer après le cooldown.',
+      };
+
+  const handleAddNewModule = () => {
+    const nextOrder = localModules.length + 1;
+    const newMod = moduleService.addModule({
+      title: `Module ${nextOrder} : Nouveau Module`,
+      description: `Description et objectifs pédagogiques du Module ${nextOrder}.`,
+      content: `## 📘 Module ${nextOrder} : Consignes Pédagogiques\n\nBienvenue dans le Module ${nextOrder} ! Lisez les documents avant de passer le quiz.`,
+      channelId: `chan-mod-${nextOrder}`,
+      channelName: `#module-${nextOrder}`,
+      roleEnCoursName: `Étape ${nextOrder} En cours`,
+      roleValidatedName: `Étape ${nextOrder} Validée`,
+      roleEnCoursId: '',
+      roleValidatedId: '',
+      resources: [],
+      buttons: [],
+      isActive: true,
+    });
+
+    const newQuiz = quizService.addQuiz({
+      moduleId: newMod.id,
+      title: `Quiz du Module ${nextOrder}`,
+      description: `Évaluation de validation du Module ${nextOrder}.`,
+      minScore: 16,
+      maxScore: 20,
+      timeLimitMinutes: 15,
+      maxAttempts: 3,
+      cooldownMinutes: 30,
+      delayMinutesBeforeQuiz: 10,
+      sampleSize: 5,
+      questions: [
+        {
+          id: `q-${Date.now()}-1`,
+          text: `Question 1 du Module ${nextOrder} : Choisis la bonne réponse ?`,
+          options: ['Réponse A (Correcte)', 'Réponse B', 'Réponse C', 'Réponse D'],
+          correctAnswer: 0,
+          points: 1,
+          explanation: 'Explication pédagogique de la réponse correcte.',
+        },
+      ],
+      successMessage: `🎉 Félicitations ! Tu as validé le Module ${nextOrder}.`,
+      failureMessage: `❌ Score insuffisant au Quiz ${nextOrder}. Réessaie après le délai.`,
+    });
+
+    moduleService.updateModule(newMod.id, { quizId: newQuiz.id });
+    const updatedMods = refreshModulesState();
+    setSelectedModuleTab(newMod.id);
+
+    onShowToast('Nouveau Module Créé 🚀', `Le Module ${nextOrder} a été ajouté au parcours d'onboarding.`, 'success');
+  };
+
+  const handleDeleteCurrentModule = () => {
+    if (localModules.length <= 1) {
+      onShowToast('Action Impossible', 'Le parcours d\'onboarding doit contenir au moins 1 module.', 'error');
+      return;
+    }
+
+    if (confirm(`Voulez-vous vraiment supprimer "${activeModuleObj?.title}" et son quiz associé ?`)) {
+      if (activeModuleObj) {
+        moduleService.deleteModule(activeModuleObj.id);
+        if (activeModuleObj.quizId) {
+          quizService.deleteQuiz(activeModuleObj.quizId);
+        }
+      }
+      const updatedMods = refreshModulesState();
+      const nextActive = updatedMods[0]?.id || 'mod-1';
+      setSelectedModuleTab(nextActive);
+
+      // Remove from stepConfigs
+      const newSteps = config.stepConfigs.filter((s) => s.moduleId !== activeModuleObj?.id);
+      const newConfig = { ...config, stepConfigs: newSteps };
+      setConfig(newConfig);
+      onboardingService.updateConfig(newConfig);
+
+      onShowToast('Module Supprimé', 'Le module et ses questions ont été retirés.', 'info');
+    }
+  };
+
+  const handleUpdateModuleDetails = (updates: Partial<TrainingModule>) => {
+    if (!activeModuleObj) return;
+    moduleService.updateModule(activeModuleObj.id, updates);
+    refreshModulesState();
+  };
+
+  const handleUpdateQuizDetails = (updates: Partial<Quiz>) => {
+    if (!activeQuizObj) return;
+    quizService.updateQuiz(activeQuizObj.id, updates);
+    refreshModulesState();
+  };
+
+  const handleAddQuestionToQuiz = () => {
+    if (!activeQuizObj) return;
+    const newQuestion: QuizQuestion = {
+      id: `q-${Date.now()}`,
+      text: 'Nouvelle question de quiz ?',
+      options: ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
+      correctAnswer: 0,
+      points: 1,
+      explanation: 'Explication de la réponse.',
+    };
+
+    const updatedQuestions = [...(activeQuizObj.questions || []), newQuestion];
+    quizService.updateQuiz(activeQuizObj.id, { questions: updatedQuestions });
+    setExpandedQuestions({ ...expandedQuestions, [newQuestion.id]: true });
+    refreshModulesState();
+    onShowToast('Question Ajoutée', 'Une nouvelle question a été ajoutée au quiz.', 'info');
+  };
+
+  const handleUpdateQuestion = (qIndex: number, updatedQ: QuizQuestion) => {
+    if (!activeQuizObj) return;
+    const questions = [...(activeQuizObj.questions || [])];
+    questions[qIndex] = updatedQ;
+    quizService.updateQuiz(activeQuizObj.id, { questions });
+    refreshModulesState();
+  };
+
+  const handleDeleteQuestion = (qIndex: number) => {
+    if (!activeQuizObj) return;
+    const questions = [...(activeQuizObj.questions || [])];
+    questions.splice(qIndex, 1);
+    quizService.updateQuiz(activeQuizObj.id, { questions });
+    refreshModulesState();
+    onShowToast('Question Supprimée', 'La question a été retirée du quiz.', 'info');
+  };
 
   const handleLaunchOnboardingOnDiscord = async () => {
     setIsLaunchingOnboarding(true);
@@ -50,7 +225,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
       const embed = {
         title: `👋 Bienvenue dans la Formation Pawako !`,
         description: config.welcomeRulesMessage || `Bienvenue ! Suivez les consignes ci-dessous pour démarrer votre formation.`,
-        color: 0x6366f1, // Indigo #6366f1
+        color: 0x6366f1,
         footer: {
           text: 'Pawako Formation • Espace de Formation Officiel',
           icon_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80',
@@ -60,11 +235,11 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
 
       const components = [
         {
-          type: 1, // Action Row
+          type: 1,
           components: [
             {
-              type: 2, // Button
-              style: 1, // Primary (Blurple)
+              type: 2,
+              style: 1,
               custom_id: 'start_onboarding_process',
               label: `🚀 ${config.welcomeButtonLabel || 'Commencer la formation'}`,
             },
@@ -113,8 +288,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     onShowToast('Relance Mise à Jour', 'Modifications enregistrées', 'info');
   };
 
-  const [isEvaluatingAutoReminders, setIsEvaluatingAutoReminders] = useState(false);
-
   const handleAutoEvaluateProgressReminders = async () => {
     setIsEvaluatingAutoReminders(true);
     onShowToast('Scan d\'Avancement des Membres...', 'Analyse du niveau d\'avancement de chaque candidat...', 'info');
@@ -152,7 +325,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   const handleSaveMainConfig = (e: React.FormEvent) => {
     e.preventDefault();
     onboardingService.updateConfig(config);
-    onShowToast('Configuration Enregistrée', 'La configuration du parcours d\'onboarding a été enregistrée dans Supabase.', 'success');
+    onShowToast('Configuration Enregistrée 🚀', 'Toutes les modifications du parcours, des modules et des quiz ont été enregistrées.', 'success');
   };
 
   const handleUpdateStepConfig = (updatedStep: ModuleStepConfig) => {
@@ -167,40 +340,17 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     setConfig(newConfig);
     onboardingService.updateConfig(newConfig);
 
-    // Sync roles directly with Module object
-    if (updatedStep.roleOnStartName || updatedStep.roleOnPassName) {
-      moduleService.updateModule(updatedStep.moduleId, {
-        roleEnCoursName: updatedStep.roleOnStartName,
-        roleValidatedName: updatedStep.roleOnPassName,
-        roleEnCoursId: updatedStep.roleOnStartId,
-        roleValidatedId: updatedStep.roleOnPassId,
-      });
-    }
-
-    onShowToast('Étape de Module Enregistrée', `Paramètres pour ${updatedStep.moduleTitle} mis à jour.`, 'info');
+    // Sync roles & title directly with Module object
+    moduleService.updateModule(updatedStep.moduleId, {
+      title: updatedStep.moduleTitle,
+      content: updatedStep.directivesText,
+      roleEnCoursName: updatedStep.roleOnStartName,
+      roleValidatedName: updatedStep.roleOnPassName,
+      roleEnCoursId: updatedStep.roleOnStartId,
+      roleValidatedId: updatedStep.roleOnPassId,
+    });
+    refreshModulesState();
   };
-
-  const activeModuleObj = modules.find((m) => m.id === selectedModuleTab);
-  const foundStep = config.stepConfigs.find((s) => s.moduleId === selectedModuleTab);
-
-  const currentStep: ModuleStepConfig = foundStep
-    ? {
-        ...foundStep,
-        roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'Trainee',
-        roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Junior',
-      }
-    : {
-        moduleId: selectedModuleTab,
-        moduleTitle: activeModuleObj?.title || 'Module de formation',
-        directivesText: 'Lisez les consignes avant de lancer le quiz.',
-        externalLinkUrl: 'https://docs.pawako.com/guide',
-        roleOnStartId: activeModuleObj?.roleEnCoursId || '',
-        roleOnStartName: activeModuleObj?.roleEnCoursName || 'Trainee',
-        roleOnPassId: activeModuleObj?.roleValidatedId || '',
-        roleOnPassName: activeModuleObj?.roleValidatedName || 'Junior',
-        successMessage: '🎉 Félicitations tu as réussi avec un score de {score}/{maxScore} ! Tu as accès au module suivant ci-dessous.',
-        failureMessage: '❌ Vous n\'avez pas réussi (score : {score}/{maxScore}). Vous pouvez réessayer après {cooldown} minutes.',
-      };
 
   return (
     <div className="space-y-6">
@@ -210,11 +360,11 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-indigo-400" />
             <h2 className="text-base font-bold text-white tracking-tight">
-              Configuration du Parcours d'Onboarding & Rôles Discord
+              Configuration Centralisée : Parcours Onboarding, Modules & Quiz Discord
             </h2>
           </div>
           <p className="text-xs text-slate-300 max-w-xl">
-            Sélectionnez dynamiquement les salons, catégories et rôles réels issus de votre serveur Discord pour l'attribution automatique et le routage des candidats.
+            Gérez l'intégralité du parcours au même endroit : contenu des modules, consignes, rôles attribués, délais d'accès et questions des quiz.
           </p>
         </div>
 
@@ -296,15 +446,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               {validationResult.checks.logChannel.status === 'pass' ? '🟢' : '🟡'} Salon des Logs : {validationResult.checks.logChannel.message}
             </div>
           </div>
-
-          {validationResult.errors.length > 0 && (
-            <div className="space-y-1 text-xs text-red-300 bg-red-950/60 p-3 rounded-lg border border-red-500/30">
-              <div className="font-bold">Avertissements Bloquants :</div>
-              {validationResult.errors.map((err, idx) => (
-                <div key={idx}>• {err}</div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -319,7 +460,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Salon de Bienvenue */}
             <DiscordResourceSelect
               type="channel"
               value={config.welcomeChannelId}
@@ -329,7 +469,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               helperText="Salon Discord dans lequel le bot poste le message d'accueil initial"
             />
 
-            {/* Libellé du Bouton sur #bienvenue */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                 Libellé du Bouton sur Bienvenue <span className="text-red-400">*</span>
@@ -346,7 +485,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               </p>
             </div>
 
-            {/* Catégorie des Salons Personnels */}
             <DiscordResourceSelect
               type="category"
               value={config.personalCategoryId}
@@ -355,7 +493,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               helperText="Catégorie Discord où seront créés les salons 🔒-formation-[pseudo]"
             />
 
-            {/* Préfixe du Salon Personnel */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                 Préfixe du Salon Personnel Membre <span className="text-red-400">*</span>
@@ -373,7 +510,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               </p>
             </div>
 
-            {/* Rôle Initial Attribution */}
             <DiscordResourceSelect
               type="role"
               value={config.initialRoleId}
@@ -383,7 +519,6 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               helperText="Rôle Discord attribué au membre lorsqu'il lance son parcours"
             />
 
-            {/* Salon des Logs */}
             <DiscordResourceSelect
               type="channel"
               value={config.logChannelId}
@@ -393,14 +528,13 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
             />
           </div>
 
-          {/* Message de Bienvenue & Règles */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
               <span>Message de Bienvenue & Consignes (Posté dans le salon personnel)</span>
             </label>
             <textarea
-              rows={4}
+              rows={3}
               value={config.welcomeRulesMessage}
               onChange={(e) => setConfig({ ...config, welcomeRulesMessage: e.target.value })}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed"
@@ -408,38 +542,34 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </div>
         </div>
 
-        {/* Section 2: Configuration par Module (Rôles & Progression) */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-400" />
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                2. Configuration des Rôles Discord par Module
-              </h3>
+        {/* Section 2: Éditeur Centralisé des Modules & Quiz (TOUT EN UN) */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  2. Gestion Centralisée des Étape & Quiz de Formation ({localModules.length} Modules)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Gérez le titre, les consignes, les rôles attribués et les questions du quiz de chaque module depuis ce panneau unique.
+              </p>
             </div>
 
-            {/* Direct Module Dropdown Selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-slate-300 whitespace-nowrap">
-                Changer de module :
-              </label>
-              <select
-                value={selectedModuleTab}
-                onChange={(e) => setSelectedModuleTab(e.target.value)}
-                className="bg-slate-950 border border-indigo-500/40 hover:border-indigo-500 text-xs text-white font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-              >
-                {modules.map((mod, idx) => (
-                  <option key={mod.id} value={mod.id}>
-                    Étape {idx + 1} : {mod.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <button
+              type="button"
+              onClick={handleAddNewModule}
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Ajouter un Module</span>
+            </button>
           </div>
 
-          {/* Module Tabs with Full Titles */}
+          {/* Module Tabs */}
           <div className="flex border-b border-slate-800 overflow-x-auto gap-2 pb-1">
-            {modules.map((mod, idx) => {
+            {localModules.map((mod, idx) => {
               const isActive = selectedModuleTab === mod.id;
               return (
                 <button
@@ -460,118 +590,350 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
             })}
           </div>
 
-          {/* Selected Module Config Form */}
-          <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-mono font-bold">
-                    Étape {modules.findIndex((m) => m.id === selectedModuleTab) + 1} / {modules.length}
+          {/* Selected Module & Quiz Unified Editor Panel */}
+          {activeModuleObj && (
+            <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-6">
+              {/* Module Header Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-mono font-bold">
+                    Étape {localModules.findIndex((m) => m.id === selectedModuleTab) + 1} / {localModules.length}
                   </span>
-                  <h4 className="text-sm font-bold text-white">
-                    {currentStep.moduleTitle}
-                  </h4>
+                  <div>
+                    <h4 className="text-base font-bold text-white flex items-center gap-2">
+                      <span>{activeModuleObj.title}</span>
+                    </h4>
+                    <span className="text-[11px] font-mono text-slate-500">ID Module : {activeModuleObj.id}</span>
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Définissez les rôles Discord attribués au démarrage et à la validation de ce module.
-                </p>
+
+                {localModules.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteCurrentModule}
+                    className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer w-fit"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Supprimer cette Étape</span>
+                  </button>
+                )}
               </div>
-              <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded border border-slate-800 shrink-0">
-                ID: {currentStep.moduleId}
-              </span>
+
+              {/* Subsection A: Informations & Contenu Pédagogique du Module */}
+              <div className="space-y-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                <h5 className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-indigo-400" />
+                  <span>A. Informations & Directives du Module</span>
+                </h5>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">Titre du Module</label>
+                    <input
+                      type="text"
+                      value={activeModuleObj.title}
+                      onChange={(e) => {
+                        const newTitle = e.target.value;
+                        handleUpdateModuleDetails({ title: newTitle });
+                        handleUpdateStepConfig({ ...currentStep, moduleTitle: newTitle });
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-semibold focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">Description courte</label>
+                    <input
+                      type="text"
+                      value={activeModuleObj.description || ''}
+                      onChange={(e) => handleUpdateModuleDetails({ description: e.target.value })}
+                      placeholder="Objectif du module..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Consignes & Contenu Pédagogique (Message posté dans le salon privé Discord)</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={activeModuleObj.content || ''}
+                    onChange={(e) => {
+                      const newContent = e.target.value;
+                      handleUpdateModuleDetails({ content: newContent });
+                      handleUpdateStepConfig({ ...currentStep, directivesText: newContent });
+                    }}
+                    placeholder="Saisissez les consignes de formation (Support Markdown accepté)..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>URL du Support Externe de Formation (Optionnel)</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={currentStep.externalLinkUrl || ''}
+                    onChange={(e) => handleUpdateStepConfig({ ...currentStep, externalLinkUrl: e.target.value })}
+                    placeholder="https://docs.pawako.com/votre-guide"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Subsection B: Attributions des Rôles Discord pour ce Module */}
+              <div className="space-y-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                <h5 className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-indigo-400" />
+                  <span>B. Attribution des Rôles Discord</span>
+                </h5>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <DiscordResourceSelect
+                    type="role"
+                    value={currentStep.roleOnStartId}
+                    onChange={(id, name) =>
+                      handleUpdateStepConfig({
+                        ...currentStep,
+                        roleOnStartId: id,
+                        roleOnStartName: name,
+                      })
+                    }
+                    label="Rôle Attribué au Démarrage de l'Étape"
+                    helperText="Rôle Discord attribué lorsque l'utilisateur entame ce module"
+                  />
+
+                  <DiscordResourceSelect
+                    type="role"
+                    value={currentStep.roleOnPassId}
+                    onChange={(id, name) =>
+                      handleUpdateStepConfig({
+                        ...currentStep,
+                        roleOnPassId: id,
+                        roleOnPassName: name,
+                      })
+                    }
+                    label="Rôle Attribué en Cas de Succès (Validation Quiz)"
+                    helperText="Rôle Discord attribué lorsque l'utilisateur réussit le quiz"
+                  />
+                </div>
+              </div>
+
+              {/* Subsection C: Configuration & Questions du Quiz Associé */}
+              {activeQuizObj && (
+                <div className="space-y-5 bg-slate-900/50 p-5 rounded-xl border border-indigo-500/30">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <h5 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                      <HelpCircle className="w-4 h-4 text-amber-400" />
+                      <span>C. Quiz & Évaluation des Connaissances ({activeQuizObj.questions?.length || 0} Questions)</span>
+                    </h5>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                      ID Quiz : {activeQuizObj.id}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Titre du Quiz</label>
+                      <input
+                        type="text"
+                        value={activeQuizObj.title}
+                        onChange={(e) => handleUpdateQuizDetails({ title: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-semibold"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Score de Passage Requis (sur 20)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={activeQuizObj.minScore}
+                        onChange={(e) => handleUpdateQuizDetails({ minScore: Number(e.target.value) || 16 })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Délai avant Déblocage Quiz (Min)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={activeQuizObj.delayMinutesBeforeQuiz ?? 10}
+                        onChange={(e) => handleUpdateQuizDetails({ delayMinutesBeforeQuiz: Number(e.target.value) || 0 })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Temps Limite (Minutes)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={activeQuizObj.timeLimitMinutes ?? 15}
+                        onChange={(e) => handleUpdateQuizDetails({ timeLimitMinutes: Number(e.target.value) || 15 })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Cooldown entre Tentatives (Minutes)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={activeQuizObj.cooldownMinutes ?? 30}
+                        onChange={(e) => handleUpdateQuizDetails({ cooldownMinutes: Number(e.target.value) || 30 })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-emerald-400">Message en cas de Succès</label>
+                      <textarea
+                        rows={2}
+                        value={currentStep.successMessage || activeQuizObj.successMessage || ''}
+                        onChange={(e) => {
+                          const msg = e.target.value;
+                          handleUpdateQuizDetails({ successMessage: msg });
+                          handleUpdateStepConfig({ ...currentStep, successMessage: msg });
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-red-400">Message en cas d'Échec</label>
+                      <textarea
+                        rows={2}
+                        value={currentStep.failureMessage || activeQuizObj.failureMessage || ''}
+                        onChange={(e) => {
+                          const msg = e.target.value;
+                          handleUpdateQuizDetails({ failureMessage: msg });
+                          handleUpdateStepConfig({ ...currentStep, failureMessage: msg });
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Question Bank Manager */}
+                  <div className="space-y-3 pt-3 border-t border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                        Banque de Questions ({activeQuizObj.questions?.length || 0})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddQuestionToQuiz}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 shadow transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Ajouter une Question</span>
+                      </button>
+                    </div>
+
+                    {activeQuizObj.questions?.map((q, qIndex) => {
+                      const isExpanded = expandedQuestions[q.id] ?? true;
+
+                      return (
+                        <div
+                          key={q.id || qIndex}
+                          className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedQuestions({ ...expandedQuestions, [q.id]: !isExpanded })}
+                              className="text-xs font-bold text-slate-200 hover:text-white flex items-center gap-2"
+                            >
+                              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[11px]">
+                                Q{qIndex + 1}
+                              </span>
+                              <span className="truncate max-w-md">{q.text || 'Question sans titre'}</span>
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteQuestion(qIndex)}
+                              className="p-1 rounded bg-rose-950/60 hover:bg-rose-900 text-rose-400 text-xs transition-colors"
+                              title="Supprimer la question"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="space-y-3 pt-2 border-t border-slate-900">
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-slate-400">Intitulé de la question</label>
+                                <input
+                                  type="text"
+                                  value={q.text}
+                                  onChange={(e) => handleUpdateQuestion(qIndex, { ...q, text: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white font-semibold"
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {q.options.map((opt, optIdx) => (
+                                  <div key={optIdx} className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name={`correct_${q.id}`}
+                                      checked={q.correctAnswer === optIdx}
+                                      onChange={() => handleUpdateQuestion(qIndex, { ...q, correctAnswer: optIdx })}
+                                      className="accent-emerald-500 cursor-pointer"
+                                      title="Cocher pour définir comme réponse correcte"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={opt}
+                                      onChange={(e) => {
+                                        const newOpts = [...q.options];
+                                        newOpts[optIdx] = e.target.value;
+                                        handleUpdateQuestion(qIndex, { ...q, options: newOpts });
+                                      }}
+                                      className={`w-full bg-slate-900 border rounded-lg p-1.5 text-xs text-white ${
+                                        q.correctAnswer === optIdx
+                                          ? 'border-emerald-500/60 bg-emerald-950/20 font-bold text-emerald-200'
+                                          : 'border-slate-800'
+                                      }`}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-slate-400">Explication pédagogique (Affichée après réponse)</label>
+                                <input
+                                  type="text"
+                                  value={q.explanation || ''}
+                                  onChange={(e) => handleUpdateQuestion(qIndex, { ...q, explanation: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-300"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Rôle attribué au démarrage du module */}
-            <DiscordResourceSelect
-              type="role"
-              value={currentStep.roleOnStartId}
-              onChange={(id, name) =>
-                handleUpdateStepConfig({
-                  ...currentStep,
-                  roleOnStartId: id,
-                  roleOnStartName: name,
-                })
-              }
-              label="Rôle Attribué au Démarrage du Module"
-              helperText="Rôle Discord attribué lorsque l'utilisateur entame ce module"
-            />
-
-            {/* Rôle attribué en cas de réussite */}
-            <DiscordResourceSelect
-              type="role"
-              value={currentStep.roleOnPassId}
-              onChange={(id, name) =>
-                handleUpdateStepConfig({
-                  ...currentStep,
-                  roleOnPassId: id,
-                  roleOnPassName: name,
-                })
-              }
-              label="Rôle Attribué en Cas de Succès (Validation Quiz)"
-              helperText="Rôle Discord attribué lorsque l'utilisateur réussit le quiz"
-            />
-          </div>
-
-          {/* Lien Documentation Externe */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-indigo-400" />
-              <span>URL du Support Externe de Formation</span>
-            </label>
-            <input
-              type="url"
-              value={currentStep.externalLinkUrl || ''}
-              onChange={(e) =>
-                handleUpdateStepConfig({
-                  ...currentStep,
-                  externalLinkUrl: e.target.value,
-                })
-              }
-              placeholder="https://docs.pawako.com/votre-guide"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Message Succès */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-emerald-400">
-                Message en cas de Succès
-              </label>
-              <textarea
-                rows={2}
-                value={currentStep.successMessage || ''}
-                onChange={(e) =>
-                  handleUpdateStepConfig({
-                    ...currentStep,
-                    successMessage: e.target.value,
-                  })
-                }
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
-              />
-            </div>
-
-            {/* Message Échec */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-red-400">
-                Message en cas d'Échec
-              </label>
-              <textarea
-                rows={2}
-                value={currentStep.failureMessage || ''}
-                onChange={(e) =>
-                  handleUpdateStepConfig({
-                    ...currentStep,
-                    failureMessage: e.target.value,
-                  })
-                }
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-red-500 font-mono"
-              />
-            </div>
-          </div>
+          )}
         </div>
-      </div>
 
         {/* Submit Main Config */}
         <div className="flex justify-end">
@@ -585,89 +947,89 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         </div>
       </form>
 
-        {/* Section 3: Relances Automatiques Adaptées à l'Avancement du Membre */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                3. Relances Automatiques Adaptées à l'Avancement du Membre
-              </h3>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleAutoEvaluateProgressReminders}
-                disabled={isEvaluatingAutoReminders}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer shrink-0"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{isEvaluatingAutoReminders ? 'Analyse...' : '⚡ Scan & Relancer selon l\'Avancement'}</span>
-              </button>
-              <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg">
-                Relances Adaptatives Activées
-              </span>
-            </div>
+      {/* Section 3: Relances Automatiques Adaptées à l'Avancement du Membre */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-400" />
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+              3. Relances Automatiques Adaptées à l'Avancement du Membre
+            </h3>
           </div>
 
-          <p className="text-xs text-slate-400">
-            Les messages de relance sont automatiquement adaptés au statut exact du membre (non démarré, module en cours, quiz échoué à repasser, ou attente de validation de rôle).
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {reminderRules.map((rule) => (
-              <div
-                key={rule.id}
-                className={`bg-slate-950/80 border rounded-xl p-4 space-y-3 transition-all ${
-                  rule.enabled ? 'border-amber-500/40' : 'border-slate-800 opacity-70'
-                }`}
-              >
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleReminderRule(rule.id)}
-                      className={`w-9 h-5 rounded-full transition-colors p-0.5 flex items-center ${
-                        rule.enabled ? 'bg-emerald-600 justify-end' : 'bg-slate-800 justify-start'
-                      }`}
-                    >
-                      <span className="w-3.5 h-3.5 bg-white rounded-full shadow-md"></span>
-                    </button>
-                    <div>
-                      <span className="text-xs font-bold text-white block">{rule.label}</span>
-                      <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 inline-block mt-0.5">
-                        Étape : {rule.stageLabel || rule.stageCondition}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleTestReminderRule(rule.id)}
-                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
-                  >
-                    <Play className="w-3 h-3 fill-amber-300" />
-                    <span>Tester Relance</span>
-                  </button>
-                </div>
-
-                <textarea
-                  rows={2}
-                  value={rule.messageText}
-                  onChange={(e) => {
-                    const updated = reminderRules.map((r) =>
-                      r.id === rule.id ? { ...r, messageText: e.target.value } : r
-                    );
-                    setReminderRules(updated);
-                    reminderService.saveRules(updated);
-                  }}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
-                />
-              </div>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAutoEvaluateProgressReminders}
+              disabled={isEvaluatingAutoReminders}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer shrink-0"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isEvaluatingAutoReminders ? 'Analyse...' : '⚡ Scan & Relancer selon l\'Avancement'}</span>
+            </button>
+            <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+              Relances Adaptatives Activées
+            </span>
           </div>
         </div>
+
+        <p className="text-xs text-slate-400">
+          Les messages de relance sont automatiquement adaptés au statut exact du membre (non démarré, module en cours, quiz échoué à repasser, ou attente de validation de rôle).
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {reminderRules.map((rule) => (
+            <div
+              key={rule.id}
+              className={`bg-slate-950/80 border rounded-xl p-4 space-y-3 transition-all ${
+                rule.enabled ? 'border-amber-500/40' : 'border-slate-800 opacity-70'
+              }`}
+            >
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleReminderRule(rule.id)}
+                    className={`w-9 h-5 rounded-full transition-colors p-0.5 flex items-center ${
+                      rule.enabled ? 'bg-emerald-600 justify-end' : 'bg-slate-800 justify-start'
+                    }`}
+                  >
+                    <span className="w-3.5 h-3.5 bg-white rounded-full shadow-md"></span>
+                  </button>
+                  <div>
+                    <span className="text-xs font-bold text-white block">{rule.label}</span>
+                    <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 inline-block mt-0.5">
+                      Étape : {rule.stageLabel || rule.stageCondition}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleTestReminderRule(rule.id)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                >
+                  <Play className="w-3 h-3 fill-amber-300" />
+                  <span>Tester Relance</span>
+                </button>
+              </div>
+
+              <textarea
+                rows={2}
+                value={rule.messageText}
+                onChange={(e) => {
+                  const updated = reminderRules.map((r) =>
+                    r.id === rule.id ? { ...r, messageText: e.target.value } : r
+                  );
+                  setReminderRules(updated);
+                  reminderService.saveRules(updated);
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+              />
+            </div>
+          ))}
+        </div>
       </div>
-    );
-  };
+    </div>
+  );
+};

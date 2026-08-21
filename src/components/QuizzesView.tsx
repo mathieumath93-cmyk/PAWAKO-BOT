@@ -13,6 +13,7 @@ interface QuizzesViewProps {
   quizzes: Quiz[];
   modules: TrainingModule[];
   onOpenBuilder: (quiz?: Quiz | null) => void;
+  onNavigate?: (tab: string) => void;
   onRefresh: () => void;
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
 }
@@ -21,6 +22,7 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({
   quizzes,
   modules,
   onOpenBuilder,
+  onNavigate,
   onRefresh,
   onShowToast,
 }) => {
@@ -34,6 +36,28 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Centralized Config Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 shadow-lg">
+        <div className="flex items-center gap-3">
+          <HelpCircle className="w-5 h-5 text-amber-400 shrink-0" />
+          <div className="text-xs">
+            <span className="font-bold text-white block">💡 Gestion Centralisée des Quiz !</span>
+            <span className="text-amber-200">
+              Tous les quiz et leurs questions de test peuvent être configurés et modifiés directement au même endroit dans <strong>Parcours Onboarding & Rôles Serveur</strong>.
+            </span>
+          </div>
+        </div>
+
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('automations')}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+          >
+            <span>Gérer dans Parcours Onboarding →</span>
+          </button>
+        )}
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 shadow-xl">
         <div>

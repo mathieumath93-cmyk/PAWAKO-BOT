@@ -257,6 +257,7 @@ export function App() {
             <ModulesView
               modules={modules}
               onOpenBuilder={handleOpenModuleBuilder}
+              onNavigate={(tab) => setActiveTab(tab)}
               onRefresh={refreshData}
               onShowToast={showToast}
             />
@@ -267,6 +268,7 @@ export function App() {
               quizzes={quizzes}
               modules={modules}
               onOpenBuilder={handleOpenQuizBuilder}
+              onNavigate={(tab) => setActiveTab(tab)}
               onRefresh={refreshData}
               onShowToast={showToast}
             />

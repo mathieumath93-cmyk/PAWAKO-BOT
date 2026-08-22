@@ -10,7 +10,7 @@ import {
   PermissionFlagsBits,
   TextChannel,
 } from 'discord.js';
-import { store } from '../services/store';
+import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
@@ -82,6 +82,11 @@ export class PawakoBotRunner {
         const guildId = process.env.DISCORD_GUILD_ID;
         console.log(`[PAWAKO BOT] Connecté : ${this.client?.user?.tag} (Guild Filter: ${guildId || 'Tous'})`);
         store.addLog('System Bot', `Bot Discord Gateway connecté (${this.client?.user?.tag})`, 'system');
+
+        // Sync Firestore data on bot ready
+        firebaseSyncService.revalidate().catch((err) => {
+          console.warn('[Pawako Bot Sync Error on Ready]', err?.message || err);
+        });
       });
 
       this.client.on('guildMemberAdd', (member) => {
@@ -334,6 +339,10 @@ export class PawakoBotRunner {
 
           // --- 1b. LAUNCH TRAINING (INSIDE PERSONAL CHANNEL) ---
           if (customId === 'start_training_module_1' || customId.startsWith('start_training')) {
+            if (store.getModules().length === 0) {
+              await firebaseSyncService.revalidate().catch(() => {});
+            }
+
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
             member.candidateState = 'formation_commencee';
             member.lastActiveAt = store.getFormattedNow();
@@ -353,7 +362,7 @@ export class PawakoBotRunner {
             }
 
             // Setup Module 1 & Quiz availability
-            const mod1 = store.getModules()[0];
+            const mod1 = store.getModules()[0] || defaultModules[0];
             if (!mod1) {
               await interaction.editReply({
                 content: '⚠️ Aucun module n\'est encore configuré par l\'administrateur sur cette plateforme.',
@@ -361,7 +370,7 @@ export class PawakoBotRunner {
               return;
             }
 
-            const quiz1 = store.getQuiz(mod1.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod1.id) || store.getQuizzes()[0];
+            const quiz1 = store.getQuiz(mod1.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod1.id) || store.getQuizzes()[0] || defaultQuizzes[0];
             const delayMins = quiz1?.delayMinutesBeforeQuiz !== undefined ? quiz1.delayMinutesBeforeQuiz : 0;
             member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
 

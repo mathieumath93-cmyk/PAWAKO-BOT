@@ -3,12 +3,18 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { store } from './src/services/store';
+import { firebaseSyncService } from './src/services/firebaseSyncService';
 import { pawakoBot } from './src/bot/discordBot';
 import { discordService } from './src/services/discordService';
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  // Sync data from Firestore into Node store
+  firebaseSyncService.initSync().catch((err) => {
+    console.warn('[Server Firestore Init Warning]', err?.message || err);
+  });
 
   // Initialize Discord Bot if token is present in ENV or discordService
   let botTokenEnv = sanitizeBotToken(process.env.DISCORD_BOT_TOKEN || '');

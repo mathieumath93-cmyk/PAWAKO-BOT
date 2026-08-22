@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Type,
@@ -18,6 +18,10 @@ import {
   Eye,
   Save,
   Lock,
+  RotateCcw,
+  Check,
+  Clock,
+  FileCheck,
 } from 'lucide-react';
 import { TrainingModule, ModuleBlock, ModuleBlockType } from '../types';
 import { DiscordPreview } from './ui/DiscordPreview';
@@ -37,18 +41,104 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [title, setTitle] = useState(moduleToEdit?.title || 'Module de Formation');
-  const [description, setDescription] = useState(moduleToEdit?.description || 'Description du module...');
-  const [isActive, setIsActive] = useState(moduleToEdit?.isActive ?? true);
+  const draftKey = `pawako_module_builder_draft_${moduleToEdit?.id || 'new'}`;
 
-  const defaultBlocks: ModuleBlock[] = moduleToEdit?.blocks || [
-    { id: 'blk-1', type: 'heading', title: 'Introduction', content: title },
-    { id: 'blk-2', type: 'text', content: 'Bienvenue dans cette session d\'apprentissage. Suivez attentivement les consignes ci-dessous.' },
-    { id: 'blk-3', type: 'alert', title: 'Rappel Important', content: 'Un score minimum de 80% au quiz final est requis pour débloquer le rôle suivant.', alertType: 'info' },
-  ];
+  const [title, setTitle] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [isActive, setIsActive] = useState<boolean>(true);
+  const [blocks, setBlocks] = useState<ModuleBlock[]>([]);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [isDraftRestored, setIsDraftRestored] = useState<boolean>(false);
+  const [hasDraft, setHasDraft] = useState<boolean>(false);
 
-  const [blocks, setBlocks] = useState<ModuleBlock[]>(defaultBlocks);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(blocks[0]?.id || null);
+  // Initialize state & restore draft if present when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let loadedFromDraft = false;
+    try {
+      const savedDraftRaw = localStorage.getItem(draftKey);
+      if (savedDraftRaw) {
+        const parsed = JSON.parse(savedDraftRaw);
+        if (parsed && Array.isArray(parsed.blocks) && parsed.title !== undefined) {
+          setTitle(parsed.title);
+          setDescription(parsed.description || '');
+          setIsActive(parsed.isActive ?? true);
+          setBlocks(parsed.blocks);
+          setSelectedBlockId(parsed.blocks[0]?.id || null);
+          setLastSavedAt(parsed.updatedAt || Date.now());
+          setIsDraftRestored(true);
+          setHasDraft(true);
+          loadedFromDraft = true;
+        }
+      }
+    } catch (e) {
+      console.warn('Error restoring module draft:', e);
+    }
+
+    if (!loadedFromDraft) {
+      const initialTitle = moduleToEdit?.title || 'Module de Formation';
+      const initialDesc = moduleToEdit?.description || 'Description du module...';
+      const initialActive = moduleToEdit?.isActive ?? true;
+      const initialBlocks: ModuleBlock[] = moduleToEdit?.blocks || [
+        { id: 'blk-1', type: 'heading', title: 'Introduction', content: initialTitle },
+        { id: 'blk-2', type: 'text', content: 'Bienvenue dans cette session d\'apprentissage. Suivez attentivement les consignes ci-dessous.' },
+        { id: 'blk-3', type: 'alert', title: 'Rappel Important', content: 'Un score minimum de 80% au quiz final est requis pour débloquer le rôle suivant.', alertType: 'info' },
+      ];
+
+      setTitle(initialTitle);
+      setDescription(initialDesc);
+      setIsActive(initialActive);
+      setBlocks(initialBlocks);
+      setSelectedBlockId(initialBlocks[0]?.id || null);
+      setIsDraftRestored(false);
+      setHasDraft(false);
+      setLastSavedAt(null);
+    }
+  }, [isOpen, moduleToEdit?.id, draftKey]);
+
+  // Real-time auto-save draft to localStorage whenever fields or blocks change
+  useEffect(() => {
+    if (!isOpen) return;
+    if (blocks.length === 0 && !title) return;
+
+    try {
+      const draftData = {
+        title,
+        description,
+        isActive,
+        blocks,
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem(draftKey, JSON.stringify(draftData));
+      setLastSavedAt(Date.now());
+      setHasDraft(true);
+    } catch (err) {
+      console.warn('Error auto-saving draft:', err);
+    }
+  }, [title, description, isActive, blocks, isOpen, draftKey]);
+
+  const handleDiscardDraft = () => {
+    localStorage.removeItem(draftKey);
+    const initialTitle = moduleToEdit?.title || 'Module de Formation';
+    const initialDesc = moduleToEdit?.description || 'Description du module...';
+    const initialActive = moduleToEdit?.isActive ?? true;
+    const initialBlocks: ModuleBlock[] = moduleToEdit?.blocks || [
+      { id: 'blk-1', type: 'heading', title: 'Introduction', content: initialTitle },
+      { id: 'blk-2', type: 'text', content: 'Bienvenue dans cette session d\'apprentissage. Suivez attentivement les consignes ci-dessous.' },
+      { id: 'blk-3', type: 'alert', title: 'Rappel Important', content: 'Un score minimum de 80% au quiz final est requis pour débloquer le rôle suivant.', alertType: 'info' },
+    ];
+
+    setTitle(initialTitle);
+    setDescription(initialDesc);
+    setIsActive(initialActive);
+    setBlocks(initialBlocks);
+    setSelectedBlockId(initialBlocks[0]?.id || null);
+    setIsDraftRestored(false);
+    setHasDraft(false);
+    setLastSavedAt(null);
+  };
 
   const availableBlockTypes: { type: ModuleBlockType; label: string; icon: any }[] = [
     { type: 'heading', label: 'Titre (Heading)', icon: Heading },
@@ -103,6 +193,9 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
 
   const handleSaveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    localStorage.removeItem(draftKey);
+    setHasDraft(false);
+    setIsDraftRestored(false);
     onSave({
       title,
       description,
@@ -114,23 +207,61 @@ export const ModuleBuilderModal: React.FC<ModuleBuilderModalProps> = ({
     onClose();
   };
 
-  const activeBlock = blocks.find((b) => b.id === selectedBlockId);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-6xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Modal Header */}
         <div className="p-4 md:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-indigo-400" />
-              <span>{moduleToEdit ? 'Éditeur de Contenu du Module' : 'Créer un Nouveau Module'}</span>
-            </h2>
-            <p className="text-xs text-slate-400">Assemblez les leçons, textes, vidéos et consignes de ce module.</p>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+                <span>{moduleToEdit ? 'Éditeur de Contenu du Module' : 'Créer un Nouveau Module'}</span>
+              </h2>
+
+              {/* Real-Time Auto-Save Status Indicator */}
+              {lastSavedAt && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-[10px] font-semibold text-emerald-400 animate-in fade-in">
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span>Brouillon sauvé ({new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})</span>
+                </div>
+              )}
+
+              {/* Draft Restored Warning Badge */}
+              {isDraftRestored && (
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-[10px] font-bold text-amber-300">
+                  <FileCheck className="w-3 h-3 text-amber-400" />
+                  <span>Brouillon non publié restauré</span>
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="underline text-amber-200 hover:text-white ml-1"
+                    title="Effacer le brouillon et réinitialiser"
+                  >
+                    Effacer
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">Assemblez les leçons, textes, vidéos et consignes de ce module. Enregistrement automatique en temps réel.</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            {hasDraft && (
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/50 hover:text-rose-300 text-slate-400 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                title="Supprimer le brouillon local et réinitialiser"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Réinitialiser</span>
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body: Split Layout */}

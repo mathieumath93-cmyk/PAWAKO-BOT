@@ -1,6 +1,6 @@
 import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { store } from './store';
+import { store, defaultModules, defaultQuizzes } from './store';
 import { TrainingModule, Quiz, Member, UsefulLink } from '../types';
 
 /**
@@ -213,8 +213,12 @@ class FirebaseSyncService {
         const modulesSnap = await getDocs(collection(db, 'modules'));
         const loadedModules: TrainingModule[] = [];
         modulesSnap.forEach((doc) => loadedModules.push(doc.data() as TrainingModule));
-        loadedModules.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        store.setModules(loadedModules);
+        if (loadedModules.length > 0) {
+          loadedModules.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          store.setModules(loadedModules);
+        } else if (store.getModules().length === 0) {
+          store.setModules(defaultModules);
+        }
       } catch (modErr) {
         console.warn('⚠️ [SWR Revalidate Modules Info]', modErr);
       }
@@ -224,7 +228,11 @@ class FirebaseSyncService {
         const quizSnap = await getDocs(collection(db, 'quizzes'));
         const loadedQuizzes: Quiz[] = [];
         quizSnap.forEach((doc) => loadedQuizzes.push(doc.data() as Quiz));
-        store.setQuizzes(loadedQuizzes);
+        if (loadedQuizzes.length > 0) {
+          store.setQuizzes(loadedQuizzes);
+        } else if (store.getQuizzes().length === 0) {
+          store.setQuizzes(defaultQuizzes);
+        }
       } catch (quizErr) {
         console.warn('⚠️ [SWR Revalidate Quizzes Info]', quizErr);
       }

@@ -66,10 +66,64 @@ const defaultHealth: SystemHealth = {
 
 const defaultBackups: BackupRecord[] = [];
 
+export const defaultModules: TrainingModule[] = [
+  {
+    id: 'mod-1',
+    title: 'Module 1 : Onboarding & Règlement',
+    description: 'Présentation de la communauté, règles de vie et fonctionnement général du serveur.',
+    content: 'Bienvenue dans ton premier module de formation PAWAKO !\n\n1. Respectez la courtoisie et la bienveillance dans tous les salons.\n2. Lisez attentivement les consignes et la documentation officielle.\n3. Complétez le quiz de validation ci-dessous pour débloquer votre rôle supérieur.',
+    order: 1,
+    quizId: 'quiz-1',
+    channelId: '',
+    channelName: '🔒-formation-candidat',
+    roleEnCoursId: '',
+    roleEnCoursName: 'En Formation',
+    roleValidatedId: '',
+    roleValidatedName: 'Membre Officiel',
+    resources: [],
+    buttons: [],
+    isActive: true,
+    blocks: [
+      { id: 'blk-1', type: 'heading', title: 'Bienvenue dans la Formation', content: 'Module 1 : Onboarding & Règlement' },
+      { id: 'blk-2', type: 'text', content: 'Bienvenue dans ton premier module de formation ! Lisez attentivement les consignes et répondez au quiz ci-dessous.' },
+      { id: 'blk-3', type: 'alert', title: 'Rappel Important', content: 'Un score minimum de 80% au quiz est requis pour valider ce premier module.', alertType: 'info' },
+    ],
+  },
+];
+
+export const defaultQuizzes: Quiz[] = [
+  {
+    id: 'quiz-1',
+    moduleId: 'mod-1',
+    title: 'Quiz de Validation - Module 1',
+    description: 'Vérification des règles fondamentales et du fonctionnement du serveur.',
+    minScore: 80,
+    cooldownMinutes: 30,
+    delayMinutesBeforeQuiz: 0,
+    sampleSize: 2,
+    questions: [
+      {
+        id: 'q1',
+        text: 'Quelle est la règle d\'or à respecter sur le serveur ?',
+        options: ['Respect et courtoisie envers tous', 'Spammer les salons', 'Utiliser un langage agressif', 'Ignorer les consignes'],
+        correctAnswer: 0,
+        explanation: 'Le respect et la courtoisie sont indispensables pour tous les membres.',
+      },
+      {
+        id: 'q2',
+        text: 'Que devez-vous faire après avoir terminé la lecture du module ?',
+        options: ['Compléter le quiz de validation', 'Quitter le serveur', 'Ignorer les instructions', 'Envoyer un message privé inutile'],
+        correctAnswer: 0,
+        explanation: 'Le quiz permet d\'évaluer la bonne compréhension et d\'attribuer le rôle supérieur.',
+      },
+    ],
+  },
+];
+
 class StoreService {
   private branding: BrandingSettings = { ...defaultBranding };
-  private modules: TrainingModule[] = [];
-  private quizzes: Quiz[] = [];
+  private modules: TrainingModule[] = [...defaultModules];
+  private quizzes: Quiz[] = [...defaultQuizzes];
   private members: Member[] = [];
   private usefulLinks: UsefulLink[] = [];
   private tickets: Ticket[] = [...defaultTickets];
@@ -90,17 +144,17 @@ class StoreService {
       const storedMods = localStorage.getItem('pawako_modules');
       if (storedMods) {
         const parsed = JSON.parse(storedMods);
-        this.modules = Array.isArray(parsed) ? parsed : [];
+        this.modules = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...defaultModules];
       } else {
-        this.modules = [];
+        this.modules = [...defaultModules];
       }
 
       const storedQuizzes = localStorage.getItem('pawako_quizzes');
       if (storedQuizzes) {
         const parsed = JSON.parse(storedQuizzes);
-        this.quizzes = Array.isArray(parsed) ? parsed : [];
+        this.quizzes = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...defaultQuizzes];
       } else {
-        this.quizzes = [];
+        this.quizzes = [...defaultQuizzes];
       }
 
       const storedMembers = localStorage.getItem('pawako_members');

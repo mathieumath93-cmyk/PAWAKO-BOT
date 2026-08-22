@@ -18,6 +18,7 @@ import { Member } from '../types';
 import { memberService } from '../services/memberService';
 import { discordService } from '../services/discordService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
+import { store } from '../services/store';
 
 interface MembersViewProps {
   members: Member[];

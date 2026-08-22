@@ -32,9 +32,9 @@ export const RolesView: React.FC<RolesViewProps> = ({ onShowToast }) => {
     }
   };
 
-  const handleUpdateRole = (moduleId: string, roleId: string) => {
+  const handleUpdateRole = (moduleId: string, roleEnCoursId: string, roleValidatedId?: string) => {
     try {
-      roleService.updateMapping(moduleId, roleId);
+      roleService.updateMapping(moduleId, roleEnCoursId, roleValidatedId);
       setMappings([...roleService.getMappings()]);
       onShowToast('Attribution de rôle mise à jour', 'Sauvegardé avec succès', 'success');
     } catch (e) {
@@ -81,25 +81,38 @@ export const RolesView: React.FC<RolesViewProps> = ({ onShowToast }) => {
                 <h3 className="text-xs font-bold text-white">{map.moduleTitle}</h3>
               </div>
 
-              <div className="flex items-center gap-3">
-                <ArrowRight className="w-4 h-4 text-slate-500 hidden md:block" />
-
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-400">Rôle attribué :</span>
+                  <span className="text-xs font-semibold text-slate-400 shrink-0">Rôle au démarrage :</span>
                   <select
                     value={map.roleId}
-                    onChange={(e) => handleUpdateRole(map.moduleId, e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-bold focus:outline-none focus:border-indigo-500"
+                    onChange={(e) => handleUpdateRole(map.moduleId, e.target.value, map.nextRoleId)}
+                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500"
                   >
-                    {roles.length === 0 ? (
-                      <option value="" disabled>Aucun rôle (synchronisez Discord)</option>
-                    ) : (
-                      roles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                        </option>
-                      ))
-                    )}
+                    <option value="">(Aucun / Conservé)</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-slate-500 hidden sm:block shrink-0" />
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-400 shrink-0">Rôle si validé :</span>
+                  <select
+                    value={map.nextRoleId || ''}
+                    onChange={(e) => handleUpdateRole(map.moduleId, map.roleId, e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">(Aucun / Conservé)</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

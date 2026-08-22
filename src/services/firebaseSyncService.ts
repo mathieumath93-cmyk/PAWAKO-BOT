@@ -211,19 +211,10 @@ class FirebaseSyncService {
       // 1. Revalidate Modules
       try {
         const modulesSnap = await getDocs(collection(db, 'modules'));
-        if (modulesSnap.empty) {
-          const currentMods = store.getModules();
-          for (const mod of currentMods) {
-            await setDoc(doc(db, 'modules', mod.id), mod).catch(() => {});
-          }
-        } else {
-          const loadedModules: TrainingModule[] = [];
-          modulesSnap.forEach((doc) => loadedModules.push(doc.data() as TrainingModule));
-          if (loadedModules.length > 0) {
-            loadedModules.sort((a, b) => a.order - b.order);
-            store.setModules(loadedModules);
-          }
-        }
+        const loadedModules: TrainingModule[] = [];
+        modulesSnap.forEach((doc) => loadedModules.push(doc.data() as TrainingModule));
+        loadedModules.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        store.setModules(loadedModules);
       } catch (modErr) {
         console.warn('⚠️ [SWR Revalidate Modules Info]', modErr);
       }
@@ -231,18 +222,9 @@ class FirebaseSyncService {
       // 2. Revalidate Quizzes
       try {
         const quizSnap = await getDocs(collection(db, 'quizzes'));
-        if (quizSnap.empty) {
-          const currentQuizzes = store.getQuizzes();
-          for (const q of currentQuizzes) {
-            await setDoc(doc(db, 'quizzes', q.id), q).catch(() => {});
-          }
-        } else {
-          const loadedQuizzes: Quiz[] = [];
-          quizSnap.forEach((doc) => loadedQuizzes.push(doc.data() as Quiz));
-          if (loadedQuizzes.length > 0) {
-            store.setQuizzes(loadedQuizzes);
-          }
-        }
+        const loadedQuizzes: Quiz[] = [];
+        quizSnap.forEach((doc) => loadedQuizzes.push(doc.data() as Quiz));
+        store.setQuizzes(loadedQuizzes);
       } catch (quizErr) {
         console.warn('⚠️ [SWR Revalidate Quizzes Info]', quizErr);
       }
@@ -250,18 +232,9 @@ class FirebaseSyncService {
       // 3. Revalidate Members
       try {
         const membersSnap = await getDocs(collection(db, 'members'));
-        if (membersSnap.empty) {
-          const currentMembers = store.getMembers();
-          for (const m of currentMembers) {
-            await setDoc(doc(db, 'members', m.id), m).catch(() => {});
-          }
-        } else {
-          const loadedMembers: Member[] = [];
-          membersSnap.forEach((doc) => loadedMembers.push(doc.data() as Member));
-          if (loadedMembers.length > 0) {
-            store.setMembers(loadedMembers);
-          }
-        }
+        const loadedMembers: Member[] = [];
+        membersSnap.forEach((doc) => loadedMembers.push(doc.data() as Member));
+        store.setMembers(loadedMembers);
         // Run auto-reminder inactivity evaluation
         await this.checkAndApplyAutoReminders().catch(() => {});
       } catch (memErr) {
@@ -271,18 +244,10 @@ class FirebaseSyncService {
       // 4. Revalidate UsefulLinks
       try {
         const linksSnap = await getDocs(collection(db, 'usefulLinks'));
-        if (linksSnap.empty) {
-          const currentLinks = store.getUsefulLinks();
-          for (const l of currentLinks) {
-            await setDoc(doc(db, 'usefulLinks', l.id), l).catch(() => {});
-          }
-        } else {
-          const loadedLinks: UsefulLink[] = [];
-          linksSnap.forEach((doc) => loadedLinks.push(doc.data() as UsefulLink));
-          if (loadedLinks.length > 0) {
-            store.setUsefulLinks(loadedLinks);
-          }
-        }
+        const loadedLinks: UsefulLink[] = [];
+        linksSnap.forEach((doc) => loadedLinks.push(doc.data() as UsefulLink));
+        loadedLinks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        store.setUsefulLinks(loadedLinks);
       } catch (linkErr) {
         console.warn('⚠️ [SWR Revalidate UsefulLinks Info]', linkErr);
       }
@@ -309,6 +274,15 @@ class FirebaseSyncService {
     }
   }
 
+  public async deleteModule(moduleId: string): Promise<void> {
+    store.deleteModule(moduleId);
+    try {
+      await deleteDoc(doc(db, 'modules', moduleId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `modules/${moduleId}`);
+    }
+  }
+
   public async saveQuiz(quizData: Quiz): Promise<void> {
     const existing = store.getQuizzes().filter((q) => q.id !== quizData.id);
     store.setQuizzes([...existing, quizData]);
@@ -317,6 +291,15 @@ class FirebaseSyncService {
       await setDoc(doc(db, 'quizzes', quizData.id), quizData);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `quizzes/${quizData.id}`);
+    }
+  }
+
+  public async deleteQuiz(quizId: string): Promise<void> {
+    store.deleteQuiz(quizId);
+    try {
+      await deleteDoc(doc(db, 'quizzes', quizId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `quizzes/${quizId}`);
     }
   }
 

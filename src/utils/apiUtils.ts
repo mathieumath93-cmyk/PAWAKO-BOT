@@ -3,11 +3,14 @@
  * Prevents "Failed to execute 'json' on 'Response': Unexpected end of JSON input" errors.
  */
 
+import { AI_STUDIO_DISCORD_NOTICE, setBackendAvailabilityCache } from './runtimeEnv';
+
 export interface SafeFetchResult<T = any> {
   ok: boolean;
   status: number;
   data: T | null;
   error: string;
+  backendMissing?: boolean;
 }
 
 export async function safeFetchJson<T = any>(
@@ -25,11 +28,25 @@ export async function safeFetchJson<T = any>(
     const status = res.status;
     const contentType = res.headers.get('content-type') || '(aucun)';
     const text = await res.text();
+    const isApiRoute = typeof input === 'string' && input.startsWith('/api');
 
     console.log(`[safeFetchJson 📡] Response received for ${typeof input === 'string' ? input : input.toString()}`);
     console.log(`  - Status Code: ${status}`);
     console.log(`  - Content-Type: ${contentType}`);
-    console.log(`  - Raw Text Snippet (first 300 chars): "${text ? text.slice(0, 300) : '(RÉPONSE VIDE)'}"`);
+
+    // Check if HTML is returned for an API route (Vite SPA fallback when backend isn't running)
+    const isHtmlResponse = contentType.toLowerCase().includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html');
+    if (isApiRoute && isHtmlResponse) {
+      console.warn(`[safeFetchJson ⚠️] /api route returned HTML instead of JSON! Backend Node server is absent.`);
+      setBackendAvailabilityCache(false);
+      return {
+        ok: false,
+        status: status || 404,
+        data: null,
+        error: AI_STUDIO_DISCORD_NOTICE,
+        backendMissing: true,
+      };
+    }
 
     if (!text || !text.trim()) {
       console.warn(`[safeFetchJson ⚠️] Empty response body received! Cannot parse JSON.`);
@@ -51,22 +68,27 @@ export async function safeFetchJson<T = any>(
         ok: false,
         status,
         data: null,
-        error: `Type de contenu non-JSON reçu (${contentType}): ${text.slice(0, 100)}`,
+        error: isApiRoute ? AI_STUDIO_DISCORD_NOTICE : `Type de contenu non-JSON reçu (${contentType}): ${text.slice(0, 100)}`,
+        backendMissing: isApiRoute,
       };
     }
 
     let parsed: any;
     try {
       parsed = JSON.parse(text);
+      if (isApiRoute) setBackendAvailabilityCache(true);
     } catch (jsonErr) {
       console.warn(`[safeFetchJson Info] Non-JSON payload received:`, jsonErr);
       return {
         ok: false,
         status,
         data: null,
-        error: res.ok
-          ? `Réponse format invalide (non-JSON): ${text.slice(0, 100)}`
-          : `Erreur serveur HTTP ${status}: ${text.slice(0, 100)}`,
+        error: isApiRoute
+          ? AI_STUDIO_DISCORD_NOTICE
+          : (res.ok
+            ? `Réponse format invalide (non-JSON): ${text.slice(0, 100)}`
+            : `Erreur serveur HTTP ${status}: ${text.slice(0, 100)}`),
+        backendMissing: isApiRoute,
       };
     }
 
@@ -91,11 +113,13 @@ export async function safeFetchJson<T = any>(
       error: '',
     };
   } catch (err: any) {
+    const isApiRoute = typeof input === 'string' && input.startsWith('/api');
     return {
       ok: false,
       status: 0,
       data: null,
-      error: err?.message || 'Erreur de connexion réseau au serveur',
+      error: isApiRoute ? AI_STUDIO_DISCORD_NOTICE : (err?.message || 'Erreur de connexion réseau au serveur'),
+      backendMissing: isApiRoute,
     };
   }
 }

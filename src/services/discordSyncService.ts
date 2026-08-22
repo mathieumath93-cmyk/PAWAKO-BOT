@@ -63,7 +63,19 @@ class DiscordSyncService {
           const gId = key.replace(STORAGE_SYNC_CACHE_PREFIX, '');
           const val = localStorage.getItem(key);
           if (val) {
-            this.syncCache[gId] = JSON.parse(val);
+            const parsed = JSON.parse(val);
+            this.syncCache[gId] = parsed;
+            if (parsed?.roles && parsed.roles.length > 0 && roleService.getRoles().length === 0) {
+              roleService.setRoles(
+                parsed.roles.map((r: any) => ({
+                  id: r.id || r.discord_role_id,
+                  name: r.name,
+                  color: r.color,
+                  position: r.position,
+                  isManaged: r.managed,
+                }))
+              );
+            }
           }
         }
       }

@@ -31,12 +31,6 @@ const defaultBranding: BrandingSettings = {
   mainWelcomeMessage: 'Bienvenue sur la plateforme PAWAKO FORMATION 🤖 ! Clique sur "Commencer la formation" pour débuter ton parcours.',
 };
 
-const defaultModules: TrainingModule[] = [];
-
-const defaultQuizzes: Quiz[] = [];
-
-const defaultMembers: Member[] = [];
-
 const defaultUsefulLinks: UsefulLink[] = [
   { id: 'link-1', name: 'Documentation PAWAKO', url: 'https://pawako.io/docs', icon: 'BookOpen', order: 1, isActive: true },
   { id: 'link-2', name: 'Portail des Ressources', url: 'https://pawako.io/resources', icon: 'Folder', order: 2, isActive: true },
@@ -74,10 +68,10 @@ const defaultBackups: BackupRecord[] = [];
 
 class StoreService {
   private branding: BrandingSettings = { ...defaultBranding };
-  private modules: TrainingModule[] = [...defaultModules];
-  private quizzes: Quiz[] = [...defaultQuizzes];
-  private members: Member[] = [...defaultMembers];
-  private usefulLinks: UsefulLink[] = [...defaultUsefulLinks];
+  private modules: TrainingModule[] = [];
+  private quizzes: Quiz[] = [];
+  private members: Member[] = [];
+  private usefulLinks: UsefulLink[] = [];
   private tickets: Ticket[] = [...defaultTickets];
   private adminLogs: AdminLog[] = [...defaultAdminLogs];
   private notifications: AdminNotification[] = [...defaultNotifications];
@@ -325,12 +319,14 @@ class StoreService {
     const newMod: TrainingModule = { ...mod, id: newId };
     this.modules.push(newMod);
     this.addLog('Anthony (Admin)', `Création du module "${newMod.title}"`, 'module');
+    this.saveModules();
     return newMod;
   }
 
   public addModule(mod: TrainingModule): TrainingModule {
     this.modules.push(mod);
     this.addLog('Anthony (Admin)', `Création du module "${mod.title}"`, 'module');
+    this.saveModules();
     return mod;
   }
 
@@ -339,6 +335,7 @@ class StoreService {
     if (idx === -1) throw new Error('Module non trouvé');
     this.modules[idx] = { ...this.modules[idx], ...data };
     this.addLog('Anthony (Admin)', `Modification du module "${this.modules[idx].title}"`, 'module');
+    this.saveModules();
     return this.modules[idx];
   }
 
@@ -348,6 +345,7 @@ class StoreService {
     if (mod) {
       this.addLog('Anthony (Admin)', `Suppression du module "${mod.title}"`, 'module');
     }
+    this.saveModules();
   }
 
   // --- Quizzes ---
@@ -364,12 +362,14 @@ class StoreService {
     const newQuiz: Quiz = { ...quiz, id: newId };
     this.quizzes.push(newQuiz);
     this.addLog('Anthony (Admin)', `Création du quiz "${newQuiz.title}"`, 'quiz');
+    this.saveQuizzes();
     return newQuiz;
   }
 
   public addQuiz(quiz: Quiz): Quiz {
     this.quizzes.push(quiz);
     this.addLog('Anthony (Admin)', `Création du quiz "${quiz.title}"`, 'quiz');
+    this.saveQuizzes();
     return quiz;
   }
 
@@ -378,6 +378,7 @@ class StoreService {
     if (idx === -1) throw new Error('Quiz non trouvé');
     this.quizzes[idx] = { ...this.quizzes[idx], ...data };
     this.addLog('Anthony (Admin)', `Modification du quiz "${this.quizzes[idx].title}"`, 'quiz');
+    this.saveQuizzes();
     return this.quizzes[idx];
   }
 
@@ -387,6 +388,7 @@ class StoreService {
     if (q) {
       this.addLog('Anthony (Admin)', `Suppression du quiz "${q.title}"`, 'quiz');
     }
+    this.saveQuizzes();
   }
 
   // --- Grade Quiz Attempt & Progression Sync ---
@@ -508,13 +510,6 @@ class StoreService {
   // --- Members ---
   public getMembers(): Member[] {
     return this.members;
-  }
-
-  public setMembers(newMembers: Member[]): void {
-    if (newMembers && newMembers.length > 0) {
-      this.members = newMembers;
-      this.saveMembers();
-    }
   }
 
   public getMember(id: string): Member | undefined {

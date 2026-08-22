@@ -1,4 +1,6 @@
-import { DiscordRole } from '../types';
+import { DiscordRole, TrainingModule } from '../types';
+import { store } from './store';
+import { firebaseSyncService } from './firebaseSyncService';
 
 export interface ModuleRoleMapping {
   moduleId: string;
@@ -11,7 +13,6 @@ export interface ModuleRoleMapping {
 
 class RoleService {
   private roles: DiscordRole[] = this.loadRoles();
-  private mappings: ModuleRoleMapping[] = [];
 
   private loadRoles(): DiscordRole[] {
     try {
@@ -42,20 +43,61 @@ class RoleService {
     return this.roles;
   }
 
+  /**
+   * Single Source of Truth: Mappings are derived directly from TrainingModules in the store
+   */
   public getMappings(): ModuleRoleMapping[] {
-    return this.mappings;
+    const modules = store.getModules();
+    return modules.map((m) => {
+      const roleEnCours = this.roles.find((r) => r.id === m.roleEnCoursId || r.name === m.roleEnCoursName);
+      const roleValidated = this.roles.find((r) => r.id === m.roleValidatedId || r.name === m.roleValidatedName);
+
+      return {
+        moduleId: m.id,
+        moduleTitle: m.title,
+        roleId: m.roleEnCoursId || roleEnCours?.id || '',
+        roleName: m.roleEnCoursName || roleEnCours?.name || 'Non configuré',
+        nextRoleId: m.roleValidatedId || roleValidated?.id || '',
+        nextRoleName: m.roleValidatedName || roleValidated?.name || 'Non configuré',
+      };
+    });
   }
 
-  public updateMapping(moduleId: string, roleId: string): ModuleRoleMapping {
-    const role = this.roles.find((r) => r.id === roleId);
-    const mapIndex = this.mappings.findIndex((m) => m.moduleId === moduleId);
+  /**
+   * Update role mappings by modifying the TrainingModule directly in store & Firestore
+   */
+  public updateMapping(moduleId: string, roleEnCoursId: string, roleValidatedId?: string): ModuleRoleMapping {
+    const module = store.getModule(moduleId);
+    if (!module) throw new Error('Module introuvable');
 
-    if (mapIndex !== -1 && role) {
-      this.mappings[mapIndex].roleId = role.id;
-      this.mappings[mapIndex].roleName = role.name;
-      return this.mappings[mapIndex];
+    const roleEnCours = this.roles.find((r) => r.id === roleEnCoursId);
+    const roleValidated = roleValidatedId ? this.roles.find((r) => r.id === roleValidatedId) : undefined;
+
+    const updatedModule: TrainingModule = {
+      ...module,
+      roleEnCoursId: roleEnCoursId || module.roleEnCoursId,
+      roleEnCoursName: roleEnCours ? roleEnCours.name : (roleEnCoursId === '' ? 'Non configuré' : module.roleEnCoursName),
+    };
+
+    if (roleValidatedId !== undefined) {
+      updatedModule.roleValidatedId = roleValidatedId;
+      updatedModule.roleValidatedName = roleValidated ? roleValidated.name : (roleValidatedId === '' ? 'Non configuré' : module.roleValidatedName);
     }
-    throw new Error('Mapping ou Rôle introuvable');
+
+    // Save update to store and sync to Firestore
+    store.updateModule(moduleId, updatedModule);
+    firebaseSyncService.saveModule(updatedModule).catch((err) =>
+      console.error('[RoleService] Error persisting updated module roles to Firebase:', err)
+    );
+
+    return {
+      moduleId: updatedModule.id,
+      moduleTitle: updatedModule.title,
+      roleId: updatedModule.roleEnCoursId || '',
+      roleName: updatedModule.roleEnCoursName || 'Non configuré',
+      nextRoleId: updatedModule.roleValidatedId || '',
+      nextRoleName: updatedModule.roleValidatedName || 'Non configuré',
+    };
   }
 
   public addRole(name: string, color: string): DiscordRole {
@@ -76,3 +118,4 @@ class RoleService {
 }
 
 export const roleService = new RoleService();
+

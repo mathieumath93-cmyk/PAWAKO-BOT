@@ -1,5 +1,6 @@
 import { Member } from '../types';
 import { store } from './store';
+import { firebaseSyncService } from './firebaseSyncService';
 
 class MemberService {
   public getMembers(): Member[] {
@@ -60,23 +61,43 @@ class MemberService {
   }
 
   public resetProgress(memberId: string): Member {
-    return store.resetMemberProgress(memberId);
+    const updated = store.resetMemberProgress(memberId);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    return updated;
   }
 
   public grantExtraAttempt(memberId: string, quizId: string): Member {
-    return store.grantExtraAttempt(memberId, quizId);
+    const updated = store.grantExtraAttempt(memberId, quizId);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    return updated;
   }
 
   public updateRoles(memberId: string, roles: string[]): Member {
-    return store.updateMemberRoles(memberId, roles);
+    const updated = store.updateMemberRoles(memberId, roles);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    return updated;
   }
 
   public resetCooldown(memberId: string): Member {
-    return store.resetCandidateCooldown(memberId);
+    const updated = store.resetCandidateCooldown(memberId);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    return updated;
   }
 
   public forceModule(memberId: string, moduleId: string): Member {
-    return store.forceCandidateModule(memberId, moduleId);
+    const updated = store.forceCandidateModule(memberId, moduleId);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    return updated;
   }
 }
 

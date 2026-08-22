@@ -416,6 +416,19 @@ class DiscordService {
   }
 
   public getChannels(): DiscordChannelConfig[] {
+    const activeGuildId = discordSyncService.getActiveGuildId();
+    if (activeGuildId) {
+      const syncedChannels = discordSyncService.getChannels(activeGuildId);
+      if (syncedChannels && syncedChannels.length > 0) {
+        return syncedChannels.map((c) => ({
+          id: c.discord_channel_id || c.id,
+          name: c.name,
+          type: 'text',
+          categoryName: 'SALONS DISCORD',
+          isConfiguredFor: 'general',
+        }));
+      }
+    }
     return this.channels;
   }
 
@@ -482,128 +495,69 @@ class DiscordService {
         console.log(`[DiscordService Cache Hit ⚡] Utilisation des données Discord synchronisées en cache local.`);
         return cached;
       }
+
+      // Check if discordSyncService already has cached data
+      const activeGuildId = discordSyncService.getActiveGuildId();
+      if (activeGuildId) {
+        const syncCache = discordSyncService.getCachedData(activeGuildId);
+        if (syncCache && syncCache.guild) {
+          if (syncCache.roles && syncCache.roles.length > 0) {
+            roleService.setRoles(
+              syncCache.roles.map((r) => ({
+                id: r.id || r.discord_role_id,
+                name: r.name,
+                color: r.color,
+                position: r.position,
+                isManaged: r.managed,
+              }))
+            );
+          }
+          return {
+            success: true,
+            server: syncCache.guild,
+            message: 'Données récupérées depuis la synchronisation Discord.',
+          };
+        }
+      }
     }
 
     return this.taskQueue.enqueue(async () => {
       const url = `/api/discord/sync-real-data?token=${encodeURIComponent(token)}`;
-
       logDiscordRequest('fetchAndSyncRealDiscordData', url);
 
-      try {
-        const response = await fetch(url);
-        const statusCode = response.status;
-        const contentType = response.headers.get('content-type') || '(aucun)';
+      const result = await safeFetchJson(url);
 
-        console.log(`[fetchAndSyncRealDiscordData 📡] Response received from ${url}`);
-        console.log(`  - Status Code: ${statusCode}`);
-        console.log(`  - Content-Type: ${contentType}`);
-
-        // 1. Verify content-type header BEFORE reading text or calling .json()
-        const isJsonContentType = contentType.toLowerCase().includes('json');
-        if (!isJsonContentType) {
-          const rawText = await response.text();
-          console.warn(`[fetchAndSyncRealDiscordData ⚠️] Content-Type non-JSON reçu: "${contentType}". Raw snippet: "${rawText.slice(0, 200)}"`);
-          logDiscordResponse(
-            'fetchAndSyncRealDiscordData',
-            statusCode,
-            contentType,
-            rawText,
-            null,
-            `Content-Type non valide (${contentType}), JSON attendu`
-          );
-          serverService.setServers([]);
-          return {
-            success: false,
-            message: `Le serveur a renvoyé un type de contenu invalide (${contentType || 'non spécifié'}) au lieu du format JSON.`,
-          };
-        }
-
-        // 2. Read raw response text to verify non-empty body
-        const rawText = await response.text();
-        logBeforeJsonParse('fetchAndSyncRealDiscordData', response, rawText);
-
-        if (!rawText || !rawText.trim()) {
-          console.warn('[fetchAndSyncRealDiscordData ⚠️] Réponse vide reçue du serveur! Annulation du parsing JSON.');
-          logDiscordResponse(
-            'fetchAndSyncRealDiscordData',
-            statusCode,
-            contentType,
-            '',
-            null,
-            'Réponse vide reçue du serveur'
-          );
-          serverService.setServers([]);
-          return {
-            success: false,
-            message: `Le serveur a renvoyé une réponse vide (HTTP ${statusCode}).`,
-          };
-        }
-
-        // 3. Parse JSON safely now that content-type and body text are validated
-        let data: any;
-        try {
-          data = JSON.parse(rawText);
-        } catch (parseError) {
-          console.warn('[fetchAndSyncRealDiscordData Info] Échec de l\'analyse du JSON:', parseError);
-          logDiscordResponse(
-            'fetchAndSyncRealDiscordData',
-            statusCode,
-            contentType,
-            rawText,
-            null,
-            parseError
-          );
-          serverService.setServers([]);
-          return {
-            success: false,
-            message: `Format JSON invalide reçu du serveur: ${rawText.slice(0, 100)}`,
-          };
-        }
-
-        logDiscordResponse(
-          'fetchAndSyncRealDiscordData',
-          statusCode,
-          contentType,
-          rawText,
-          data,
-          response.ok ? null : data?.error || 'Erreur HTTP'
-        );
-
-        if (!response.ok || !data) {
-          serverService.setServers([]);
-          return { success: false, message: data?.error || data?.message || `Erreur lors de la synchronisation avec Discord (HTTP ${statusCode})` };
-        }
-
-        if (!data.success) {
-          serverService.setServers([]);
-          return { success: false, message: data.message || 'Aucun serveur trouvé' };
-        }
-
-        if (data.channels && Array.isArray(data.channels)) {
-          this.setChannels(data.channels);
-        }
-
-        if (data.roles && Array.isArray(data.roles)) {
-          roleService.setRoles(data.roles);
-        }
-
-        if (data.server) {
-          serverService.updateServerDetails(data.server);
-        }
-
-        if (data.members && Array.isArray(data.members)) {
-          store.setMembers(data.members);
-        }
-
-        // Store in cache upon successful fetch (60 seconds TTL)
-        this.cacheManager.set(cacheKey, data, 60_000);
-
-        return data;
-      } catch (err: any) {
-        console.warn('[Discord Sync Info]', err?.message || err);
-        serverService.setServers([]);
-        return { success: false, message: err.message };
+      if (!result.ok || !result.data) {
+        console.warn('[fetchAndSyncRealDiscordData Info]', result.error);
+        return {
+          success: false,
+          message: result.error,
+        };
       }
+
+      const data = result.data;
+      if (!data.success) {
+        return { success: false, message: data.message || 'Aucun serveur trouvé' };
+      }
+
+      if (data.channels && Array.isArray(data.channels)) {
+        this.setChannels(data.channels);
+      }
+
+      if (data.roles && Array.isArray(data.roles)) {
+        roleService.setRoles(data.roles);
+      }
+
+      if (data.server) {
+        serverService.updateServerDetails(data.server);
+      }
+
+      if (data.members && Array.isArray(data.members)) {
+        store.setMembers(data.members);
+      }
+
+      this.cacheManager.set(cacheKey, data, 60_000);
+      return data;
     }, { type: 'sync_real_data', priority: 2 });
   }
 

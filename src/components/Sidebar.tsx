@@ -32,10 +32,7 @@ interface SidebarProps {
 
 export const navItems = [
   { id: 'overview', label: 'Candidats & Progression', icon: Users },
-  { id: 'modules', label: 'Modules & Supports', icon: BookOpen },
-  { id: 'quizzes', label: 'Questions & Quiz', icon: HelpCircle },
-  { id: 'automations', label: 'Reminders & Relances', icon: Zap },
-  { id: 'messages', label: 'Modèles de Messages', icon: MessageSquare },
+  { id: 'onboarding', label: 'Parcours Onboarding & Rôles', icon: Shield },
   { id: 'discord-sync', label: 'Synchronisation Discord', icon: RefreshCw },
   { id: 'settings', label: 'Paramètres', icon: Settings },
 ];

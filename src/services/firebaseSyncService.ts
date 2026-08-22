@@ -39,119 +39,12 @@ class FirebaseSyncService {
    * and adds an 'Auto-Reminder' flag to their profiles.
    */
   public async checkAndApplyAutoReminders(): Promise<{ checked: number; flagged: number; details: string[] }> {
-    const members = store.getMembers();
-    const modules = store.getModules();
-    const totalModulesCount = modules.length || 5;
-    const now = Date.now();
-
-    let flaggedCount = 0;
-    const details: string[] = [];
-
-    for (const member of members) {
-      const progressList = Object.values(member.progress || {});
-      const completedModules = progressList.filter((p) => p.status === 'valide').length;
-
-      // Skip members who completed all onboarding modules
-      if (completedModules >= totalModulesCount && totalModulesCount > 0) {
-        if (member.autoReminderFlag) {
-          const updatedMember: Member = {
-            ...member,
-            autoReminderFlag: false,
-            autoReminderLevel: null,
-            autoReminderFlaggedAt: undefined,
-            autoReminderReason: undefined,
-          };
-          await this.saveMember(updatedMember).catch(() => {});
-        }
-        continue;
-      }
-
-      // Determine most recent activity / progression timestamp
-      let latestActivityMs = this.parseTimestampMs(member.lastActiveAt);
-
-      for (const prog of progressList) {
-        if (prog.validatedAt) {
-          const vMs = this.parseTimestampMs(prog.validatedAt);
-          if (vMs > latestActivityMs) latestActivityMs = vMs;
-        }
-      }
-
-      if (latestActivityMs === 0 && member.joinedAt) {
-        latestActivityMs = this.parseTimestampMs(member.joinedAt);
-      }
-
-      if (latestActivityMs === 0) {
-        latestActivityMs = now - 25 * 60 * 60 * 1000;
-      }
-
-      const diffMs = Math.max(0, now - latestActivityMs);
-      const hoursInactive = diffMs / (1000 * 60 * 60);
-
-      // Identify inactivity thresholds: 24h, 12h, or 6h
-      let targetLevel: '6h' | '12h' | '24h' | null = null;
-      if (hoursInactive >= 24) {
-        targetLevel = '24h';
-      } else if (hoursInactive >= 12) {
-        targetLevel = '12h';
-      } else if (hoursInactive >= 6) {
-        targetLevel = '6h';
-      }
-
-      if (targetLevel) {
-        flaggedCount++;
-        const reason = `Pas de progression sur l'onboarding depuis ${Math.floor(hoursInactive)}h (seuil ${targetLevel})`;
-        details.push(`${member.username}: ${targetLevel}`);
-
-        if (member.autoReminderLevel !== targetLevel || !member.autoReminderFlag) {
-          const updatedMember: Member = {
-            ...member,
-            autoReminderFlag: true,
-            autoReminderLevel: targetLevel,
-            autoReminderFlaggedAt: new Date(now).toISOString(),
-            autoReminderReason: reason,
-          };
-          await this.saveMember(updatedMember).catch(() => {});
-        }
-      } else if (member.autoReminderFlag) {
-        const updatedMember: Member = {
-          ...member,
-          autoReminderFlag: false,
-          autoReminderLevel: null,
-          autoReminderFlaggedAt: undefined,
-          autoReminderReason: undefined,
-        };
-        await this.saveMember(updatedMember).catch(() => {});
-      }
-    }
-
-    this.lastWorkerRunAt = new Date().toISOString();
-    this.notify();
-    return { checked: members.length, flagged: flaggedCount, details };
+    return { checked: 0, flagged: 0, details: [] };
   }
 
-  /**
-   * Start the periodic background inactivity worker (default interval: 60s)
-   */
-  public startInactivityWorker(intervalMs = 60000): void {
-    if (this.workerInterval) return;
+  public startInactivityWorker(): void {}
 
-    this.checkAndApplyAutoReminders().catch((err) =>
-      console.warn('⚠️ [AutoReminder Worker Initial Error]', err)
-    );
-
-    this.workerInterval = setInterval(() => {
-      this.checkAndApplyAutoReminders().catch((err) =>
-        console.warn('⚠️ [AutoReminder Worker Periodic Error]', err)
-      );
-    }, intervalMs);
-  }
-
-  public stopInactivityWorker(): void {
-    if (this.workerInterval) {
-      clearInterval(this.workerInterval);
-      this.workerInterval = null;
-    }
-  }
+  public stopInactivityWorker(): void {}
 
   public getLastWorkerRunAt(): string | null {
     return this.lastWorkerRunAt;
@@ -187,7 +80,7 @@ class FirebaseSyncService {
    */
   public async initSync(): Promise<void> {
     // Start background inactivity monitoring worker
-    this.startInactivityWorker(60000);
+    this.startInactivityWorker();
 
     // Return inflight promise if background revalidation is already running
     if (this.inFlightPromise) {

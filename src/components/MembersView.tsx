@@ -80,7 +80,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
             <span>Membres du Serveur Discord ({filteredMembers.length})</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Consultez le statut, la progression et le suivi des relances automatiques (6h, 12h, 24h).
+            Consultez le statut et la progression des candidats sur le serveur.
           </p>
         </div>
 
@@ -124,10 +124,6 @@ export const MembersView: React.FC<MembersViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto custom-scrollbar pb-1">
           {[
             { id: 'all', label: 'Tous' },
-            { id: 'auto_reminder', label: '🔔 Auto-Rappels' },
-            { id: 'auto_reminder_6h', label: '⏳ 6h' },
-            { id: 'auto_reminder_12h', label: '⚠️ 12h' },
-            { id: 'auto_reminder_24h', label: '🚨 24h' },
             { id: 'active', label: 'Actifs' },
             { id: 'in_progress', label: 'En cours' },
             { id: 'completed', label: 'Terminés' },

@@ -106,11 +106,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
 
         <button
-          onClick={onCreateModuleClick}
+          onClick={() => onNavigate('onboarding')}
           className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all w-fit shrink-0"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Créer un Module</span>
+          <span>Configurer Onboarding & Modules</span>
         </button>
       </div>
 

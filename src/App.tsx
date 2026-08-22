@@ -3,15 +3,10 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { OverviewView } from './components/OverviewView';
-import { ModulesView } from './components/ModulesView';
-import { ModuleBuilderModal } from './components/ModuleBuilderModal';
-import { QuizzesView } from './components/QuizzesView';
-import { QuizBuilderModal } from './components/QuizBuilderModal';
+import { OnboardingFlowConfigurator } from './components/OnboardingFlowConfigurator';
 import { MembersView } from './components/MembersView';
 import { RolesView } from './components/RolesView';
 import { ChannelsView } from './components/ChannelsView';
-import { MessagesView } from './components/MessagesView';
-import { AutomationsView } from './components/AutomationsView';
 import { DiscordSyncView } from './components/DiscordSyncView';
 import { LogsView } from './components/LogsView';
 import { SettingsView } from './components/SettingsView';
@@ -41,7 +36,7 @@ export function App() {
   const [isOpenMobileSidebar, setIsOpenMobileSidebar] = useState<boolean>(false);
 
   // User session
-  const [session, setSession] = useState<UserSession>({
+  const [session] = useState<UserSession>({
     id: 'user-admin',
     username: 'Anthony',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
@@ -56,15 +51,10 @@ export function App() {
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
   // Modals state
-  const [isModuleBuilderOpen, setIsModuleBuilderOpen] = useState(false);
-  const [editingModule, setEditingModule] = useState<TrainingModule | null>(null);
-
-  const [isQuizBuilderOpen, setIsQuizBuilderOpen] = useState(false);
-  const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [isBotTokenModalOpen, setIsBotTokenModalOpen] = useState(false);
 
   // System Notifications
-  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [notifications] = useState<AdminNotification[]>([]);
 
   // System Logs
   const [logs, setLogs] = useState<AdminLog[]>([]);
@@ -115,49 +105,6 @@ export function App() {
     }, 4000);
   };
 
-  // Module actions
-  const handleOpenModuleBuilder = (mod?: TrainingModule | null) => {
-    setEditingModule(mod || null);
-    setIsModuleBuilderOpen(true);
-  };
-
-  const handleSaveModule = async (data: Partial<TrainingModule>) => {
-    let savedModule: TrainingModule;
-    if (editingModule) {
-      savedModule = moduleService.updateModule(editingModule.id, data);
-      showToast('Module mis à jour', data.title, 'success');
-    } else {
-      savedModule = moduleService.addModule(data as any);
-      showToast('Nouveau module créé', data.title, 'success');
-    }
-    refreshData();
-
-    // Send Embed message directly to selected Discord channel!
-    const res = await discordService.sendModuleEmbed(savedModule);
-    if (res.success) {
-      showToast('Embed Discord Publié 🚀', res.message, 'success');
-    } else {
-      showToast('Info Publication Embed', res.message, 'info');
-    }
-  };
-
-  // Quiz actions
-  const handleOpenQuizBuilder = (q?: Quiz | null) => {
-    setEditingQuiz(q || null);
-    setIsQuizBuilderOpen(true);
-  };
-
-  const handleSaveQuiz = (data: Partial<Quiz>) => {
-    if (editingQuiz) {
-      quizService.updateQuiz(editingQuiz.id, data);
-      showToast('Quiz mis à jour', data.title, 'success');
-    } else {
-      quizService.addQuiz(data as any);
-      showToast('Nouveau quiz créé', data.title, 'success');
-    }
-    refreshData();
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-indigo-500 selection:text-white">
       {/* Toast Notifications */}
@@ -197,29 +144,15 @@ export function App() {
             <OverviewView
               logs={logs}
               onNavigate={setActiveTab}
-              onCreateModuleClick={() => handleOpenModuleBuilder(null)}
+              onCreateModuleClick={() => setActiveTab('onboarding')}
             />
           )}
 
           {activeTab === 'discord-sync' && <DiscordSyncView />}
 
-          {activeTab === 'modules' && (
-            <ModulesView
+          {activeTab === 'onboarding' && (
+            <OnboardingFlowConfigurator
               modules={modules}
-              onOpenBuilder={handleOpenModuleBuilder}
-              onNavigate={(tab) => setActiveTab(tab)}
-              onRefresh={refreshData}
-              onShowToast={showToast}
-            />
-          )}
-
-          {activeTab === 'quizzes' && (
-            <QuizzesView
-              quizzes={quizzes}
-              modules={modules}
-              onOpenBuilder={handleOpenQuizBuilder}
-              onNavigate={(tab) => setActiveTab(tab)}
-              onRefresh={refreshData}
               onShowToast={showToast}
             />
           )}
@@ -236,16 +169,6 @@ export function App() {
 
           {activeTab === 'channels' && <ChannelsView onShowToast={showToast} />}
 
-          {activeTab === 'messages' && <MessagesView onShowToast={showToast} />}
-
-          {activeTab === 'automations' && (
-            <AutomationsView
-              modules={modules}
-              quizzes={quizzes}
-              onShowToast={showToast}
-            />
-          )}
-
           {activeTab === 'logs' && (
             <LogsView
               logs={logs}
@@ -258,23 +181,6 @@ export function App() {
           {activeTab === 'settings' && <SettingsView onShowToast={showToast} />}
         </main>
       </div>
-
-      {/* Module Builder Modal */}
-      <ModuleBuilderModal
-        isOpen={isModuleBuilderOpen}
-        moduleToEdit={editingModule}
-        onClose={() => setIsModuleBuilderOpen(false)}
-        onSave={handleSaveModule}
-      />
-
-      {/* Quiz Builder Modal */}
-      <QuizBuilderModal
-        isOpen={isQuizBuilderOpen}
-        quizToEdit={editingQuiz}
-        modules={modules}
-        onClose={() => setIsQuizBuilderOpen(false)}
-        onSave={handleSaveQuiz}
-      />
 
       {/* Bot Token Configuration Modal */}
       <BotTokenModal

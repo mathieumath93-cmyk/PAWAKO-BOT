@@ -41,16 +41,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   const unreadNotifs = notifications.filter((n) => n.status === 'non_lue');
 
   const tabLabels: Record<string, string> = {
-    overview: 'Overview',
-    modules: 'Modules',
-    quizzes: 'Quizzes',
-    members: 'Members',
-    roles: 'Roles',
-    channels: 'Channels',
-    messages: 'Messages',
-    automations: 'Automations',
-    logs: 'Logs',
-    settings: 'Settings',
+    overview: 'Candidats & Progression',
+    onboarding: 'Parcours Onboarding & Rôles',
+    'discord-sync': 'Synchronisation Discord',
+    logs: 'Journal & Audit',
+    settings: 'Paramètres',
   };
 
   return (

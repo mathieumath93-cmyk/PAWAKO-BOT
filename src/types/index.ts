@@ -304,7 +304,6 @@ export interface BrandingSettings {
   botDisplayName: string;
   primaryColor: string; // e.g. "#6366f1"
   secondaryColor: string; // e.g. "#06b6d4"
-  mainWelcomeMessage: string;
 }
 
 export interface DiscordPermissionAudit {

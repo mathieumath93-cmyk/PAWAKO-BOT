@@ -28,7 +28,6 @@ const defaultBranding: BrandingSettings = {
   botDisplayName: 'PAWAKO FORMATION 🤖',
   primaryColor: '#6366f1',
   secondaryColor: '#06b6d4',
-  mainWelcomeMessage: 'Bienvenue sur la plateforme PAWAKO FORMATION 🤖 ! Clique sur "Commencer la formation" pour débuter ton parcours.',
 };
 
 const defaultUsefulLinks: UsefulLink[] = [

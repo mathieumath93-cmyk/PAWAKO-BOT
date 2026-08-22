@@ -115,9 +115,10 @@ export class PawakoBotRunner {
         const branding = store.getBranding();
 
         if (content === '!help' || content === '!start' || content === '!pawako') {
+          const cfg = onboardingService.getConfig();
           const embed = new EmbedBuilder()
             .setTitle(`🤖 ${branding.trainingName}`)
-            .setDescription(branding.mainWelcomeMessage)
+            .setDescription(cfg.welcomeRulesMessage || branding.description)
             .setColor(0x6366f1)
             .addFields(
               { name: '📚 Formation', value: 'Utilise `!formation` pour voir tes modules.' },

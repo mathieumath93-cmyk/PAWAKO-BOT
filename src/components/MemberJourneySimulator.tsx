@@ -56,18 +56,20 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
   const [quizScore, setQuizScore] = useState<number>(0);
   const [quizPassed, setQuizPassed] = useState<boolean>(false);
 
-  // Cooldown State
+  // Cooldown & Delay States
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
+  const [quizDelaySeconds, setQuizDelaySeconds] = useState<number>(0);
   const [showProfile, setShowProfile] = useState<boolean>(false);
 
-  // Handle Cooldown Timer Ticking
+  // Handle Cooldown & Delay Timers Ticking
   useEffect(() => {
-    if (cooldownSeconds <= 0) return;
+    if (cooldownSeconds <= 0 && quizDelaySeconds <= 0) return;
     const interval = setInterval(() => {
       setCooldownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      setQuizDelaySeconds((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [cooldownSeconds]);
+  }, [cooldownSeconds, quizDelaySeconds]);
 
   const addLog = (msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]);
@@ -109,6 +111,15 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
     const newAssignedRoles = Array.from(new Set([...assignedRoles, ...rolesToAdd]));
     setAssignedRoles(newAssignedRoles);
 
+    const q1 = quizzes.find((q) => q.moduleId === modules[0]?.id) || quizzes[0];
+    const delayMins = q1?.delayMinutesBeforeQuiz ?? step1Cfg?.delayMinutesBeforeQuiz ?? 0;
+    if (delayMins > 0) {
+      setQuizDelaySeconds(delayMins * 60);
+      addLog(`Délai de ${delayMins} minute(s) configuré avant déblocage du quiz.`);
+    } else {
+      setQuizDelaySeconds(0);
+    }
+
     addLog(`Attribution automatique des rôles : ${rolesToAdd.map((r) => `@${r}`).join(', ')} à ${memberName}.`);
     addLog(`Affichage des directives du ${modules[0]?.title || 'Module 1'} et du lien externe de formation.`);
 
@@ -120,6 +131,18 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
     const quizObj = quizzes.find((q) => q.moduleId === moduleId) || quizzes[0];
     if (!quizObj) {
       onShowToast('Erreur Quiz', 'Aucun quiz configuré pour ce module', 'info');
+      return;
+    }
+
+    // Check delay before quiz
+    if (quizDelaySeconds > 0) {
+      const mins = Math.floor(quizDelaySeconds / 60);
+      const secs = quizDelaySeconds % 60;
+      onShowToast(
+        'Quiz en Préparation ⏱️',
+        `Le quiz est encore bloqué. Il sera débloqué dans ${mins} min ${secs}s. Veuillez consulter le support de formation.`,
+        'info'
+      );
       return;
     }
 

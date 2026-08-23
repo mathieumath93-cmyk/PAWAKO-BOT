@@ -399,25 +399,26 @@ export class PawakoBotRunner {
 
             const cfg = onboardingService.getConfig();
 
-            // Assign initial roles configured by admin
-            const step1Cfg = cfg.stepConfigs?.[0];
-            const initialRoleName = cfg.initialRoleName;
-            const step1RoleOnStart = step1Cfg?.roleOnStartName;
-
-            const configuredInitialRoles = Array.from(
-              new Set([initialRoleName, step1RoleOnStart].filter(Boolean) as string[])
-            );
-            if (configuredInitialRoles.length > 0) {
-              member.roles = Array.from(new Set([...(member.roles || []), ...configuredInitialRoles]));
-            }
-
-            // Setup Module 1 & Quiz availability
+            // Setup Module 1 & Step Config
             const mod1 = store.getModules()[0] || defaultModules[0];
             if (!mod1) {
               await interaction.editReply({
                 content: '⚠️ Aucun module n\'est encore configuré par l\'administrateur sur cette plateforme.',
               });
               return;
+            }
+
+            const step1Cfg = onboardingService.getStepConfigForModule(mod1.id);
+            const initialRoleName = cfg.initialRoleName;
+            const initialRoleId = cfg.initialRoleId;
+            const step1RoleOnStartName = step1Cfg?.roleOnStartName || mod1.roleEnCoursName;
+            const step1RoleOnStartId = step1Cfg?.roleOnStartId || mod1.roleEnCoursId;
+
+            const configuredInitialRoles = Array.from(
+              new Set([initialRoleName, initialRoleId, step1RoleOnStartName, step1RoleOnStartId].filter(Boolean) as string[])
+            );
+            if (configuredInitialRoles.length > 0) {
+              member.roles = Array.from(new Set([...(member.roles || []), ...configuredInitialRoles]));
             }
 
             const quiz1 = store.getQuiz(mod1.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod1.id) || store.getQuizzes()[0] || defaultQuizzes[0];
@@ -874,18 +875,22 @@ export class PawakoBotRunner {
             const stepCfg = onboardingService.getStepConfigForModule(mod.id);
             const delayMins = quiz?.delayMinutesBeforeQuiz ?? stepCfg?.delayMinutesBeforeQuiz ?? 0;
 
-            if (stepCfg?.roleOnStartName || stepCfg?.roleOnStartId) {
-              const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
-              const roleToAdd = stepCfg.roleOnStartName || stepCfg.roleOnStartId;
-              if (roleToAdd) {
-                member.roles = Array.from(new Set([...(member.roles || []), roleToAdd]));
-                store.saveMembers();
-                if (guild) {
-                  syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
-                }
-                discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
+            const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+            member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
+
+            const roleName = stepCfg?.roleOnStartName || mod.roleEnCoursName;
+            const roleId = stepCfg?.roleOnStartId || mod.roleEnCoursId;
+            const rolesToAdd = [roleName, roleId].filter(Boolean) as string[];
+
+            if (rolesToAdd.length > 0) {
+              member.roles = Array.from(new Set([...(member.roles || []), ...rolesToAdd]));
+              if (guild) {
+                syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
               }
+              discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
             }
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
 
             const externalLink = stepCfg?.externalLinkUrl || mod.url || (mod.resources && mod.resources[0]?.url);
             const brandingName = store.getBranding().trainingName || 'Espace de Formation';

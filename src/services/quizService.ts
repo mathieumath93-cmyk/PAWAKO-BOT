@@ -22,6 +22,7 @@ class QuizService {
       isActive: true,
     } as Quiz;
 
+    store.addQuiz(newQuiz);
     firebaseSyncService.saveQuiz(newQuiz).catch((err) =>
       console.error('[QuizService] Firebase saveQuiz failed:', err)
     );
@@ -29,9 +30,7 @@ class QuizService {
   }
 
   public updateQuiz(id: string, updates: Partial<Quiz>): Quiz {
-    const existing = store.getQuiz(id);
-    if (!existing) throw new Error('Quiz non trouvé');
-    const updated: Quiz = { ...existing, ...updates, id };
+    const updated = store.updateQuiz(id, updates);
     firebaseSyncService.saveQuiz(updated).catch((err) =>
       console.error('[QuizService] Firebase saveQuiz failed:', err)
     );
@@ -39,6 +38,7 @@ class QuizService {
   }
 
   public deleteQuiz(id: string): void {
+    store.deleteQuiz(id);
     firebaseSyncService.deleteQuiz(id).catch((err) =>
       console.error('[QuizService] Firebase deleteQuiz failed:', err)
     );

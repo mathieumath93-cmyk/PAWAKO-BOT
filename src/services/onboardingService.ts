@@ -87,6 +87,7 @@ class OnboardingService {
         moduleTitle: mod?.title || existing.moduleTitle,
         directivesText: mod?.content || existing.directivesText || 'Lisez les consignes attentivement avant de passer le quiz.',
         externalLinkUrl: existing.externalLinkUrl || mod?.url || (mod?.resources && mod.resources[0]?.url) || '',
+        delayMinutesBeforeQuiz: existing.delayMinutesBeforeQuiz ?? quiz?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartName: mod?.roleEnCoursName || existing.roleOnStartName || 'En cours',
         roleOnPassName: mod?.roleValidatedName || existing.roleOnPassName || 'Validé',
         successMessage: quiz?.successMessage || existing.successMessage || '🎉 Félicitations, tu as réussi !',
@@ -99,6 +100,7 @@ class OnboardingService {
       moduleTitle: mod?.title || 'Module de Formation',
       directivesText: mod?.content || 'Lisez les consignes attentivement avant de passer le quiz.',
       externalLinkUrl: mod?.url || (mod?.resources && mod.resources[0]?.url) || '',
+      delayMinutesBeforeQuiz: quiz?.delayMinutesBeforeQuiz ?? 0,
       roleOnStartName: mod?.roleEnCoursName || 'En cours',
       roleOnPassName: mod?.roleValidatedName || 'Validé',
       successMessage: quiz?.successMessage || '🎉 Félicitations, tu as réussi !',
@@ -126,10 +128,12 @@ class OnboardingService {
         roleEnCoursName: step.roleOnStartName || mod.roleEnCoursName,
         roleValidatedName: step.roleOnPassName || mod.roleValidatedName,
       });
-      if (mod.quizId) {
-        store.updateQuiz(mod.quizId, {
-          successMessage: step.successMessage,
-          failureMessage: step.failureMessage,
+      const quiz = mod.quizId ? store.getQuiz(mod.quizId) : store.getQuizzes().find((q) => q.moduleId === step.moduleId);
+      if (quiz) {
+        store.updateQuiz(quiz.id, {
+          delayMinutesBeforeQuiz: step.delayMinutesBeforeQuiz ?? quiz.delayMinutesBeforeQuiz,
+          successMessage: step.successMessage || quiz.successMessage,
+          failureMessage: step.failureMessage || quiz.failureMessage,
         });
       }
     }

@@ -75,6 +75,8 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         ...foundStep,
         moduleTitle: activeModuleObj?.title || foundStep.moduleTitle,
         directivesText: activeModuleObj?.content || foundStep.directivesText,
+        externalLinkUrl: foundStep.externalLinkUrl || activeModuleObj?.url || '',
+        delayMinutesBeforeQuiz: foundStep.delayMinutesBeforeQuiz ?? activeQuizObj?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'En cours',
         roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Validé',
       }
@@ -82,7 +84,8 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         moduleId: selectedModuleTab,
         moduleTitle: activeModuleObj?.title || 'Module de formation',
         directivesText: activeModuleObj?.content || 'Lisez les consignes avant de lancer le quiz.',
-        externalLinkUrl: 'https://docs.pawako.com/guide',
+        externalLinkUrl: activeModuleObj?.url || '',
+        delayMinutesBeforeQuiz: activeQuizObj?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartId: activeModuleObj?.roleEnCoursId || '',
         roleOnStartName: activeModuleObj?.roleEnCoursName || 'En cours',
         roleOnPassId: activeModuleObj?.roleValidatedId || '',
@@ -708,9 +711,13 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
                   </label>
                   <input
                     type="url"
-                    value={currentStep.externalLinkUrl || ''}
-                    onChange={(e) => handleUpdateStepConfig({ ...currentStep, externalLinkUrl: e.target.value })}
-                    placeholder="https://docs.pawako.com/votre-guide"
+                    value={currentStep.externalLinkUrl || activeModuleObj.url || ''}
+                    onChange={(e) => {
+                      const url = e.target.value;
+                      handleUpdateStepConfig({ ...currentStep, externalLinkUrl: url });
+                      handleUpdateModuleDetails({ url });
+                    }}
+                    placeholder="https://votre-domaine.com/votre-guide-ou-support"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -795,8 +802,12 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
                       <input
                         type="number"
                         min={0}
-                        value={activeQuizObj.delayMinutesBeforeQuiz ?? 10}
-                        onChange={(e) => handleUpdateQuizDetails({ delayMinutesBeforeQuiz: Number(e.target.value) || 0 })}
+                        value={activeQuizObj.delayMinutesBeforeQuiz ?? currentStep.delayMinutesBeforeQuiz ?? 0}
+                        onChange={(e) => {
+                          const mins = Number(e.target.value) || 0;
+                          handleUpdateQuizDetails({ delayMinutesBeforeQuiz: mins });
+                          handleUpdateStepConfig({ ...currentStep, delayMinutesBeforeQuiz: mins });
+                        }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
                       />
                     </div>

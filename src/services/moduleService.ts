@@ -33,6 +33,7 @@ class ModuleService {
       ],
     } as TrainingModule;
 
+    store.addModule(newModule);
     firebaseSyncService.saveModule(newModule).catch((err) =>
       console.error('[ModuleService] Firebase saveModule failed:', err)
     );
@@ -40,9 +41,7 @@ class ModuleService {
   }
 
   public updateModule(id: string, updates: Partial<TrainingModule>): TrainingModule {
-    const existing = store.getModule(id);
-    if (!existing) throw new Error('Module non trouvé');
-    const updated: TrainingModule = { ...existing, ...updates, id };
+    const updated = store.updateModule(id, updates);
     firebaseSyncService.saveModule(updated).catch((err) =>
       console.error('[ModuleService] Firebase saveModule failed:', err)
     );
@@ -50,6 +49,7 @@ class ModuleService {
   }
 
   public deleteModule(id: string): void {
+    store.deleteModule(id);
     firebaseSyncService.deleteModule(id).catch((err) =>
       console.error('[ModuleService] Firebase deleteModule failed:', err)
     );

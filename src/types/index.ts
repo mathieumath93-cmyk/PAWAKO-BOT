@@ -70,7 +70,7 @@ export interface Quiz {
   maxAttempts?: number;
   cooldownMinutes: number; // e.g. 30, 60, 120 min configurable per quiz
   delayMinutesBeforeQuiz?: number; // e.g. 10 min delay before quiz unlocks
-  sampleSize: number; // e.g. 20 randomly drawn questions from bank
+  sampleSize?: number; // e.g. 20 randomly drawn questions from bank
   questions: QuizQuestion[]; // Unlimited question bank
   successMessage?: string;
   failureMessage?: string;

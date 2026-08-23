@@ -25,6 +25,7 @@ import {
   Bell,
   Zap,
   RefreshCw,
+  Upload,
 } from 'lucide-react';
 import { OnboardingFlowConfig, ModuleStepConfig, TrainingModule, Quiz, QuizQuestion } from '../types';
 import { onboardingService } from '../services/onboardingService';
@@ -34,6 +35,7 @@ import { discordService } from '../services/discordService';
 import { moduleService } from '../services/moduleService';
 import { quizService } from '../services/quizService';
 import { store } from '../services/store';
+import { QuizImportModal } from './QuizImportModal';
 import { DiscordResourceSelect } from './DiscordResourceSelect';
 
 interface OnboardingFlowConfiguratorProps {
@@ -63,6 +65,19 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   // Expanded questions accordion state
   const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
   const [isRunningWorker, setIsRunningWorker] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const handleImportQuestions = (imported: QuizQuestion[], replaceExisting: boolean) => {
+    if (!activeQuizObj) return;
+    const current = activeQuizObj.questions || [];
+    const finalQuestions = replaceExisting ? imported : [...current, ...imported];
+    quizService.updateQuiz(activeQuizObj.id, { questions: finalQuestions });
+    onShowToast(
+      'Quiz Mis à Jour',
+      `${imported.length} question(s) importée(s) avec succès dans le quiz.`,
+      'success'
+    );
+  };
 
   const handleRunWorkerNow = async () => {
     setIsRunningWorker(true);
@@ -885,18 +900,28 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
 
                   {/* Question Bank Manager */}
                   <div className="space-y-3 pt-3 border-t border-slate-800">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
                         Banque de Questions ({activeQuizObj.questions?.length || 0})
                       </span>
-                      <button
-                        type="button"
-                        onClick={handleAddQuestionToQuiz}
-                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 shadow transition-all cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>+ Ajouter une Question</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsImportModalOpen(true)}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>📥 Importer (TXT / Excel)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddQuestionToQuiz}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 shadow transition-all cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+ Question</span>
+                        </button>
+                      </div>
                     </div>
 
                     {activeQuizObj.questions?.map((q, qIndex) => {
@@ -1150,6 +1175,13 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           </button>
         </div>
       </form>
+
+      <QuizImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        quizTitle={activeQuizObj?.title}
+        onImportQuestions={handleImportQuestions}
+      />
     </div>
   );
 };

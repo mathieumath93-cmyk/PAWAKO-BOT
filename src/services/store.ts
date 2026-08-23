@@ -69,24 +69,414 @@ const defaultBackups: BackupRecord[] = [];
 export const defaultModules: TrainingModule[] = [
   {
     id: 'mod-1',
-    title: 'Module 1 : Onboarding & Règlement',
-    description: 'Présentation de la communauté, règles de vie et fonctionnement général du serveur.',
-    content: 'Bienvenue dans ton premier module de formation PAWAKO !\n\n1. Respectez la courtoisie et la bienveillance dans tous les salons.\n2. Lisez attentivement les consignes et la documentation officielle.\n3. Complétez le quiz de validation ci-dessous pour débloquer votre rôle supérieur.',
+    title: '📚 Module 1️⃣ : Onboarding & Base',
+    description: 'Ici, on ne forme pas des gens pour discuter, mais pour performer. 🤑\n\nTon rôle est simple : comprendre les fans, créer de la valeur et générer du chiffre.\n\nLis, assimile, exécute. Chaque étape est obligatoire.\n\nMDP doc : PAWAKO1\n\nUn score minimum de 12/20 au quiz final est requis pour débloquer le rôle suivant.',
+    content: 'Ici, on ne forme pas des gens pour discuter, mais pour performer. 🤑\n\nTon rôle est simple : comprendre les fans, créer de la valeur et générer du chiffre.\n\nLis, assimile, exécute. Chaque étape est obligatoire.\n\nMDP doc : PAWAKO1\n\nUn score minimum de 12/20 au quiz final est requis pour débloquer le rôle suivant.',
     order: 1,
     quizId: 'quiz-1',
     channelId: '',
-    channelName: '🔒-formation-candidat',
+    channelName: '🔒-formation-mod-1',
     roleEnCoursId: '',
-    roleEnCoursName: 'En Formation',
+    roleEnCoursName: 'En Formation M1',
     roleValidatedId: '',
-    roleValidatedName: 'Membre Officiel',
+    roleValidatedName: 'Module 1 Validé',
     resources: [],
     buttons: [],
     isActive: true,
     blocks: [
-      { id: 'blk-1', type: 'heading', title: 'Bienvenue dans la Formation', content: 'Module 1 : Onboarding & Règlement' },
-      { id: 'blk-2', type: 'text', content: 'Bienvenue dans ton premier module de formation ! Lisez attentivement les consignes et répondez au quiz ci-dessous.' },
-      { id: 'blk-3', type: 'alert', title: 'Rappel Important', content: 'Un score minimum de 80% au quiz est requis pour valider ce premier module.', alertType: 'info' },
+      { id: 'blk-1-1', type: 'heading', title: '📚 Module 1️⃣ : Onboarding & Base', content: 'Onboarding & Prise en Main' },
+      { id: 'blk-1-2', type: 'text', content: 'Ici, on ne forme pas des gens pour discuter, mais pour performer. 🤑\n\nTon rôle est simple : comprendre les fans, créer de la valeur et générer du chiffre.\n\nLis, assimile, exécute. Chaque étape est obligatoire.' },
+      { id: 'blk-1-3', type: 'alert', title: 'Instructions & Accès Doc', content: 'MDP doc : PAWAKO1\n\nUn score minimum de 12/20 au quiz final est requis pour débloquer le rôle suivant.', alertType: 'warning' },
+    ],
+  },
+  {
+    id: 'mod-2',
+    title: 'PSYCHOLOGIE FAN & CHATTING 🧠🔥',
+    description: `On passe à un niveau supérieur.
+
+Si tu pensais que le job c’était “répondre à des messages”… mauvaise nouvelle :
+👉 c’est là que tout commence vraiment.
+
+Dans ce module, tu vas comprendre :
+• pourquoi un fan paye (spoiler : jamais pour les raisons que tu crois)
+• comment créer de l’attachement sans être réel
+• comment contrôler une conversation du début à la vente
+• et surtout… toutes les erreurs qui te font perdre de l’argent sans que tu t’en rendes compte
+
+⚠️ Très important :
+Ce module fait la différence entre :
+👉 quelqu’un qui discute
+👉 et quelqu’un qui génère du CA
+
+🎯 OBJECTIF :
+Que tu comprennes exactement comment fonctionne le cerveau du fan
+ET comment toi, tu dois te comporter pour convertir
+
+📌 ACTION IMMÉDIATE :
+
+Regarde le module COMPLET
+Prends des notes (obligatoire)
+Applique DIRECTEMENT dans tes conversations
+
+⚠️ Je vais être clair :
+Si tu n’appliques pas ça, tu peux envoyer 1000 messages…
+👉 tu ne feras pas de ventes.
+
+À l’inverse, si tu maîtrises ça :
+👉 chaque message devient une opportunité de cash.
+
+On ne veut pas des gens actifs.
+On veut des gens efficaces.
+
+MDP doc : PAWAKO 2`,
+    content: `On passe à un niveau supérieur.
+
+Si tu pensais que le job c’était “répondre à des messages”… mauvaise nouvelle :
+👉 c’est là que tout commence vraiment.
+
+Dans ce module, tu vas comprendre :
+• pourquoi un fan paye (spoiler : jamais pour les raisons que tu crois)
+• comment créer de l’attachement sans être réel
+• comment contrôler une conversation du début à la vente
+• et surtout… toutes les erreurs qui te font perdre de l’argent sans que tu t’en rendes compte
+
+⚠️ Très important :
+Ce module fait la différence entre :
+👉 quelqu’un qui discute
+👉 et quelqu’un qui génère du CA
+
+🎯 OBJECTIF :
+Que tu comprennes exactement comment fonctionne le cerveau du fan
+ET comment toi, tu dois te comporter pour convertir
+
+📌 ACTION IMMÉDIATE :
+
+Regarde le module COMPLET
+Prends des notes (obligatoire)
+Applique DIRECTEMENT dans tes conversations
+
+⚠️ Je vais être clair :
+Si tu n’appliques pas ça, tu peux envoyer 1000 messages…
+👉 tu ne feras pas de ventes.
+
+À l’inverse, si tu maîtrises ça :
+👉 chaque message devient une opportunité de cash.
+
+On ne veut pas des gens actifs.
+On veut des gens efficaces.
+
+MDP doc : PAWAKO 2`,
+    order: 2,
+    quizId: 'quiz-2',
+    channelId: '',
+    channelName: '🔒-formation-mod-2',
+    roleEnCoursId: '',
+    roleEnCoursName: 'En Formation M2',
+    roleValidatedId: '',
+    roleValidatedName: 'Module 2 Validé',
+    resources: [],
+    buttons: [],
+    isActive: true,
+    blocks: [
+      { id: 'blk-2-1', type: 'heading', title: 'PSYCHOLOGIE FAN & CHATTING 🧠🔥', content: 'Comprendre & Convertir' },
+      { id: 'blk-2-2', type: 'text', content: 'Dans ce module, tu vas comprendre pourquoi un fan paye, comment créer de l’attachement et comment contrôler une conversation.' },
+      { id: 'blk-2-3', type: 'alert', title: 'Accès Doc', content: 'MDP doc : PAWAKO 2', alertType: 'warning' },
+    ],
+  },
+  {
+    id: 'mod-3',
+    title: 'STRUCTURE DE SCRIPT & CLOSING',
+    description: `On arrête de parler.
+
+Maintenant, vous allez apprendre à faire payer.
+
+⚠️ La vérité que personne ne vous dit
+
+Un fan n’achète pas parce que tu es sexy.
+
+👉 Il achète parce que tu l’as amené exactement au bon niveau d’excitation.
+
+Et ça…
+👉 ça ne s’improvise pas.
+
+🧠 Ce module va changer votre manière de chatter
+
+Vous allez apprendre :
+
+✔️ Le script EXACT utilisé par les top chatteurs
+✔️ L’ordre précis à respecter (et pourquoi)
+✔️ Comment faire monter la pression étape par étape
+✔️ Comment éviter les erreurs qui tuent une vente
+✔️ Comment transformer une simple discussion en paiement
+
+🔥 La règle la plus importante
+
+👉 Tu ne sautes JAMAIS une phase.
+
+Sinon :
+
+trop rapide → il bloque
+trop lent → il se désintéresse
+
+👉 Résultat : zéro vente
+
+💰 Objectif
+
+👉 Faire un PPV en 8 à 15 messages
+👉 Garder le contrôle de la conversation
+👉 Créer une montée d’excitation maîtrisée
+👉 Close proprement sans forcer
+
+❌ Ce que tu fais peut-être déjà (et qui te tue)
+Aller trop vite dans le sale
+Rester bloqué en mode “gentil”
+Lancer un PPV sans build-up
+Copier-coller sans réfléchir
+
+👉 Si tu te reconnais, ce module est obligatoire.
+
+⚠️ Important
+
+👉 Ce script n’est PAS un texte à réciter
+👉 C’est une structure à comprendre et adapter
+
+Les meilleurs :
+👉 lisent le client
+👉 s’adaptent
+👉 dominent la conversation
+
+
+MDP doc : PAWAKO3`,
+    content: `On arrête de parler.
+
+Maintenant, vous allez apprendre à faire payer.
+
+⚠️ La vérité que personne ne vous dit
+
+Un fan n’achète pas parce que tu es sexy.
+
+👉 Il achète parce que tu l’as amené exactement au bon niveau d’excitation.
+
+Et ça…
+👉 ça ne s’improvise pas.
+
+🧠 Ce module va changer votre manière de chatter
+
+Vous allez apprendre :
+
+✔️ Le script EXACT utilisé par les top chatteurs
+✔️ L’ordre précis à respecter (et pourquoi)
+✔️ Comment faire monter la pression étape par étape
+✔️ Comment éviter les erreurs qui tuent une vente
+✔️ Comment transformer une simple discussion en paiement
+
+🔥 La règle la plus importante
+
+👉 Tu ne sautes JAMAIS une phase.
+
+Sinon :
+
+trop rapide → il bloque
+trop lent → il se désintéresse
+
+👉 Résultat : zéro vente
+
+💰 Objectif
+
+👉 Faire un PPV en 8 à 15 messages
+👉 Garder le contrôle de la conversation
+👉 Créer une montée d’excitation maîtrisée
+👉 Close proprement sans forcer
+
+❌ Ce que tu fais peut-être déjà (et qui te tue)
+Aller trop vite dans le sale
+Rester bloqué en mode “gentil”
+Lancer un PPV sans build-up
+Copier-coller sans réfléchir
+
+👉 Si tu te reconnais, ce module est obligatoire.
+
+⚠️ Important
+
+👉 Ce script n’est PAS un texte à réciter
+👉 C’est une structure à comprendre et adapter
+
+Les meilleurs :
+👉 lisent le client
+👉 s’adaptent
+👉 dominent la conversation
+
+
+MDP doc : PAWAKO3`,
+    order: 3,
+    quizId: 'quiz-3',
+    channelId: '',
+    channelName: '🔒-formation-mod-3',
+    roleEnCoursId: '',
+    roleEnCoursName: 'En Formation M3',
+    roleValidatedId: '',
+    roleValidatedName: 'Module 3 Validé',
+    resources: [],
+    buttons: [],
+    isActive: true,
+    blocks: [
+      { id: 'blk-3-1', type: 'heading', title: 'STRUCTURE DE SCRIPT & CLOSING', content: 'Faire payer & Closing' },
+      { id: 'blk-3-2', type: 'text', content: 'Apprenez le script EXACT utilisé par les top chatteurs et la règle fondamentale pour amener le fan au bon niveau d\'excitation.' },
+      { id: 'blk-3-3', type: 'alert', title: 'Accès Doc', content: 'MDP doc : PAWAKO3', alertType: 'warning' },
+    ],
+  },
+  {
+    id: 'mod-4',
+    title: 'FOLLOW-UP & RELANCES',
+    description: `Vous avez appris à créer de l’intérêt, à installer une vibe, à chauffer une conversation.
+
+Maintenant, on attaque le point qui fait la différence entre :
+👉 un chatteur moyen
+👉 et un chatteur qui génère du cash tous les jours
+
+💰 Le FOLLOW-UP.
+
+⚠️ La réalité
+
+80% des ventes ne se font PAS au premier message.
+
+Elles se font :
+
+après une relance bien placée
+au bon moment
+avec la bonne énergie
+
+Et pourtant…
+👉 la majorité abandonne trop tôt
+👉 ou relance comme des robots
+
+🎯 Ce que vous allez apprendre
+
+Dans ce module, vous allez maîtriser :
+
+✔️ Quand relancer (timing stratégique)
+✔️ Comment relancer sans être lourd
+✔️ Comment recréer de l’émotion
+✔️ Comment récupérer un fan froid
+✔️ Comment transformer un “peut-être” en vente
+
+❌ Ce que vous devez arrêter IMMÉDIATEMENT
+“Tu veux toujours ?”
+“Réponds-moi”
+“???”
+Spam sans valeur
+
+👉 Ça tue la conversation.
+👉 Ça fait fuir.
+
+✅ Ce que vous allez apprendre à faire
+Relances naturelles
+Relances émotionnelles
+Relances intrigantes
+Relances qui reconnectent
+
+👉 Le but : donner envie de revenir, pas forcer.
+
+🎯 Objectif du module
+
+👉 Transformer les conversations mortes en opportunités
+👉 Multiplier les ventes sans nouveaux leads
+👉 Devenir imprévisible et intéressant
+
+MDP : PAWAKO4`,
+    content: `Vous avez appris à créer de l’intérêt, à installer une vibe, à chauffer une conversation.
+
+Maintenant, on attaque le point qui fait la différence entre :
+👉 un chatteur moyen
+👉 et un chatteur qui génère du cash tous les jours
+
+💰 Le FOLLOW-UP.
+
+⚠️ La réalité
+
+80% des ventes ne se font PAS au premier message.
+
+Elles se font :
+
+après une relance bien placée
+au bon moment
+avec la bonne énergie
+
+Et pourtant…
+👉 la majorité abandonne trop tôt
+👉 ou relance comme des robots
+
+🎯 Ce que vous allez apprendre
+
+Dans ce module, vous allez maîtriser :
+
+✔️ Quand relancer (timing stratégique)
+✔️ Comment relancer sans être lourd
+✔️ Comment recréer de l’émotion
+✔️ Comment récupérer un fan froid
+✔️ Comment transformer un “peut-être” en vente
+
+❌ Ce que vous devez arrêter IMMÉDIATEMENT
+“Tu veux toujours ?”
+“Réponds-moi”
+“???”
+Spam sans valeur
+
+👉 Ça tue la conversation.
+👉 Ça fait fuir.
+
+✅ Ce que vous allez apprendre à faire
+Relances naturelles
+Relances émotionnelles
+Relances intrigantes
+Relances qui reconnectent
+
+👉 Le but : donner envie de revenir, pas forcer.
+
+🎯 Objectif du module
+
+👉 Transformer les conversations mortes en opportunités
+👉 Multiplier les ventes sans nouveaux leads
+👉 Devenir imprévisible et intéressant
+
+MDP : PAWAKO4`,
+    order: 4,
+    quizId: 'quiz-4',
+    channelId: '',
+    channelName: '🔒-formation-mod-4',
+    roleEnCoursId: '',
+    roleEnCoursName: 'En Formation M4',
+    roleValidatedId: '',
+    roleValidatedName: 'Module 4 Validé',
+    resources: [],
+    buttons: [],
+    isActive: true,
+    blocks: [
+      { id: 'blk-4-1', type: 'heading', title: 'FOLLOW-UP & RELANCES', content: 'Relancer avec Stratégie' },
+      { id: 'blk-4-2', type: 'text', content: '80% des ventes ne se font pas au premier message. Découvrez le timing stratégique et les relances émotionnelles.' },
+      { id: 'blk-4-3', type: 'alert', title: 'Accès Doc', content: 'MDP : PAWAKO4', alertType: 'warning' },
+    ],
+  },
+  {
+    id: 'mod-5',
+    title: 'Négociation Spenders & Tag TW',
+    description: 'Veuillez regarder avec attention ( en X2) cette vidéo qui vous explique comment on négocie avec les nouveaux spenders et surtout comment on attribue enfin le TAG: TW (Time Waster)',
+    content: 'Veuillez regarder avec attention ( en X2) cette vidéo qui vous explique comment on négocie avec les nouveaux spenders et surtout comment on attribue enfin le TAG: TW (Time Waster)',
+    order: 5,
+    quizId: 'quiz-5',
+    channelId: '',
+    channelName: '🔒-formation-mod-5',
+    roleEnCoursId: '',
+    roleEnCoursName: 'En Formation M5',
+    roleValidatedId: '',
+    roleValidatedName: 'Chatteur Certifié',
+    resources: [],
+    buttons: [],
+    isActive: true,
+    blocks: [
+      { id: 'blk-5-1', type: 'heading', title: 'Négociation Spenders & Tag TW', content: 'Video Spenders & Gestion Time Wasters' },
+      { id: 'blk-5-2', type: 'text', content: 'Veuillez regarder avec attention ( en X2) cette vidéo qui vous explique comment on négocie avec les nouveaux spenders et surtout comment on attribue enfin le TAG: TW (Time Waster)' },
+      { id: 'blk-5-3', type: 'alert', title: 'Consigne Vidéo', content: 'Visionnez la vidéo en vitesse x2 puis validez le questionnaire.', alertType: 'info' },
     ],
   },
 ];
@@ -96,25 +486,117 @@ export const defaultQuizzes: Quiz[] = [
     id: 'quiz-1',
     moduleId: 'mod-1',
     title: 'Quiz de Validation - Module 1',
-    description: 'Vérification des règles fondamentales et du fonctionnement du serveur.',
-    minScore: 80,
+    description: 'Onboarding & Base PAWAKO',
+    minScore: 60,
     cooldownMinutes: 30,
     delayMinutesBeforeQuiz: 0,
-    sampleSize: 2,
     questions: [
       {
-        id: 'q1',
-        text: 'Quelle est la règle d\'or à respecter sur le serveur ?',
-        options: ['Respect et courtoisie envers tous', 'Spammer les salons', 'Utiliser un langage agressif', 'Ignorer les consignes'],
-        correctAnswer: 0,
-        explanation: 'Le respect et la courtoisie sont indispensables pour tous les membres.',
+        id: 'q1-1',
+        text: 'Quel est l\'objectif principal du chatteur selon le Module 1 ?',
+        options: ['Discuter amicalement', 'Comprendre les fans, créer de la valeur et générer du chiffre', 'Envoyer des messages automatiques', 'Passer le temps'],
+        correctAnswer: 1,
+        explanation: 'Ici on ne forme pas pour discuter mais pour performer et générer du chiffre.',
       },
       {
-        id: 'q2',
-        text: 'Que devez-vous faire après avoir terminé la lecture du module ?',
-        options: ['Compléter le quiz de validation', 'Quitter le serveur', 'Ignorer les instructions', 'Envoyer un message privé inutile'],
+        id: 'q1-2',
+        text: 'Quel est le mot de passe de la documentation du Module 1 ?',
+        options: ['PAWAKO1', 'PAWAKO2', 'SECRET123', 'FORMATION'],
         correctAnswer: 0,
-        explanation: 'Le quiz permet d\'évaluer la bonne compréhension et d\'attribuer le rôle supérieur.',
+        explanation: 'Le mot de passe de la documentation du Module 1 est PAWAKO1.',
+      },
+    ],
+  },
+  {
+    id: 'quiz-2',
+    moduleId: 'mod-2',
+    title: 'Quiz de Validation - Module 2',
+    description: 'Psychologie Fan & Chatting',
+    minScore: 60,
+    cooldownMinutes: 30,
+    delayMinutesBeforeQuiz: 0,
+    questions: [
+      {
+        id: 'q2-1',
+        text: 'Quelle est la différence fondamentale entre quelqu\'un qui discute et quelqu\'un qui génère du CA ?',
+        options: ['La vitesse de frappe', 'La compréhension de la psychologie du fan et le contrôle de la conversation', 'Le nombre de messages envoyés', 'La longueur des réponses'],
+        correctAnswer: 1,
+        explanation: 'Comprendre pourquoi un fan paye et maîtriser la conversation permet de convertir.',
+      },
+      {
+        id: 'q2-2',
+        text: 'Quel est le MDP de la doc du Module 2 ?',
+        options: ['PAWAKO 2', 'PAWAKO2', 'PAWAKO_FAN', 'PAWAKO3'],
+        correctAnswer: 0,
+        explanation: 'Le mot de passe indiqué est "PAWAKO 2".',
+      },
+    ],
+  },
+  {
+    id: 'quiz-3',
+    moduleId: 'mod-3',
+    title: 'Quiz de Validation - Module 3',
+    description: 'Structure de Script & Closing',
+    minScore: 60,
+    cooldownMinutes: 30,
+    delayMinutesBeforeQuiz: 0,
+    questions: [
+      {
+        id: 'q3-1',
+        text: 'Pourquoi un fan achète-t-il selon le Module 3 ?',
+        options: ['Parce que tu es sexy', 'Parce que tu l\'as amené au bon niveau d\'excitation', 'Par hasard', 'Parce qu\'il n\'a rien d\'autre à faire'],
+        correctAnswer: 1,
+        explanation: 'Le closing repose sur la montée progressive d\'excitation.',
+      },
+      {
+        id: 'q3-2',
+        text: 'En combien de messages vise-t-on de faire un PPV ?',
+        options: ['1 à 2 messages', '8 à 15 messages', '50+ messages', '100 messages'],
+        correctAnswer: 1,
+        explanation: 'Un PPV bien amenée se fait en 8 à 15 messages maîtrisés.',
+      },
+    ],
+  },
+  {
+    id: 'quiz-4',
+    moduleId: 'mod-4',
+    title: 'Quiz de Validation - Module 4',
+    description: 'Follow-up & Relances',
+    minScore: 60,
+    cooldownMinutes: 30,
+    delayMinutesBeforeQuiz: 0,
+    questions: [
+      {
+        id: 'q4-1',
+        text: 'Quel pourcentage des ventes se font lors des relances/follow-up ?',
+        options: ['20%', '50%', '80%', '100%'],
+        correctAnswer: 2,
+        explanation: '80% des ventes se concluent grâce à une relance stratégique et bien rythmée.',
+      },
+      {
+        id: 'q4-2',
+        text: 'Quelles relances faut-il bannir immédiatement ?',
+        options: ['Relances émotionnelles', 'Relances intrigantes', 'Spam sans valeur du type "Tu veux toujours ?" ou "???"', 'Relances de reconnexion'],
+        correctAnswer: 2,
+        explanation: 'Les relances vides ("Tu veux toujours ?") font fuir le client.',
+      },
+    ],
+  },
+  {
+    id: 'quiz-5',
+    moduleId: 'mod-5',
+    title: 'Quiz de Validation - Module 5',
+    description: 'Négociation Spenders & Tag TW',
+    minScore: 60,
+    cooldownMinutes: 30,
+    delayMinutesBeforeQuiz: 0,
+    questions: [
+      {
+        id: 'q5-1',
+        text: 'Que signifie l\'attribution du TAG TW ?',
+        options: ['Top Worker', 'Time Waster (Perdeur de Temps)', 'Total Winner', 'Two Way'],
+        correctAnswer: 1,
+        explanation: 'Le TAG TW désigne un Time Waster pour adapter sa gestion de conversation.',
       },
     ],
   },
@@ -144,7 +626,14 @@ class StoreService {
       const storedMods = localStorage.getItem('pawako_modules');
       if (storedMods) {
         const parsed = JSON.parse(storedMods);
-        this.modules = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...defaultModules];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Merge missing default modules (e.g. mod-2, mod-3, mod-4, mod-5) if not present
+          const existingIds = new Set(parsed.map((m: any) => m.id));
+          const missingDefaults = defaultModules.filter((defM) => !existingIds.has(defM.id));
+          this.modules = [...parsed, ...missingDefaults].sort((a, b) => (a.order || 0) - (b.order || 0));
+        } else {
+          this.modules = [...defaultModules];
+        }
       } else {
         this.modules = [...defaultModules];
       }
@@ -152,7 +641,13 @@ class StoreService {
       const storedQuizzes = localStorage.getItem('pawako_quizzes');
       if (storedQuizzes) {
         const parsed = JSON.parse(storedQuizzes);
-        this.quizzes = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...defaultQuizzes];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingQIds = new Set(parsed.map((q: any) => q.id));
+          const missingQuizzes = defaultQuizzes.filter((defQ) => !existingQIds.has(defQ.id));
+          this.quizzes = [...parsed, ...missingQuizzes];
+        } else {
+          this.quizzes = [...defaultQuizzes];
+        }
       } else {
         this.quizzes = [...defaultQuizzes];
       }
@@ -1079,6 +1574,14 @@ ${statusText}
     this.quizAttempts = [];
     this.saveToLocalStorage();
     this.notify();
+  }
+
+  public resetModulesToDefaults(): void {
+    this.modules = JSON.parse(JSON.stringify(defaultModules));
+    this.quizzes = JSON.parse(JSON.stringify(defaultQuizzes));
+    this.saveToLocalStorage();
+    this.notify();
+    this.addLog('Anthony (Admin)', 'Réinitialisation des 5 modules et quiz officiels effectuée', 'system');
   }
 
   public resetAllData(): void {

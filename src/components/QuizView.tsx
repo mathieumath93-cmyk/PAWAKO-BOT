@@ -8,9 +8,11 @@ import {
   Plus,
   Target,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import { Quiz, QuizQuestion, TrainingModule } from '../types';
+import { QuizImportModal } from './QuizImportModal';
 
 interface QuizViewProps {
   quizzes: Quiz[];
@@ -36,6 +38,13 @@ export const QuizView: React.FC<QuizViewProps> = ({
 }) => {
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const handleImportQuestions = (imported: QuizQuestion[], replaceExisting: boolean) => {
+    const current = formData.questions || [];
+    const final = replaceExisting ? imported : [...current, ...imported];
+    setFormData({ ...formData, questions: final });
+  };
 
   const [formData, setFormData] = useState<Omit<Quiz, 'id'>>({
     moduleId: modules[0]?.id || '',
@@ -302,14 +311,24 @@ export const QuizView: React.FC<QuizViewProps> = ({
                     <HelpCircle className="w-4 h-4 text-indigo-400" />
                     <span>Questions ({formData.questions.length})</span>
                   </h4>
-                  <button
-                    type="button"
-                    onClick={handleAddQuestion}
-                    className="px-3 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-medium flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Ajouter Question</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsImportModalOpen(true)}
+                      className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>📥 Importer (TXT / Excel)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddQuestion}
+                      className="px-3 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-medium flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Ajouter Question</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -393,6 +412,13 @@ export const QuizView: React.FC<QuizViewProps> = ({
           </div>
         </div>
       )}
+
+      <QuizImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        quizTitle={formData.title}
+        onImportQuestions={handleImportQuestions}
+      />
     </div>
   );
 };

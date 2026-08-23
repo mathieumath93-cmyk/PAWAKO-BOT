@@ -86,6 +86,7 @@ class OnboardingService {
         ...existing,
         moduleTitle: mod?.title || existing.moduleTitle,
         directivesText: mod?.content || existing.directivesText || 'Lisez les consignes attentivement avant de passer le quiz.',
+        externalLinkUrl: existing.externalLinkUrl || mod?.url || (mod?.resources && mod.resources[0]?.url) || '',
         roleOnStartName: mod?.roleEnCoursName || existing.roleOnStartName || 'En cours',
         roleOnPassName: mod?.roleValidatedName || existing.roleOnPassName || 'Validé',
         successMessage: quiz?.successMessage || existing.successMessage || '🎉 Félicitations, tu as réussi !',
@@ -97,6 +98,7 @@ class OnboardingService {
       moduleId,
       moduleTitle: mod?.title || 'Module de Formation',
       directivesText: mod?.content || 'Lisez les consignes attentivement avant de passer le quiz.',
+      externalLinkUrl: mod?.url || (mod?.resources && mod.resources[0]?.url) || '',
       roleOnStartName: mod?.roleEnCoursName || 'En cours',
       roleOnPassName: mod?.roleValidatedName || 'Validé',
       successMessage: quiz?.successMessage || '🎉 Félicitations, tu as réussi !',
@@ -120,6 +122,7 @@ class OnboardingService {
       store.updateModule(step.moduleId, {
         title: step.moduleTitle,
         content: step.directivesText || mod.content,
+        url: step.externalLinkUrl || mod.url,
         roleEnCoursName: step.roleOnStartName || mod.roleEnCoursName,
         roleValidatedName: step.roleOnPassName || mod.roleValidatedName,
       });

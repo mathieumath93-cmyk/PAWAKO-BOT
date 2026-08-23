@@ -319,10 +319,11 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     setConfig(newConfig);
     onboardingService.updateConfig(newConfig);
 
-    // Sync roles & title directly with Module object
+    // Sync roles, title & external link directly with Module object
     moduleService.updateModule(updatedStep.moduleId, {
       title: updatedStep.moduleTitle,
       content: updatedStep.directivesText,
+      url: updatedStep.externalLinkUrl,
       roleEnCoursName: updatedStep.roleOnStartName,
       roleValidatedName: updatedStep.roleOnPassName,
       roleEnCoursId: updatedStep.roleOnStartId,

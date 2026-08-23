@@ -29,6 +29,38 @@ export interface ActiveQuizSession {
   startedAt: number;
 }
 
+async function syncMemberRolesOnGuild(guild: any, discordUserId: string, roleIdentifiers: string[]) {
+  try {
+    if (!guild || !discordUserId || !roleIdentifiers || roleIdentifiers.length === 0) return;
+    const member = await guild.members.fetch(discordUserId).catch(() => null);
+    if (!member) return;
+
+    const guildRoles = await guild.roles.fetch().catch(() => guild.roles.cache);
+    if (!guildRoles) return;
+
+    for (const roleInput of roleIdentifiers) {
+      if (!roleInput) continue;
+      const cleanInput = String(roleInput).trim();
+      if (!cleanInput) continue;
+
+      const matchedRole = guildRoles.find(
+        (r: any) =>
+          r.id === cleanInput ||
+          r.name.toLowerCase() === cleanInput.toLowerCase() ||
+          r.name.toLowerCase() === cleanInput.replace(/^@/, '').toLowerCase()
+      );
+
+      if (matchedRole && !member.roles.cache.has(matchedRole.id)) {
+        await member.roles.add(matchedRole.id).catch((err: any) =>
+          console.warn(`[Bot Direct Role Add Warning] ${cleanInput} (${matchedRole.id}) to ${discordUserId}:`, err?.message || err)
+        );
+      }
+    }
+  } catch (err: any) {
+    console.warn('[syncMemberRolesOnGuild Error]', err?.message || err);
+  }
+}
+
 export class PawakoBotRunner {
   private client: Client | null = null;
   private isConnected: boolean = false;
@@ -89,14 +121,27 @@ export class PawakoBotRunner {
         });
       });
 
-      this.client.on('guildMemberAdd', (member) => {
+      this.client.on('guildMemberAdd', async (member) => {
         const allowedGuildId = process.env.DISCORD_GUILD_ID;
         if (allowedGuildId && member.guild.id !== allowedGuildId) return;
+
+        const cfg = onboardingService.getConfig();
+        const initialRole = cfg.initialRoleId || cfg.initialRoleName;
+
+        if (initialRole) {
+          syncMemberRolesOnGuild(member.guild, member.id, [initialRole]).catch(() => {});
+        }
+
+        const cand = store.getOrCreateCandidate(member.id, member.displayName, member.user.displayAvatarURL());
+        if (initialRole && !cand.roles.includes(initialRole)) {
+          cand.roles.push(initialRole);
+          store.saveMembers();
+        }
 
         store.addNotification({
           level: 'information',
           title: 'Nouveau membre rejoint',
-          message: `${member.displayName} a rejoint le serveur Discord.`,
+          message: `${member.displayName} a rejoint le serveur Discord. Rôle initial attribué.`,
           event: 'member_join',
           mentionAdmin: false,
         });
@@ -185,6 +230,7 @@ export class PawakoBotRunner {
 
         const customId = interaction.customId;
         const user = interaction.user;
+        const guild = interaction.guild;
 
         try {
           // Defer reply or update IMMEDIATELY (<10ms) to prevent Discord timeout errors
@@ -292,13 +338,16 @@ export class PawakoBotRunner {
             // Setup Module 1 & Quiz availability
             const mod1 = store.getModules()[0];
             const quiz1 = mod1 ? store.getQuiz(mod1.quizId || '') || store.getQuizzes()[0] : store.getQuizzes()[0];
-            const delayMins = quiz1?.delayMinutesBeforeQuiz || 10;
-            member.currentQuizAvailableAtTimestamp = Date.now() + delayMins * 60 * 1000;
+            const delayMins = quiz1?.delayMinutesBeforeQuiz ?? cfg.stepConfigs?.[0]?.delayMinutesBeforeQuiz ?? 0;
+            member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
 
             store.saveMembers();
             firebaseSyncService.saveMember(member).catch(() => {});
 
-            // Trigger Discord API role assignment in background
+            // Assign Discord roles directly on Guild and via API
+            if (guild) {
+              syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
+            }
             discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
               console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
             });
@@ -372,36 +421,56 @@ export class PawakoBotRunner {
             }
 
             const quiz1 = store.getQuiz(mod1.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod1.id) || store.getQuizzes()[0] || defaultQuizzes[0];
-            const delayMins = quiz1?.delayMinutesBeforeQuiz !== undefined ? quiz1.delayMinutesBeforeQuiz : 0;
+            const delayMins = quiz1?.delayMinutesBeforeQuiz ?? step1Cfg?.delayMinutesBeforeQuiz ?? 0;
             member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
 
             store.saveMembers();
             firebaseSyncService.saveMember(member).catch(() => {});
 
-            // Trigger Discord API role assignment in background
+            // Trigger Discord API role assignment and live Guild member role update
+            if (guild) {
+              syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
+            }
             discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
               console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
             });
 
+            const externalLink = step1Cfg?.externalLinkUrl || mod1.url || (mod1.resources && mod1.resources[0]?.url);
             const brandingName = store.getBranding().trainingName || 'Espace de Formation';
+
             const delayNotice = delayMins > 0
               ? `\n\n⏱️ **Information Quiz** : Le quiz de ce module sera débloqué dans **${delayMins} minute(s)** dans ce salon !`
               : `\n\n⏱️ **Information Quiz** : Le quiz est débloqué et disponible immédiatement ci-dessous !`;
 
+            const linkNotice = externalLink
+              ? `\n\n🔗 **Support / Document de cours** :\n👉 [Clique ici pour accéder au support de formation](${externalLink})`
+              : '';
+
             const modEmbed = new EmbedBuilder()
               .setTitle(`📚 ${mod1.title}`)
-              .setDescription(`${mod1.content}${delayNotice}`)
+              .setDescription(`${mod1.content}${linkNotice}${delayNotice}`)
               .setColor(0x6366f1)
               .setFooter({ text: `${brandingName} • Parcours Individuel` })
               .setTimestamp();
 
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const actionButtons: ButtonBuilder[] = [];
+            if (externalLink) {
+              actionButtons.push(
+                new ButtonBuilder()
+                  .setLabel('🔗 Support / Lien de Cours')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(externalLink)
+              );
+            }
+            actionButtons.push(
               new ButtonBuilder()
                 .setCustomId(`launch_quiz_${quiz1?.id || ''}`)
                 .setLabel(`📝 Lancer le Quiz (${quiz1?.title || mod1.title})`)
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
             );
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(actionButtons);
 
             await interaction.editReply({
               content: `🚀 **Formation Lancée !** Ton rôle **@${member.roles[0] || initialRoleName || 'Nouveau membre'}** a été attribué avec succès. Voici ton premier module :`,
@@ -697,13 +766,11 @@ export class PawakoBotRunner {
                   member.currentModuleId = nextMod.id;
                   member.candidateState = 'module_en_cours';
 
-                  const nextQuiz = store.getQuiz(nextMod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === nextMod.id);
-                  const delayMins = nextQuiz?.delayMinutesBeforeQuiz || 10;
-                  member.currentQuizAvailableAtTimestamp = Date.now() + delayMins * 60 * 1000;
-
-                  // Assign Discord roles for validated module and new module according to step configs
                   const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
                   const nextStepCfg = nextMod ? onboardingService.getStepConfigForModule(nextMod.id) : null;
+                  const nextQuiz = store.getQuiz(nextMod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === nextMod.id);
+                  const delayMins = nextQuiz?.delayMinutesBeforeQuiz ?? nextStepCfg?.delayMinutesBeforeQuiz ?? 0;
+                  member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
 
                   const passRoleName = stepCfg?.roleOnPassName || currentMod?.roleValidatedName;
                   const nextStartRoleName = nextStepCfg?.roleOnStartName || nextMod?.roleEnCoursName;
@@ -713,6 +780,9 @@ export class PawakoBotRunner {
                   if (nextMod && nextStartRoleName) updatedRoles.push(nextStartRoleName);
 
                   member.roles = Array.from(new Set(updatedRoles));
+                  if (guild) {
+                    syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
+                  }
                   discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
                     console.warn('[Quiz Pass Role Sync Warning]', roleErr?.message || roleErr);
                   });
@@ -722,6 +792,9 @@ export class PawakoBotRunner {
                   const passRoleName = stepCfg?.roleOnPassName || currentMod?.roleValidatedName;
                   if (passRoleName) {
                     member.roles = Array.from(new Set([...(member.roles || []), passRoleName]));
+                  }
+                  if (guild) {
+                    syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
                   }
                   discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
                 }
@@ -750,7 +823,7 @@ export class PawakoBotRunner {
                 return;
               } else {
                 // Quiz Failed - Activate Cooldown
-                const cooldownMins = quiz.cooldownMinutes || 30;
+                const cooldownMins = quiz?.cooldownMinutes ?? onboardingService.getConfig().cooldownMinutes ?? 15;
                 member.cooldownUntilTimestamp = Date.now() + cooldownMins * 60 * 1000;
                 member.candidateState = 'cooldown_actif';
 
@@ -798,35 +871,58 @@ export class PawakoBotRunner {
             }
 
             const quiz = store.getQuiz(mod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod.id);
-            const delayMins = quiz?.delayMinutesBeforeQuiz !== undefined ? quiz.delayMinutesBeforeQuiz : 0;
-
             const stepCfg = onboardingService.getStepConfigForModule(mod.id);
-            if (stepCfg?.roleOnStartName) {
+            const delayMins = quiz?.delayMinutesBeforeQuiz ?? stepCfg?.delayMinutesBeforeQuiz ?? 0;
+
+            if (stepCfg?.roleOnStartName || stepCfg?.roleOnStartId) {
               const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
-              member.roles = Array.from(new Set([...(member.roles || []), stepCfg.roleOnStartName]));
-              store.saveMembers();
-              discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
+              const roleToAdd = stepCfg.roleOnStartName || stepCfg.roleOnStartId;
+              if (roleToAdd) {
+                member.roles = Array.from(new Set([...(member.roles || []), roleToAdd]));
+                store.saveMembers();
+                if (guild) {
+                  syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
+                }
+                discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
+              }
             }
 
+            const externalLink = stepCfg?.externalLinkUrl || mod.url || (mod.resources && mod.resources[0]?.url);
             const brandingName = store.getBranding().trainingName || 'Espace de Formation';
+
             const delayNotice = delayMins > 0
               ? `\n\n⏱️ **Information Quiz** : Le quiz de ce module sera débloqué dans **${delayMins} minute(s)** !`
               : `\n\n⏱️ **Information Quiz** : Le quiz est disponible immédiatement ci-dessous !`;
 
+            const linkNotice = externalLink
+              ? `\n\n🔗 **Support / Document de cours** :\n👉 [Accéder au support de formation](${externalLink})`
+              : '';
+
             const embed = new EmbedBuilder()
               .setTitle(`📚 ${mod.title}`)
-              .setDescription(`${mod.content}${delayNotice}`)
+              .setDescription(`${mod.content}${linkNotice}${delayNotice}`)
               .setColor(0x6366f1)
               .setFooter({ text: `${brandingName} • Parcours de Formation` })
               .setTimestamp();
 
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const actionButtons: ButtonBuilder[] = [];
+            if (externalLink) {
+              actionButtons.push(
+                new ButtonBuilder()
+                  .setLabel('🔗 Support / Lien de Cours')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(externalLink)
+              );
+            }
+            actionButtons.push(
               new ButtonBuilder()
                 .setCustomId(`launch_quiz_${quiz?.id || 'quiz-1'}`)
                 .setLabel(`📝 Lancer le Quiz (${quiz?.title || mod.title})`)
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
             );
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(actionButtons);
 
             await interaction.editReply({ embeds: [embed], components: [row] });
             return;

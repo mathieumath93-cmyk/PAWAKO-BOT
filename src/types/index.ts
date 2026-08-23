@@ -124,6 +124,7 @@ export interface TrainingModule {
   title: string;
   description: string;
   content: string; // Markdown or structured rich text
+  url?: string; // External document/resource link
   blocks?: ModuleBlock[];
   channelId: string;
   channelName: string; // e.g. "#formation"
@@ -415,6 +416,7 @@ export interface ModuleStepConfig {
   nextModuleTitle?: string;
   directivesText?: string;
   externalLinkUrl?: string;
+  delayMinutesBeforeQuiz?: number;
   successMessage?: string; // e.g. "Félicitations tu as réussi avec : {score}/20 ! Tu as accès au module 2 en cliquant ci-dessous."
   failureMessage?: string; // e.g. "Vous n'avez pas réussi (score : {score}/20), vous pouvez réessayer après 15 minutes."
 }

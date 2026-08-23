@@ -101,13 +101,16 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
       );
       return;
     }
-    const roleName = config.initialRoleName || 'Nouveau membre';
-    if (!assignedRoles.includes(roleName)) {
-      setAssignedRoles((prev) => [...prev, roleName]);
-    }
+    const step1Cfg = config.stepConfigs?.[0];
+    const initialRole = config.initialRoleName || 'Nouveau membre';
+    const startRole = step1Cfg?.roleOnStartName || modules[0]?.roleEnCoursName;
 
-    addLog(`Attribution du rôle initial "@${roleName}" à ${memberName}.`);
-    addLog(`Affichage des directives du ${modules[0]?.title || 'Module'} et du lien de formation.`);
+    const rolesToAdd = Array.from(new Set([initialRole, startRole].filter(Boolean) as string[]));
+    const newAssignedRoles = Array.from(new Set([...assignedRoles, ...rolesToAdd]));
+    setAssignedRoles(newAssignedRoles);
+
+    addLog(`Attribution automatique des rôles : ${rolesToAdd.map((r) => `@${r}`).join(', ')} à ${memberName}.`);
+    addLog(`Affichage des directives du ${modules[0]?.title || 'Module 1'} et du lien externe de formation.`);
 
     setStep('module1_active');
   };
@@ -372,7 +375,9 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 animate-in fade-in">
                 <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Rôle <strong>@{assignedRoles[0] || config.initialRoleName || 'Nouveau membre'}</strong> attribué avec succès !</span>
+                  <span>
+                    Rôles <strong>{assignedRoles.map((r) => `@${r}`).join(', ') || '@Nouveau membre'}</strong> attribués avec succès !
+                  </span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
@@ -381,18 +386,25 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                     {modules[0]?.content || 'Consultez les consignes attentivement avant d\'ouvrir l\'évaluation.'}
                   </p>
 
-                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-300">Support de Formation Externe :</span>
-                    <a
-                      href="https://docs.pawako.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-indigo-400 hover:underline font-mono flex items-center gap-1"
-                    >
-                      <span>Consulter la Doc</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
+                  {(() => {
+                    const step1Cfg = config.stepConfigs?.[0];
+                    const externalLink = step1Cfg?.externalLinkUrl || modules[0]?.url || (modules[0]?.resources && modules[0]?.resources[0]?.url);
+                    if (!externalLink) return null;
+                    return (
+                      <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-300">Support de Formation Externe :</span>
+                        <a
+                          href={externalLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-400 hover:underline font-mono flex items-center gap-1"
+                        >
+                          <span>Accéder au Support / Lien</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <button

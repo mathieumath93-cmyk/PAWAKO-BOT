@@ -209,7 +209,6 @@ export class PawakoBotRunner {
             .setTitle(`👤 Profil de ${message.author.username}`)
             .setColor(0x06b6d4)
             .addFields(
-              { name: 'Rôles Discord', value: m.roles.join(', ') || 'Nouveau membre' },
               { name: 'Modules Validés', value: `${validatedCount} / ${store.getModules().length}` }
             )
             .setThumbnail(message.author.displayAvatarURL());
@@ -378,7 +377,7 @@ export class PawakoBotRunner {
               const welcomeEmbed = new EmbedBuilder()
                 .setTitle(`👋 Content de te voir, ${user.username} !`)
                 .setDescription(
-                  `Bienvenue dans ton espace de formation privé.\n\nPour débloquer ton premier rôle et accéder aux consignes de ta formation, clique sur le bouton ci-dessous :`
+                  `Bienvenue dans ton espace de formation privé.\n\nPour accéder aux consignes et démarrer ta formation, clique sur le bouton ci-dessous :`
                 )
                 .setColor(0x6366f1)
                 .setFooter({ text: 'PAWAKO FORMATION • Accès Privé' });
@@ -400,7 +399,7 @@ export class PawakoBotRunner {
             }
 
             const confirmMsg = createdChannel
-              ? `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}>. Ton salon de formation privé **<#${createdChannel.id}>** a été créé ! Rends-toi dedans et clique sur **"${cfg.startTrainingButtonLabel || '🚀 Lancer la formation'}"** pour débloquer ton premier rôle.`
+              ? `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}>. Ton salon de formation privé **<#${createdChannel.id}>** a été créé ! Rends-toi dedans et clique sur **"${cfg.startTrainingButtonLabel || '🚀 Lancer la formation'}"** pour débuter.`
               : `🎓 **Onboarding Démarré !** Bienvenue <@${user.id}> dans votre parcours de formation. Ton salon privé **#${expectedChanName}** est en cours d'attribution.`;
 
             await interaction.editReply({ content: confirmMsg });
@@ -493,9 +492,8 @@ export class PawakoBotRunner {
 
             const row = new ActionRowBuilder<ButtonBuilder>().addComponents(actionButtons);
 
-            const roleFormattedText = formatMemberRolesDisplay(member.roles);
             await interaction.editReply({
-              content: `🚀 **Formation Lancée !** Accès configuré (${roleFormattedText}). Voici ton premier module :`,
+              content: `🚀 **Formation Lancée !** Ton espace de formation est prêt. Voici ton premier module :`,
               embeds: [modEmbed],
               components: [row],
             });
@@ -541,8 +539,7 @@ export class PawakoBotRunner {
               .addFields(
                 { name: '🆔 Identifiant Discord', value: `<@${member.discordId || member.id.replace('mem-', '')}>`, inline: true },
                 { name: '📊 Progression', value: `**${validatedCount} / ${modules.length}** modules validés`, inline: true },
-                { name: '⏳ Statut Cooldown', value: cooldownNotice, inline: false },
-                { name: '📜 Rôles Discord', value: formatMemberRolesDisplay(member.roles), inline: false }
+                { name: '⏳ Statut Cooldown', value: cooldownNotice, inline: false }
               )
               .setFooter({
                 text: isStaffViewer

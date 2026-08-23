@@ -2,6 +2,7 @@ import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore'
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { store, defaultModules, defaultQuizzes } from './store';
 import { TrainingModule, Quiz, Member, UsefulLink } from '../types';
+import { onboardingService } from './onboardingService';
 
 /**
  * FirebaseSyncService implementing a Stale-While-Revalidate (SWR) pattern.
@@ -35,16 +36,150 @@ class FirebaseSyncService {
 
   /**
    * Background Worker: monitors member activity & onboarding timestamps.
-   * Identifies members who have not progressed in onboarding for 6h, 12h, or 24h,
-   * and adds an 'Auto-Reminder' flag to their profiles.
+   * Identifies members with inactive status (module non démarré, quiz non terminé)
+   * and sends automatic reminder messages on Discord channels.
    */
   public async checkAndApplyAutoReminders(): Promise<{ checked: number; flagged: number; details: string[] }> {
-    return { checked: 0, flagged: 0, details: [] };
+    this.lastWorkerRunAt = store.getFormattedNow();
+    const members = store.getMembers();
+    const config = onboardingService.getConfig();
+    const autoCfg = config.autoReminders || {
+      enabled: true,
+      thresholdHours: [2, 6, 8, 24],
+      unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
+      unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
+    };
+
+    if (!autoCfg.enabled) {
+      return { checked: members.length, flagged: 0, details: ['Relances automatiques désactivées dans les paramètres'] };
+    }
+
+    const thresholds = (autoCfg.thresholdHours && autoCfg.thresholdHours.length > 0)
+      ? [...autoCfg.thresholdHours].sort((a, b) => a - b)
+      : [2, 6, 8, 24];
+
+    let checked = 0;
+    let flagged = 0;
+    const details: string[] = [];
+    const nowMs = Date.now();
+
+    for (const member of members) {
+      if (!member.isActive || member.candidateState === 'formation_terminee') {
+        continue;
+      }
+
+      checked++;
+
+      // Determine last active time
+      const lastActiveMs = this.parseTimestampMs(member.lastActiveAt) || this.parseTimestampMs(member.joinedAt) || nowMs;
+      const inactiveMs = Math.max(0, nowMs - lastActiveMs);
+      const inactiveHours = inactiveMs / (1000 * 3600);
+
+      const modules = store.getModules();
+      const currentMod = modules.find((m) => m.id === member.currentModuleId) || modules[0];
+      const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
+
+      let situation: 'unstarted' | 'unfinished' | null = null;
+
+      if (validatedCount === 0 && (member.candidateState === 'nouveau' || !member.progress || Object.keys(member.progress).length === 0)) {
+        situation = 'unstarted';
+      } else if (member.candidateState === 'formation_commencee' || validatedCount < modules.length) {
+        const curProg = member.progress?.[currentMod?.id || ''];
+        if (!curProg || curProg.status !== 'valide') {
+          situation = 'unfinished';
+        }
+      }
+
+      if (!situation) continue;
+
+      // Find highest threshold hour reached by inactiveHours
+      const applicableThreshold = thresholds.slice().reverse().find((th) => inactiveHours >= th);
+      if (!applicableThreshold) continue;
+
+      const reminderKey = situation === 'unstarted'
+        ? `unstarted_${applicableThreshold}h`
+        : `${currentMod?.id || 'mod'}_unfinished_${applicableThreshold}h`;
+
+      if (member.remindersSent && member.remindersSent[reminderKey]) {
+        continue;
+      }
+
+      // Format template message
+      const template = situation === 'unstarted' ? autoCfg.unstartedMessage : autoCfg.unfinishedQuizMessage;
+      const buttonLabel = config.startTrainingButtonLabel || '🚀 Lancer la formation';
+      const moduleTitle = currentMod?.title || 'ton module actuel';
+
+      const formattedMessage = template
+        .replace(/\{discordId\}/g, member.discordId)
+        .replace(/\{username\}/g, member.username)
+        .replace(/\{buttonLabel\}/g, buttonLabel)
+        .replace(/\{moduleTitle\}/g, moduleTitle);
+
+      let sentSuccess = false;
+      if (member.personalChannelId) {
+        try {
+          const apiRes = await fetch('/api/discord/send-channel-embed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              guildId: config.guildId || '',
+              channelId: member.personalChannelId,
+              embed: {
+                title: `⏰ Relance Automatique (${applicableThreshold}h d'inactivité)`,
+                description: formattedMessage,
+                color: 0xf59e0b,
+                footer: { text: 'PAWAKO FORMATION • Relance Automatique' },
+                timestamp: new Date().toISOString(),
+              },
+              content: `<@${member.discordId}>`,
+            }),
+          });
+          sentSuccess = apiRes.ok;
+        } catch {
+          sentSuccess = false;
+        }
+      }
+
+      const updatedMember: Member = {
+        ...member,
+        autoReminderFlag: true,
+        autoReminderLevel: `${applicableThreshold}h`,
+        autoReminderReason: situation === 'unstarted' ? 'Module non démarré' : `Quiz non terminé (${moduleTitle})`,
+        autoReminderFlaggedAt: store.getFormattedNow(),
+        lastReminderAt: store.getFormattedNow(),
+        remindersSent: {
+          ...(member.remindersSent || {}),
+          [reminderKey]: nowMs,
+        },
+      };
+
+      store.updateMember(updatedMember);
+      await this.saveMember(updatedMember).catch(() => {});
+      flagged++;
+
+      const logMsg = `Relance ${applicableThreshold}h (${situation === 'unstarted' ? 'Non démarré' : moduleTitle}) ${sentSuccess ? 'envoyée sur Discord' : 'marquée'} pour ${member.username}`;
+      details.push(logMsg);
+    }
+
+    return { checked, flagged, details };
   }
 
-  public startInactivityWorker(): void {}
+  public startInactivityWorker(): void {
+    if (this.workerInterval) return;
+    // Run worker evaluation every 10 minutes (600,000 ms)
+    this.workerInterval = setInterval(() => {
+      this.checkAndApplyAutoReminders().catch((err) => {
+        console.warn('[InactivityWorker Interval Error]', err);
+      });
+    }, 10 * 60 * 1000);
+  }
 
-  public stopInactivityWorker(): void {}
+  public stopInactivityWorker(): void {
+    if (this.workerInterval) {
+      clearInterval(this.workerInterval);
+      this.workerInterval = null;
+    }
+  }
 
   public getLastWorkerRunAt(): string | null {
     return this.lastWorkerRunAt;

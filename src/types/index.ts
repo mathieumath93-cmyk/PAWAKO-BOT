@@ -174,9 +174,11 @@ export interface Member {
   modulesCompletedCount?: number;
   averageScore?: number;
   autoReminderFlag?: boolean;
-  autoReminderLevel?: '6h' | '12h' | '24h' | null;
+  autoReminderLevel?: string | null;
   autoReminderFlaggedAt?: string;
   autoReminderReason?: string;
+  remindersSent?: Record<string, number>;
+  lastReminderAt?: string;
 }
 
 export interface TicketMessage {
@@ -421,6 +423,13 @@ export interface ModuleStepConfig {
   failureMessage?: string; // e.g. "Vous n'avez pas réussi (score : {score}/20), vous pouvez réessayer après 15 minutes."
 }
 
+export interface AutoReminderConfig {
+  enabled: boolean;
+  thresholdHours: number[]; // e.g. [2, 6, 8, 24]
+  unstartedMessage: string;
+  unfinishedQuizMessage: string;
+}
+
 export interface OnboardingFlowConfig {
   guildId?: string;
   welcomeChannelId?: string;
@@ -439,6 +448,7 @@ export interface OnboardingFlowConfig {
   randomizeQuestions: boolean; // default true
   hideQuizSolutions: boolean; // default true
   stepConfigs: ModuleStepConfig[];
+  autoReminders?: AutoReminderConfig;
 }
 
 export interface UserSession {

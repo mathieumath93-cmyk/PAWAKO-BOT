@@ -992,6 +992,35 @@ export class PawakoBotRunner {
     }
   }
 
+  public async sendReminderToChannel(
+    channelId: string,
+    memberDiscordId: string,
+    messageText: string,
+    title?: string
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const channel = (await this.client.channels.fetch(channelId).catch(() => null)) as TextChannel | null;
+      if (!channel) return false;
+
+      const embed = new EmbedBuilder()
+        .setTitle(title || "⏰ Rappel d'Inactivité - PAWAKO FORMATION")
+        .setDescription(messageText)
+        .setColor(0xf59e0b)
+        .setFooter({ text: 'PAWAKO FORMATION • Relance Automatique' })
+        .setTimestamp();
+
+      await channel.send({
+        content: `<@${memberDiscordId}>`,
+        embeds: [embed],
+      });
+      return true;
+    } catch (err: any) {
+      console.warn(`[PawakoBot Reminder Send Warning] Channel ${channelId}:`, err?.message || err);
+      return false;
+    }
+  }
+
   public getIsConnected(): boolean {
     return this.isConnected && Boolean(this.client && this.client.user);
   }

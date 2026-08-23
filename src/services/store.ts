@@ -263,6 +263,16 @@ class StoreService {
     }
   }
 
+  public updateMember(updated: Member): void {
+    const idx = this.members.findIndex((m) => m.id === updated.id || m.discordId === updated.discordId);
+    if (idx >= 0) {
+      this.members[idx] = updated;
+    } else {
+      this.members.push(updated);
+    }
+    this.saveMembers();
+  }
+
   public saveUsefulLinks(): void {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       try {

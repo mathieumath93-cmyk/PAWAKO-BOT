@@ -22,9 +22,13 @@ import {
   ChevronUp,
   Layers,
   Award,
+  Bell,
+  Zap,
+  RefreshCw,
 } from 'lucide-react';
 import { OnboardingFlowConfig, ModuleStepConfig, TrainingModule, Quiz, QuizQuestion } from '../types';
 import { onboardingService } from '../services/onboardingService';
+import { firebaseSyncService } from '../services/firebaseSyncService';
 import { discordSyncService, PreFlightValidationResult } from '../services/discordSyncService';
 import { discordService } from '../services/discordService';
 import { moduleService } from '../services/moduleService';
@@ -58,6 +62,18 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
 
   // Expanded questions accordion state
   const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
+  const [isRunningWorker, setIsRunningWorker] = useState(false);
+
+  const handleRunWorkerNow = async () => {
+    setIsRunningWorker(true);
+    const res = await firebaseSyncService.checkAndApplyAutoReminders();
+    setIsRunningWorker(false);
+    onShowToast(
+      'Worker Inactivité Exécuté',
+      `${res.checked} membres vérifiés • ${res.flagged} relances envoyées/marquées`,
+      'success'
+    );
+  };
 
   const refreshModulesState = () => {
     const updated = store.getModules();
@@ -974,6 +990,153 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               )}
             </div>
           )}
+        </div>
+
+        {/* Section 3: Relances Automatiques (Inactivité) */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-amber-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  3. Messages de Relances Automatiques en cas d'Inactivité
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Relancez automatiquement les membres stagnants (module non démarré ou quiz non terminé) selon les délais de votre choix.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRunWorkerNow}
+              disabled={isRunningWorker}
+              className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md shadow-amber-600/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <Zap className={`w-4 h-4 ${isRunningWorker ? 'animate-spin' : ''}`} />
+              <span>{isRunningWorker ? 'Analyse...' : '⚡ Tester le Worker'}</span>
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+              <input
+                type="checkbox"
+                id="auto_reminders_enabled"
+                checked={config.autoReminders?.enabled ?? true}
+                onChange={(e) => setConfig({
+                  ...config,
+                  autoReminders: {
+                    ...(config.autoReminders || {
+                      enabled: true,
+                      thresholdHours: [2, 6, 8, 24],
+                      unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
+                      unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
+                    }),
+                    enabled: e.target.checked
+                  }
+                })}
+                className="w-4 h-4 accent-amber-500 cursor-pointer"
+              />
+              <label htmlFor="auto_reminders_enabled" className="text-xs font-bold text-slate-200 cursor-pointer select-none">
+                Activer les Relances Automatiques en Arrière-Plan (Worker Inactivité)
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                  Délais d'inactivité déclencheurs (en heures)
+                </label>
+                <input
+                  type="text"
+                  value={(config.autoReminders?.thresholdHours || [2, 6, 8, 24]).join(', ')}
+                  onChange={(e) => {
+                    const parsed = e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+                    setConfig({
+                      ...config,
+                      autoReminders: {
+                        ...(config.autoReminders || {
+                          enabled: true,
+                          thresholdHours: [2, 6, 8, 24],
+                          unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
+                          unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
+                        }),
+                        thresholdHours: parsed.length > 0 ? parsed : [2, 6, 8, 24]
+                      }
+                    });
+                  }}
+                  placeholder="2, 6, 8, 24"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Séparez les heures par des virgules (ex: <code className="text-amber-400">2, 6, 8, 24, 48</code>). Le bot relancera à chaque palier.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                  Variables Disponibles
+                </label>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-300 font-mono space-y-1">
+                  <div><code className="text-indigo-400 font-bold">{'{discordId}'}</code> : Mentionne le membre Discord</div>
+                  <div><code className="text-amber-400 font-bold">{'{username}'}</code> : Pseudo du membre</div>
+                  <div><code className="text-emerald-400 font-bold">{'{moduleTitle}'}</code> : Nom du module en cours</div>
+                  <div><code className="text-sky-400 font-bold">{'{buttonLabel}'}</code> : Libellé du bouton lancer</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Message de Relance : Module non démarré</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={config.autoReminders?.unstartedMessage || '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !'}
+                  onChange={(e) => setConfig({
+                    ...config,
+                    autoReminders: {
+                      ...(config.autoReminders || {
+                        enabled: true,
+                        thresholdHours: [2, 6, 8, 24],
+                        unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
+                        unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
+                      }),
+                      unstartedMessage: e.target.value
+                    }
+                  })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Message de Relance : Quiz / Module non terminé</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={config.autoReminders?.unfinishedQuizMessage || '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !'}
+                  onChange={(e) => setConfig({
+                    ...config,
+                    autoReminders: {
+                      ...(config.autoReminders || {
+                        enabled: true,
+                        thresholdHours: [2, 6, 8, 24],
+                        unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
+                        unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
+                      }),
+                      unfinishedQuizMessage: e.target.value
+                    }
+                  })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Submit Main Config */}

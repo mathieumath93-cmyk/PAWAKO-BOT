@@ -19,6 +19,7 @@ import {
   UserSession,
 } from '../types';
 import { discordService } from './discordService';
+import { onboardingService } from './onboardingService';
 
 const defaultBranding: BrandingSettings = {
   trainingName: 'PAWAKO FORMATION 🤖',
@@ -499,26 +500,28 @@ class StoreService {
       const currentModIdx = sortedMods.findIndex((m) => m.id === quiz.moduleId);
       const currentMod = sortedMods[currentModIdx];
 
-      // Assign role "Module X Validé"
-      if (currentMod && !member.roles.includes(currentMod.roleValidatedName)) {
-        member.roles.push(currentMod.roleValidatedName);
+      const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
+      const passRole = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId || currentMod?.roleValidatedName || '';
+      const startRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId || currentMod?.roleEnCoursName || '';
+
+      // Assign pass role if configured
+      if (passRole && !member.roles.includes(passRole)) {
+        member.roles.push(passRole);
       }
 
-      // Remove "Nouveau membre" if finishing module 1
-      if (currentModIdx === 0) {
-        member.roles = member.roles.filter((r) => r !== 'Nouveau membre');
+      // Remove current start role if configured
+      if (startRole) {
+        member.roles = member.roles.filter((r) => r !== startRole);
       }
 
       // Unlock next module
       const nextMod = sortedMods[currentModIdx + 1];
       if (nextMod) {
-        // Remove previous "En cours" role
-        if (currentMod) {
-          member.roles = member.roles.filter((r) => r !== currentMod.roleEnCoursName);
-        }
-        // Add next "En cours" role
-        if (!member.roles.includes(nextMod.roleEnCoursName)) {
-          member.roles.push(nextMod.roleEnCoursName);
+        const nextStepCfg = onboardingService.getStepConfigForModule(nextMod.id);
+        const nextStartRole = nextStepCfg?.roleOnStartName || nextStepCfg?.roleOnStartId || nextMod?.roleEnCoursName || '';
+
+        if (nextStartRole && !member.roles.includes(nextStartRole)) {
+          member.roles.push(nextStartRole);
         }
         member.currentModuleId = nextMod.id;
         if (!member.progress[nextMod.id]) {
@@ -574,14 +577,18 @@ class StoreService {
     if (!m) {
       const firstMod = this.modules[0];
       const firstModId = firstMod?.id || '';
-      const initialRole = firstMod?.roleEnCoursName || 'En cours';
+
+      const cfg = onboardingService.getConfig();
+      const step1 = cfg.stepConfigs?.[0];
+      const configuredInitialRole = cfg.initialRoleName || cfg.initialRoleId || step1?.roleOnStartName || step1?.roleOnStartId || '';
+      const initialRoles = configuredInitialRole ? [configuredInitialRole] : [];
 
       m = {
         id: `mem-${discordUserId}`,
         discordId: discordUserId,
         username: username || `Candidat-${discordUserId.slice(-4)}`,
         avatarUrl: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-        roles: ['Nouveau membre', initialRole],
+        roles: initialRoles,
         joinedAt: this.getFormattedNow(),
         currentModuleId: firstModId,
         candidateState: 'nouveau',
@@ -635,7 +642,11 @@ class StoreService {
       ? { [firstModId]: { moduleId: firstModId, status: 'en_cours', attemptsCount: 0 } }
       : {};
     m.currentModuleId = firstModId;
-    m.roles = ['Nouveau membre'];
+    const cfg = onboardingService.getConfig();
+    const step1 = cfg.stepConfigs?.[0];
+    const configuredInitialRole = cfg.initialRoleName || cfg.initialRoleId || step1?.roleOnStartName || step1?.roleOnStartId || '';
+    m.roles = configuredInitialRole ? [configuredInitialRole] : [];
+    this.saveMembers();
     this.saveMembers();
     this.addLog('Anthony (Admin)', `Réinitialisation de la progression de ${m.username}`, 'member', m.username, undefined, undefined, 'effectué');
 

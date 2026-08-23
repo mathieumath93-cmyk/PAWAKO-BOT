@@ -1,15 +1,63 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { store } from './src/services/store';
 import { firebaseSyncService } from './src/services/firebaseSyncService';
 import { pawakoBot } from './src/bot/discordBot';
 import { discordService } from './src/services/discordService';
 
+const BOT_CONFIG_FILE = path.join(process.cwd(), 'data', 'bot_config.json');
+
+function saveServerBotConfig(config: { token?: string; clientId?: string; clientSecret?: string; webhookUrl?: string }) {
+  try {
+    const dir = path.dirname(BOT_CONFIG_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    let existing: any = {};
+    if (fs.existsSync(BOT_CONFIG_FILE)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(BOT_CONFIG_FILE, 'utf-8'));
+      } catch (e) {}
+    }
+    const merged = { ...existing, ...config };
+    fs.writeFileSync(BOT_CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Config File Persist Warning]', err);
+  }
+}
+
+function loadServerBotConfig() {
+  try {
+    if (fs.existsSync(BOT_CONFIG_FILE)) {
+      const data = JSON.parse(fs.readFileSync(BOT_CONFIG_FILE, 'utf-8'));
+      if (data.token) {
+        process.env.DISCORD_BOT_TOKEN = data.token;
+      }
+      if (data.clientId) {
+        process.env.DISCORD_CLIENT_ID = data.clientId;
+      }
+      if (data.clientSecret) {
+        process.env.DISCORD_CLIENT_SECRET = data.clientSecret;
+      }
+      if (data.webhookUrl) {
+        process.env.DISCORD_WEBHOOK_URL = data.webhookUrl;
+      }
+      console.log('[PAWAKO BOT] Configuration d\'API Discord rechargée depuis le stockage local persistant.');
+    }
+  } catch (err) {
+    console.warn('[Config File Load Warning]', err);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  // Restore stored server configuration
+  loadServerBotConfig();
 
   // Sync data from Firestore into Node store
   firebaseSyncService.initSync().catch((err) => {
@@ -1455,6 +1503,7 @@ async function startServer() {
     if (token !== undefined && token !== '') {
       const cleanToken = sanitizeBotToken(token);
       process.env.DISCORD_BOT_TOKEN = cleanToken;
+      saveServerBotConfig({ token: cleanToken });
       try {
         pawakoBot.initAndConnect();
       } catch (err) {
@@ -1464,14 +1513,17 @@ async function startServer() {
 
     if (clientId !== undefined) {
       process.env.DISCORD_CLIENT_ID = clientId.trim();
+      saveServerBotConfig({ clientId: clientId.trim() });
     }
 
     if (clientSecret !== undefined && clientSecret !== '') {
       process.env.DISCORD_CLIENT_SECRET = clientSecret.trim();
+      saveServerBotConfig({ clientSecret: clientSecret.trim() });
     }
 
     if (webhookUrl !== undefined) {
       process.env.DISCORD_WEBHOOK_URL = webhookUrl.trim();
+      saveServerBotConfig({ webhookUrl: webhookUrl.trim() });
     }
 
     const currentToken = (process.env.DISCORD_BOT_TOKEN || '').trim();
@@ -1484,7 +1536,7 @@ async function startServer() {
 
     res.json({
       success: true,
-      message: 'Identifiants API Discord mis à jour et sécurisés sur le serveur.',
+      message: 'Identifiants API Discord mis à jour et sauvegardés de façon permanente sur le serveur.',
       tokenSet: Boolean(currentToken),
       maskedToken,
       clientId: process.env.DISCORD_CLIENT_ID || '',
@@ -1500,6 +1552,7 @@ async function startServer() {
     if (token) {
       const cleanToken = sanitizeBotToken(token);
       process.env.DISCORD_BOT_TOKEN = cleanToken;
+      saveServerBotConfig({ token: cleanToken });
     }
     pawakoBot.initAndConnect();
     res.json({ success: true, message: 'Connexion du bot Discord initiée.' });

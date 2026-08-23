@@ -197,9 +197,19 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                     {/* Role */}
                     <td className="p-4">
-                      <span className="px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-semibold text-[11px]">
-                        {member.roles[0] || 'Nouveau membre'}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {member.roles && member.roles.filter(Boolean).length > 0 ? (
+                          member.roles.filter(Boolean).map((role, idx) => (
+                            <span key={idx} className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-semibold text-[11px]">
+                              {role.startsWith('@') ? role : `@${role}`}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 font-normal text-[11px]">
+                            Aucun rôle
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Progress Bar */}

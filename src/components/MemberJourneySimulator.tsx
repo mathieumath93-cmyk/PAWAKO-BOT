@@ -104,8 +104,8 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
       return;
     }
     const step1Cfg = config.stepConfigs?.[0];
-    const initialRole = config.initialRoleName || 'Nouveau membre';
-    const startRole = step1Cfg?.roleOnStartName || modules[0]?.roleEnCoursName;
+    const initialRole = config.initialRoleName || config.initialRoleId || '';
+    const startRole = step1Cfg?.roleOnStartName || step1Cfg?.roleOnStartId || '';
 
     const rolesToAdd = Array.from(new Set([initialRole, startRole].filter(Boolean) as string[]));
     const newAssignedRoles = Array.from(new Set([...assignedRoles, ...rolesToAdd]));
@@ -387,7 +387,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                   <p>Candidat : <strong className="text-white">{memberName}</strong></p>
                   <p>📊 <strong>Progression :</strong> {step === 'module2_active' ? '████████░░ 80%' : '████░░░░░░ 40%'}</p>
                   <p>📚 <strong>Module actuel :</strong> {step === 'module2_active' ? (modules[1]?.title || 'Module suivant') : (modules[0]?.title || 'Module de formation')}</p>
-                  <p>🏷️ <strong>Rôles Discord actuels :</strong> {assignedRoles.map(r => `@${r}`).join(', ') || '@Nouveau membre'}</p>
+                  <p>🏷️ <strong>Rôles Discord actuels :</strong> {assignedRoles.length > 0 ? assignedRoles.map(r => `@${r}`).join(', ') : 'Aucun rôle'}</p>
                   <p>⏱️ <strong>Statut Cooldown :</strong> {cooldownSeconds > 0 ? `⏳ Actif (${Math.floor(cooldownSeconds/60)}m)` : '✅ Disponible'}</p>
                 </div>
               </div>
@@ -399,7 +399,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                 <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Rôles <strong>{assignedRoles.map((r) => `@${r}`).join(', ') || '@Nouveau membre'}</strong> attribués avec succès !
+                    Rôles <strong>{assignedRoles.length > 0 ? assignedRoles.map((r) => `@${r}`).join(', ') : 'Aucun rôle'}</strong> attribués avec succès !
                   </span>
                 </div>
 

@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
+import { discordSyncService } from '../services/discordSyncService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
 import { QuizQuestion, Member } from '../types';
@@ -27,6 +28,25 @@ export interface ActiveQuizSession {
   userAnswers: number[];
   score: number;
   startedAt: number;
+}
+
+function formatMemberRolesDisplay(roles: string[] = []): string {
+  const filtered = (roles || []).filter(Boolean);
+  if (filtered.length === 0) return 'Aucun rôle attribué';
+
+  const allGuildRoles = discordSyncService.getRoles();
+
+  const formattedList = filtered.map((roleStr) => {
+    const clean = String(roleStr).trim();
+    if (/^\d{17,20}$/.test(clean)) {
+      const matched = allGuildRoles.find((r) => r.discord_role_id === clean || r.id === clean);
+      if (matched) return `@${matched.name}`;
+      return `<@&${clean}>`;
+    }
+    return `@${clean.replace(/^@/, '')}`;
+  });
+
+  return Array.from(new Set(formattedList)).join(', ');
 }
 
 async function syncMemberRolesOnGuild(guild: any, discordUserId: string, roleIdentifiers: string[]) {
@@ -411,8 +431,8 @@ export class PawakoBotRunner {
             const step1Cfg = onboardingService.getStepConfigForModule(mod1.id);
             const initialRoleName = cfg.initialRoleName;
             const initialRoleId = cfg.initialRoleId;
-            const step1RoleOnStartName = step1Cfg?.roleOnStartName || mod1.roleEnCoursName;
-            const step1RoleOnStartId = step1Cfg?.roleOnStartId || mod1.roleEnCoursId;
+            const step1RoleOnStartName = step1Cfg?.roleOnStartName;
+            const step1RoleOnStartId = step1Cfg?.roleOnStartId;
 
             const configuredInitialRoles = Array.from(
               new Set([initialRoleName, initialRoleId, step1RoleOnStartName, step1RoleOnStartId].filter(Boolean) as string[])
@@ -473,8 +493,9 @@ export class PawakoBotRunner {
 
             const row = new ActionRowBuilder<ButtonBuilder>().addComponents(actionButtons);
 
+            const roleFormattedText = formatMemberRolesDisplay(member.roles);
             await interaction.editReply({
-              content: `🚀 **Formation Lancée !** Ton rôle **@${member.roles[0] || initialRoleName || 'Nouveau membre'}** a été attribué avec succès. Voici ton premier module :`,
+              content: `🚀 **Formation Lancée !** Accès configuré (${roleFormattedText}). Voici ton premier module :`,
               embeds: [modEmbed],
               components: [row],
             });
@@ -521,7 +542,7 @@ export class PawakoBotRunner {
                 { name: '🆔 Identifiant Discord', value: `<@${member.discordId || member.id.replace('mem-', '')}>`, inline: true },
                 { name: '📊 Progression', value: `**${validatedCount} / ${modules.length}** modules validés`, inline: true },
                 { name: '⏳ Statut Cooldown', value: cooldownNotice, inline: false },
-                { name: '📜 Rôles Discord', value: member.roles.join(', ') || 'Nouveau membre', inline: false }
+                { name: '📜 Rôles Discord', value: formatMemberRolesDisplay(member.roles), inline: false }
               )
               .setFooter({
                 text: isStaffViewer
@@ -773,14 +794,18 @@ export class PawakoBotRunner {
                   const delayMins = nextQuiz?.delayMinutesBeforeQuiz ?? nextStepCfg?.delayMinutesBeforeQuiz ?? 0;
                   member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
 
-                  const passRoleName = stepCfg?.roleOnPassName || currentMod?.roleValidatedName;
-                  const nextStartRoleName = nextStepCfg?.roleOnStartName || nextMod?.roleEnCoursName;
+                  const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
+                  const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
+                  const nextStartRoleName = nextStepCfg?.roleOnStartName || nextStepCfg?.roleOnStartId;
 
                   let updatedRoles = [...(member.roles || [])];
+                  if (currentStartRole) {
+                    updatedRoles = updatedRoles.filter((r) => r !== currentStartRole);
+                  }
                   if (passRoleName) updatedRoles.push(passRoleName);
                   if (nextMod && nextStartRoleName) updatedRoles.push(nextStartRoleName);
 
-                  member.roles = Array.from(new Set(updatedRoles));
+                  member.roles = Array.from(new Set(updatedRoles.filter(Boolean)));
                   if (guild) {
                     syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
                   }
@@ -790,10 +815,17 @@ export class PawakoBotRunner {
                 } else {
                   member.candidateState = 'formation_terminee';
                   const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
-                  const passRoleName = stepCfg?.roleOnPassName || currentMod?.roleValidatedName;
-                  if (passRoleName) {
-                    member.roles = Array.from(new Set([...(member.roles || []), passRoleName]));
+                  const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
+                  const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
+
+                  let updatedRoles = [...(member.roles || [])];
+                  if (currentStartRole) {
+                    updatedRoles = updatedRoles.filter((r) => r !== currentStartRole);
                   }
+                  if (passRoleName) {
+                    updatedRoles.push(passRoleName);
+                  }
+                  member.roles = Array.from(new Set(updatedRoles.filter(Boolean)));
                   if (guild) {
                     syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
                   }

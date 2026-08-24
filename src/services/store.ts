@@ -913,7 +913,35 @@ class StoreService {
   }
 
   public getQuiz(id: string): Quiz | undefined {
-    return this.quizzes.find((q) => q.id === id);
+    if (!id) return undefined;
+
+    // 1. Direct match by quiz ID
+    let found = this.quizzes.find((q) => q.id === id);
+    if (found) return found;
+
+    // 2. Match by moduleId
+    found = this.quizzes.find((q) => q.moduleId === id);
+    if (found) return found;
+
+    // 3. Match by module's quizId property
+    const mod = this.modules.find((m) => m.id === id || m.quizId === id);
+    if (mod && mod.quizId) {
+      found = this.quizzes.find((q) => q.id === mod.quizId);
+      if (found) return found;
+    }
+
+    // 4. Fallback search in defaultQuizzes if store array lost it
+    const defQuiz = defaultQuizzes.find(
+      (dq) => dq.id === id || dq.moduleId === id || (mod && (dq.id === mod.quizId || dq.moduleId === mod.id))
+    );
+    if (defQuiz) {
+      const restored = JSON.parse(JSON.stringify(defQuiz));
+      this.quizzes.push(restored);
+      this.saveQuizzes();
+      return restored;
+    }
+
+    return undefined;
   }
 
   public createQuiz(quiz: Omit<Quiz, 'id'>): Quiz {
@@ -1040,7 +1068,35 @@ class StoreService {
         }
       }
 
-      this.addLog('System Bot', `Module ${quiz.moduleId} validé par ${member.username} (Score: ${score}%)`, 'quiz', member.username, quiz.title);
+      const isModule5OrFinal = !nextMod || quiz.moduleId === 'module-5' || quiz.id === 'quiz-5' || (currentMod && currentMod.order === 5);
+
+      this.addLog(
+        member.username,
+        `[QUIZ_SUCCESS] Quiz validé : ${quiz.title} - Score: ${score}%`,
+        'quiz',
+        member.username,
+        quiz.title,
+        quiz.moduleId
+      );
+
+      if (isModule5OrFinal) {
+        this.addLog(
+          member.username,
+          `🏆 [PARCOURS_VALIDÉ_MODULE_5] Le candidat ${member.username} a réussi le Quiz du Module 5 ! Staff notifié sur Discord.`,
+          'quiz',
+          member.username,
+          quiz.title,
+          quiz.moduleId
+        );
+
+        if (typeof window === 'undefined') {
+          import('../bot/discordBot').then(({ pawakoBot }) => {
+            const totalQ = quiz.questions?.length || 20;
+            const finalPoints = Math.round((score / 100) * totalQ);
+            pawakoBot.notifyStaffModule5Completion(member, quiz.title, finalPoints, totalQ, quiz.minScore || 16).catch(() => {});
+          }).catch(() => {});
+        }
+      }
 
       // Sync new roles directly to Discord REST API
       const discordId = member.discordId || member.id;
@@ -1051,7 +1107,14 @@ class StoreService {
       }
     } else {
       member.progress[quiz.moduleId] = prog;
-      this.addLog('System Bot', `Échec au quiz ${quiz.title} pour ${member.username} (Score: ${score}%)`, 'quiz', member.username, quiz.title);
+      this.addLog(
+        member.username,
+        `[QUIZ_FAILED] Échec au quiz ${quiz.title} pour ${member.username} (Score: ${score}%)`,
+        'quiz',
+        member.username,
+        quiz.title,
+        quiz.moduleId
+      );
     }
 
     member.lastActiveAt = this.getFormattedNow();
@@ -1171,13 +1234,19 @@ class StoreService {
   /**
    * Randomly selects questions from quiz question bank & shuffles answer options
    */
-  public getRandomQuizQuestions(quizId: string, targetCount: number = 20): QuizQuestion[] {
+  public getRandomQuizQuestions(quizId: string, targetCount?: number): QuizQuestion[] {
     const quiz = this.getQuiz(quizId);
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
       return [];
     }
 
-    const count = quiz.sampleSize || targetCount || 20;
+    // Default target count is 20 questions randomly selected from bank (unless specified or sampleSize set)
+    const desiredCount = targetCount && targetCount > 0
+      ? targetCount
+      : (quiz.sampleSize && quiz.sampleSize > 0 ? quiz.sampleSize : 20);
+
+    const count = Math.min(desiredCount, quiz.questions.length);
+
     const bank = [...quiz.questions];
 
     // Fisher-Yates shuffle question bank
@@ -1186,22 +1255,24 @@ class StoreService {
       [bank[i], bank[j]] = [bank[j], bank[i]];
     }
 
-    // Select up to `count` questions
+    // Select up to `count` questions randomly from the bank (e.g. 20 out of 100)
     const selected = bank.slice(0, count);
 
-    // If bank is smaller than count, duplicate with variation to reach 20 questions
-    while (selected.length < count && bank.length > 0) {
-      const baseQ = bank[selected.length % bank.length];
-      selected.push({
-        ...baseQ,
-        id: `${baseQ.id}-variation-${selected.length}`,
-      });
+    // Only duplicate if sampleSize was explicitly set larger than bank length
+    if (quiz.sampleSize && quiz.sampleSize > bank.length) {
+      while (selected.length < quiz.sampleSize && bank.length > 0) {
+        const baseQ = bank[selected.length % bank.length];
+        selected.push({
+          ...baseQ,
+          id: `${baseQ.id}-variation-${selected.length}`,
+        });
+      }
     }
 
     // Shuffle options for each question & update correctAnswer index
     return selected.map((q, idx) => {
       const originalOptions = [...q.options];
-      const correctText = originalOptions[q.correctAnswer] || originalOptions[0];
+      const correctText = originalOptions[q.correctAnswer] ?? originalOptions[0];
 
       // Shuffle options
       const shuffledOptions = [...originalOptions];

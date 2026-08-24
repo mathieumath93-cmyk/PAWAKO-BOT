@@ -21,6 +21,7 @@ import {
 import { Quiz, QuizQuestion, TrainingModule } from '../types';
 import { onboardingService } from '../services/onboardingService';
 import { discordService } from '../services/discordService';
+import { store } from '../services/store';
 
 interface MemberJourneySimulatorProps {
   quizzes: Quiz[];
@@ -128,7 +129,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
 
   // Step 3 -> Step 4: Clic sur "Démarrer le Quiz"
   const handleStartQuiz = (moduleId: string) => {
-    const quizObj = quizzes.find((q) => q.moduleId === moduleId) || quizzes[0];
+    const quizObj = store.getQuiz(moduleId) || quizzes.find((q) => q.moduleId === moduleId || q.id === moduleId) || quizzes[0];
     if (!quizObj) {
       onShowToast('Erreur Quiz', 'Aucun quiz configuré pour ce module', 'info');
       return;

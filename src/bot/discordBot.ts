@@ -561,8 +561,14 @@ export class PawakoBotRunner {
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
             member.lastActiveAt = store.getFormattedNow();
 
-            const rawQuizId = customId.replace('launch_quiz_', '').replace('retry_quiz_', '').split('_')[0] || 'quiz-1';
-            const quiz = store.getQuiz(rawQuizId) || store.getQuizzes()[0];
+            const rawQuizId = customId.replace('launch_quiz_', '').replace('retry_quiz_', '');
+            let quiz = store.getQuiz(rawQuizId);
+            if (!quiz && member.currentModuleId) {
+              quiz = store.getQuiz(member.currentModuleId);
+            }
+            if (!quiz) {
+              quiz = store.getQuiz('quiz-1') || defaultQuizzes[0];
+            }
 
             // 3a. Cooldown Check
             if (member.cooldownUntilTimestamp && Date.now() < member.cooldownUntilTimestamp) {
@@ -599,29 +605,18 @@ export class PawakoBotRunner {
             }
 
             // 3c. Pull and shuffle questions from question bank
-            const sampleCount = quiz?.sampleSize || 20;
-            const bankQuestions = store.getRandomQuizQuestions(quiz?.id || 'quiz-1', sampleCount);
+            const sampleCount = (quiz?.sampleSize && quiz.sampleSize > 0) ? quiz.sampleSize : 20;
+            const shuffledQuestions = store.getRandomQuizQuestions(quiz?.id || 'quiz-1', sampleCount);
 
-            // Shuffle questions & choices
-            const shuffledQuestions: QuizQuestion[] = bankQuestions.map((q, idx) => {
-              const choices = [...q.options];
-              const originalCorrectChoice = choices[q.correctAnswer];
-              
-              // Fisher-Yates shuffle choices
-              for (let i = choices.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [choices[i], choices[j]] = [choices[j], choices[i]];
-              }
-
-              const newCorrectIndex = choices.indexOf(originalCorrectChoice);
-
-              return {
-                ...q,
-                id: `q-${idx}-${Date.now()}`,
-                options: choices,
-                correctAnswer: newCorrectIndex >= 0 ? newCorrectIndex : 0,
-              };
-            });
+            // Log activity: candidate launches quiz
+            store.addLog(
+              user.username,
+              `[QUIZ_START] A démarré le ${quiz.title} (${shuffledQuestions.length} questions tirées au sort)`,
+              'quiz',
+              user.username,
+              quiz.title,
+              quiz.moduleId
+            );
 
             // Create Quiz Attempt Session
             const attemptId = `att_${user.id}_${quiz.id}_${Date.now()}`;
@@ -761,6 +756,16 @@ export class PawakoBotRunner {
               });
 
               if (passed) {
+                // Log activity: Quiz success
+                store.addLog(
+                  user.username,
+                  `[QUIZ_SUCCESS] Quiz validé : ${quiz.title} - Score: ${finalScore}/${totalQuestions} (Minimum requis: ${minScore})`,
+                  'quiz',
+                  user.username,
+                  quiz.title,
+                  quiz.moduleId
+                );
+
                 // Mark module validated
                 const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
                 member.progress[quiz.moduleId] = {
@@ -775,6 +780,7 @@ export class PawakoBotRunner {
                 // Find next module in order
                 const currentMod = store.getModule(quiz.moduleId) || store.getModules()[0];
                 const nextMod = store.getModules().find((m) => m.order === (currentMod?.order || 1) + 1);
+                const isModule5OrFinal = !nextMod || quiz.moduleId === 'module-5' || quiz.id === 'quiz-5' || (currentMod && currentMod.order === 5);
 
                 if (nextMod) {
                   member.progress[nextMod.id] = {
@@ -827,6 +833,18 @@ export class PawakoBotRunner {
                     syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
                   }
                   discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
+                }
+
+                if (isModule5OrFinal) {
+                  store.addLog(
+                    user.username,
+                    `🏆 [PARCOURS_VALIDÉ_MODULE_5] Le candidat ${user.username} a réussi le Quiz du Module 5 ! Staff notifié sur Discord.`,
+                    'quiz',
+                    user.username,
+                    quiz.title,
+                    quiz.moduleId
+                  );
+                  this.notifyStaffModule5Completion(member, quiz.title, finalScore, totalQuestions, minScore).catch(() => {});
                 }
 
                 store.saveMembers();
@@ -900,7 +918,7 @@ export class PawakoBotRunner {
               return;
             }
 
-            const quiz = store.getQuiz(mod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === mod.id);
+            const quiz = store.getQuiz(mod.quizId || mod.id) || store.getQuiz(mod.id);
             const stepCfg = onboardingService.getStepConfigForModule(mod.id);
             const delayMins = quiz?.delayMinutesBeforeQuiz ?? stepCfg?.delayMinutesBeforeQuiz ?? 0;
 
@@ -1017,6 +1035,84 @@ export class PawakoBotRunner {
       return true;
     } catch (err: any) {
       console.warn(`[PawakoBot Reminder Send Warning] Channel ${channelId}:`, err?.message || err);
+      return false;
+    }
+  }
+
+  public async notifyStaffModule5Completion(
+    member: Member,
+    quizTitle: string,
+    score: number,
+    totalQuestions: number,
+    minScore: number
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const config = onboardingService.getConfig();
+      let staffChannel: any = null;
+
+      if (config.logChannelId && /^\d{17,20}$/.test(config.logChannelId)) {
+        staffChannel = await this.client.channels.fetch(config.logChannelId).catch(() => null);
+      }
+
+      if (!staffChannel && config.guildId) {
+        const guild = await this.client.guilds.fetch(config.guildId).catch(() => null);
+        if (guild) {
+          const channels = await guild.channels.fetch().catch(() => null);
+          if (channels) {
+            staffChannel = channels.find(
+              (c: any) =>
+                c &&
+                c.isTextBased() &&
+                (c.name.includes('staff') ||
+                  c.name.includes('formateur') ||
+                  c.name.includes('log') ||
+                  c.name.includes('equipe') ||
+                  c.name.includes('alert'))
+            );
+          }
+        }
+      }
+
+      const staffEmbed = new EmbedBuilder()
+        .setTitle('🏆 VALIDATION FINALE MODULE 5 — NOTIFICATION STAFF')
+        .setDescription(
+          `🎉 **Excellente nouvelle !** Le candidat <@${member.discordId}> (**${member.username}**) a validé avec succès le **Module 5 (${quizTitle})** !\n\n` +
+          `📊 **Résultats du Quiz Final :**\n` +
+          `• **Score obtenu :** **${score}/${totalQuestions}** (Minimum requis : ${minScore}/${totalQuestions})\n` +
+          `• **Statut :** **PARCOURS INTÉGRALEMENT TERMINÉ** 🏆\n` +
+          `• **Salon du candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé'}\n\n` +
+          `🔔 **Action requise :** Le staff est notifié afin d'effectuer la validation administrative et l'accueil officiel.`
+        )
+        .setColor(0x10b981)
+        .setThumbnail(member.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80')
+        .setFooter({ text: 'PAWAKO FORMATION • Notification Automatique Staff' })
+        .setTimestamp();
+
+      let sent = false;
+
+      if (staffChannel && 'send' in staffChannel) {
+        await (staffChannel as any).send({
+          content: '📢 **[ALERTE STAFF]** Un candidat vient de réussir le Module 5 et termine sa formation !',
+          embeds: [staffEmbed],
+        }).catch((e: any) => console.warn('[Staff Send Warning]', e));
+        sent = true;
+      }
+
+      if (member.personalChannelId) {
+        const candChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+        if (candChan && 'send' in candChan && candChan.id !== staffChannel?.id) {
+          await (candChan as any).send({
+            content: '📢 **[NOTIFICATION STAFF & CANDIDAT]** Validation finale du Module 5 transmise à l\'équipe de formation !',
+            embeds: [staffEmbed],
+          }).catch((e: any) => console.warn('[Cand Chan Staff Embed Warning]', e));
+          sent = true;
+        }
+      }
+
+      return sent;
+    } catch (err: any) {
+      console.warn('[Notify Staff Module 5 Error]', err?.message || err);
       return false;
     }
   }

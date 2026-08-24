@@ -118,7 +118,11 @@ class FirebaseSyncService {
       let sentSuccess = false;
       if (member.personalChannelId) {
         try {
-          const apiRes = await fetch('/api/discord/send-channel-embed', {
+          const baseUrl = typeof window !== 'undefined'
+            ? window.location.origin
+            : (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : 'http://127.0.0.1:3000');
+
+          const apiRes = await fetch(`${baseUrl}/api/discord/send-channel-embed`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -135,7 +139,8 @@ class FirebaseSyncService {
             }),
           });
           sentSuccess = apiRes.ok;
-        } catch {
+        } catch (err) {
+          console.warn('[Auto-Reminder Send Error]', err);
           sentSuccess = false;
         }
       }
@@ -242,9 +247,11 @@ class FirebaseSyncService {
         const loadedModules: TrainingModule[] = [];
         modulesSnap.forEach((doc) => loadedModules.push(doc.data() as TrainingModule));
         if (loadedModules.length > 0) {
-          loadedModules.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          store.setModules(loadedModules);
-        } else if (store.getModules().length === 0) {
+          const existingIds = new Set(loadedModules.map((m) => m.id));
+          const missingDefaults = defaultModules.filter((defM) => !existingIds.has(defM.id));
+          const mergedMods = [...loadedModules, ...missingDefaults].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          store.setModules(mergedMods);
+        } else {
           store.setModules(defaultModules);
         }
       } catch (modErr) {
@@ -257,8 +264,11 @@ class FirebaseSyncService {
         const loadedQuizzes: Quiz[] = [];
         quizSnap.forEach((doc) => loadedQuizzes.push(doc.data() as Quiz));
         if (loadedQuizzes.length > 0) {
-          store.setQuizzes(loadedQuizzes);
-        } else if (store.getQuizzes().length === 0) {
+          const existingQIds = new Set(loadedQuizzes.map((q) => q.id));
+          const missingQuizzes = defaultQuizzes.filter((defQ) => !existingQIds.has(defQ.id));
+          const mergedQuizzes = [...loadedQuizzes, ...missingQuizzes];
+          store.setQuizzes(mergedQuizzes);
+        } else {
           store.setQuizzes(defaultQuizzes);
         }
       } catch (quizErr) {

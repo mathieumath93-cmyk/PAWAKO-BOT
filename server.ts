@@ -450,18 +450,7 @@ async function startServer() {
 
   // --- SEND EMBED/MESSAGE STRICT DISCORD PUBLICATION ---
   app.post('/api/discord/send-channel-embed', async (req: Request, res: Response) => {
-    const token = getBotTokenOrError(req, res);
-    if (!token) return;
-
     const { guildId, channelId, embed, content, components } = req.body;
-
-    if (!guildId || !/^\d{17,20}$/.test(guildId)) {
-      return res.status(400).json({
-        success: false,
-        discordStatus: 400,
-        error: 'guildId Discord obligatoire et doit être un identifiant snowflake réel.'
-      });
-    }
 
     if (!channelId || !/^\d{17,20}$/.test(channelId)) {
       return res.status(400).json({
@@ -471,8 +460,41 @@ async function startServer() {
       });
     }
 
+    // Fast-path: attempt direct send via PawakoBot instance if connected
+    if (pawakoBot && pawakoBot.getIsConnected()) {
+      try {
+        const client = pawakoBot.getClient();
+        if (client) {
+          const chan = await client.channels.fetch(channelId).catch(() => null);
+          if (chan && 'send' in chan) {
+            const sendOptions: any = {};
+            if (content) sendOptions.content = content;
+            if (embed) sendOptions.embeds = [embed];
+            if (components) sendOptions.components = components;
+
+            const sentMsg = await (chan as any).send(sendOptions);
+            store.addLog(
+              'Discord Bot Direct',
+              `[ACTION_SUCCESS] Message/Embed publié directement via le bot dans le salon ${channelId} - Message ID: ${sentMsg.id}`,
+              'module'
+            );
+            return res.status(201).json({
+              success: true,
+              messageId: sentMsg.id,
+              channelId: chan.id,
+            });
+          }
+        }
+      } catch (botErr: any) {
+        console.warn('[Server Bot Direct Send Fallback to REST]', botErr?.message || botErr);
+      }
+    }
+
+    const token = getBotTokenOrError(req, res);
+    if (!token) return;
+
     try {
-      // 1. Pre-flight check channel
+      // 1. Pre-flight check channel via REST API
       const chanRes = await fetchDiscordWithRetry(`https://discord.com/api/v10/channels/${channelId}`, {
         headers: { Authorization: `Bot ${token}` },
       });
@@ -491,7 +513,8 @@ async function startServer() {
 
       const chanData = await chanRes.json();
 
-      if (chanData.guild_id && chanData.guild_id !== guildId) {
+      // Only check guildId if explicitly provided as a valid snowflake
+      if (guildId && /^\d{17,20}$/.test(guildId) && chanData.guild_id && chanData.guild_id !== guildId) {
         return res.status(400).json({
           success: false,
           discordStatus: 400,
@@ -562,6 +585,17 @@ async function startServer() {
         discordStatus: 500,
         error: `Erreur serveur: ${err.message}`
       });
+    }
+  });
+
+  // --- MANUAL / AUTOMATED REMINDER WORKER RUN ---
+  app.post('/api/discord/check-reminders', async (req: Request, res: Response) => {
+    try {
+      const result = await firebaseSyncService.checkAndApplyAutoReminders();
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.warn('[Check Reminders Route Error]', err);
+      res.status(500).json({ success: false, error: err?.message || 'Error running auto-reminders' });
     }
   });
 

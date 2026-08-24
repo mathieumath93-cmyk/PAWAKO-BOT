@@ -94,6 +94,84 @@ function getQuizMinScoreRequired(quiz: Quiz | undefined, totalQuestions: number 
   return val;
 }
 
+function getMemberAccessStatusFormatted(member: Member): string {
+  const modules = store.getModules();
+  const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
+
+  if (modules.length > 0 && validatedCount >= modules.length) {
+    return '🎓 **Parcours entièrement validé !** Félicitations, tu as terminé avec succès l\'ensemble des modules.';
+  }
+
+  const now = Date.now();
+
+  // Cooldown Active
+  if (member.cooldownUntilTimestamp && now < member.cooldownUntilTimestamp) {
+    const remainingMs = member.cooldownUntilTimestamp - now;
+    const mins = Math.floor(remainingMs / 60000);
+    const secs = Math.floor((remainingMs % 60000) / 1000);
+    const tsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
+    return `⏳ **Cooldown Échec Quiz actif**\n*Prochaine tentative autorisée <t:${tsSec}:R> (dans ${mins}m ${secs}s)*`;
+  }
+
+  // Quiz Delay Active
+  if (member.currentQuizAvailableAtTimestamp && now < member.currentQuizAvailableAtTimestamp) {
+    const remainingMs = member.currentQuizAvailableAtTimestamp - now;
+    const mins = Math.floor(remainingMs / 60000);
+    const secs = Math.floor((remainingMs % 60000) / 1000);
+    const tsSec = Math.floor(member.currentQuizAvailableAtTimestamp / 1000);
+    return `🔒 **Module en cours de lecture**\n*Quiz débloqué <t:${tsSec}:R> (dans ${mins}m ${secs}s)*`;
+  }
+
+  // Current Unvalidated Module
+  let currentModTitle = 'Module';
+  if (modules.length > 0) {
+    const nextUnvalidated = modules.find((mod) => member.progress?.[mod.id]?.status !== 'valide');
+    if (nextUnvalidated) {
+      currentModTitle = nextUnvalidated.title;
+    } else {
+      currentModTitle = modules[0].title;
+    }
+  }
+
+  if (member.candidateState === 'nouveau' || !member.candidateState) {
+    return `📚 **Non démarré** — Rends-toi dans ton salon privé pour lancer ton parcours.`;
+  }
+
+  return `🟢 **Libre !** Tu peux lancer le quiz du **${currentModTitle}** dès maintenant.`;
+}
+
+function buildQuizButton(member: Member, quiz: Quiz | undefined, defaultTitle: string): ButtonBuilder {
+  const quizId = quiz?.id || 'quiz-1';
+  const now = Date.now();
+
+  if (member.cooldownUntilTimestamp && now < member.cooldownUntilTimestamp) {
+    const remainingMs = member.cooldownUntilTimestamp - now;
+    const mins = Math.floor(remainingMs / 60000);
+    const secs = Math.floor((remainingMs % 60000) / 1000);
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    return new ButtonBuilder()
+      .setCustomId(`launch_quiz_${quizId}`)
+      .setLabel(`⏳ Cooldown (${timeStr})`)
+      .setStyle(ButtonStyle.Danger);
+  }
+
+  if (member.currentQuizAvailableAtTimestamp && now < member.currentQuizAvailableAtTimestamp) {
+    const remainingMs = member.currentQuizAvailableAtTimestamp - now;
+    const mins = Math.floor(remainingMs / 60000);
+    const secs = Math.floor((remainingMs % 60000) / 1000);
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    return new ButtonBuilder()
+      .setCustomId(`launch_quiz_${quizId}`)
+      .setLabel(`🔒 Quiz bloqué (${timeStr})`)
+      .setStyle(ButtonStyle.Secondary);
+  }
+
+  return new ButtonBuilder()
+    .setCustomId(`launch_quiz_${quizId}`)
+    .setLabel(`📝 Lancer le Quiz (${quiz?.title || defaultTitle})`)
+    .setStyle(ButtonStyle.Success);
+}
+
 export class PawakoBotRunner {
   private client: Client | null = null;
   private isConnected: boolean = false;
@@ -228,13 +306,7 @@ export class PawakoBotRunner {
           const modules = store.getModules();
           const validatedCount = Object.values(m.progress || {}).filter((p: any) => p.status === 'valide').length;
 
-          let cooldownNoticeFriendly = '🟢 **Libre !** Tu peux lancer ton prochain quiz dès maintenant.';
-          if (m.cooldownUntilTimestamp && Date.now() < m.cooldownUntilTimestamp) {
-            const remainingMs = m.cooldownUntilTimestamp - Date.now();
-            const mins = Math.floor(remainingMs / 60000);
-            const secs = Math.floor((remainingMs % 60000) / 1000);
-            cooldownNoticeFriendly = `⏳ **En attente** (Délai d'attente actif : ${mins}m ${secs}s restantes avant la prochaine tentative)`;
-          }
+          const cooldownNoticeFriendly = getMemberAccessStatusFormatted(m);
 
           const memberAttempts = store.getQuizAttemptsForMember(m.id);
           let quizResultsFormatted = 'Aucun quiz effectué pour le moment.';
@@ -561,10 +633,7 @@ export class PawakoBotRunner {
               );
             }
             actionButtons.push(
-              new ButtonBuilder()
-                .setCustomId(`launch_quiz_${quiz1?.id || ''}`)
-                .setLabel(`📝 Lancer le Quiz (${quiz1?.title || mod1.title})`)
-                .setStyle(ButtonStyle.Success),
+              buildQuizButton(member, quiz1, mod1.title),
               new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
             );
 
@@ -600,13 +669,7 @@ export class PawakoBotRunner {
             const modules = store.getModules();
             const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
 
-            let cooldownNoticeFriendly = '🟢 **Libre !** Tu peux lancer ton prochain quiz dès maintenant.';
-            if (member.cooldownUntilTimestamp && Date.now() < member.cooldownUntilTimestamp) {
-              const remainingMs = member.cooldownUntilTimestamp - Date.now();
-              const mins = Math.floor(remainingMs / 60000);
-              const secs = Math.floor((remainingMs % 60000) / 1000);
-              cooldownNoticeFriendly = `⏳ **En attente** (Délai d'attente actif : ${mins}m ${secs}s restantes avant la prochaine tentative)`;
-            }
+            const cooldownNoticeFriendly = getMemberAccessStatusFormatted(member);
 
             const isStaffViewer = user.id !== member.discordId && user.id !== member.id.replace('mem-', '');
 
@@ -673,16 +736,22 @@ export class PawakoBotRunner {
               const remainingMs = member.cooldownUntilTimestamp - Date.now();
               const mins = Math.floor(remainingMs / 60000);
               const secs = Math.floor((remainingMs % 60000) / 1000);
+              const tsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
 
               const requiredMin = getQuizMinScoreRequired(quiz, 20);
               const cooldownEmbed = new EmbedBuilder()
                 .setTitle('❌ Quiz Indisponible - Cooldown Actif')
-                .setDescription(`Tu n'as pas obtenu le score nécessaire (minimum **${requiredMin}/20**) lors de ton dernier essai.\n\nTu pourras retenter ce quiz dans :`)
-                .addFields({ name: '⏳ Temps d\'attente restant', value: `**${mins} minutes ${secs} secondes**` })
+                .setDescription(`Tu n'as pas obtenu le score nécessaire (minimum **${requiredMin}/20**) lors de ton dernier essai.\n\nTu pourras retenter ce quiz <t:${tsSec}:R> (dans **${mins} minute(s) ${secs} seconde(s)**).`)
+                .addFields({ name: '⏳ Déblocage Automatique', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
                 .setColor(0xef4444)
                 .setFooter({ text: 'PAWAKO FORMATION • Système de Cooldown Serveur' });
 
-              await interaction.editReply({ embeds: [cooldownEmbed] });
+              const cooldownRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
+                new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+              );
+
+              await interaction.editReply({ embeds: [cooldownEmbed], components: [cooldownRow] });
               return;
             }
 
@@ -691,15 +760,21 @@ export class PawakoBotRunner {
               const remainingMs = member.currentQuizAvailableAtTimestamp - Date.now();
               const mins = Math.floor(remainingMs / 60000);
               const secs = Math.floor((remainingMs % 60000) / 1000);
+              const tsSec = Math.floor(member.currentQuizAvailableAtTimestamp / 1000);
 
               const delayEmbed = new EmbedBuilder()
                 .setTitle('⏳ Quiz en Préparation')
-                .setDescription(`Le quiz **${quiz?.title}** n'est pas encore débloqué.\n\nIl sera disponible dans :`)
-                .addFields({ name: '⏱️ Temps restant', value: `**${mins} minutes ${secs} secondes**` })
+                .setDescription(`Le quiz **${quiz?.title}** n'est pas encore débloqué.\n\nIl sera disponible <t:${tsSec}:R> (dans **${mins} minute(s) ${secs} seconde(s)**). N'hésite pas à relire les supports de cours.`)
+                .addFields({ name: '⏱️ Déblocage Automatique', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
                 .setColor(0xf59e0b)
-                .setFooter({ text: 'PAWAKO FORMATION • Veuillez lire le support de formation' });
+                .setFooter({ text: 'PAWAKO FORMATION • Temps de lecture recommandé' });
 
-              await interaction.editReply({ embeds: [delayEmbed] });
+              const delayRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
+                new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+              );
+
+              await interaction.editReply({ embeds: [delayEmbed], components: [delayRow] });
               return;
             }
 
@@ -986,19 +1061,21 @@ export class PawakoBotRunner {
                 store.saveMembers();
                 firebaseSyncService.saveMember(member).catch(() => {});
 
+                const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
                 const failEmbed = new EmbedBuilder()
                   .setTitle(`❌ QUIZ NON VALIDÉ (${finalScore}/${totalQuestions})`)
                   .setDescription(
                     `Score obtenu : **${finalScore}/${totalQuestions}**\nScore minimum requis : **${minScore}/${totalQuestions}**.\n\n` +
-                    `⏳ Un cooldown de **${cooldownMins} minutes** a été activé. Tu pourras retenter ce quiz à l'issue de ce délai.\n` +
+                    `⏳ Un cooldown de **${cooldownMins} minutes** est activé.\nTu pourras retenter ce quiz <t:${cooldownTsSec}:R> (dans **${cooldownMins} minutes**).\n` +
                     `Prends le temps de relire les fiches de formation avant ta prochaine tentative.`
                   )
+                  .addFields({ name: '⏱️ Déblocage du Quiz', value: `<t:${cooldownTsSec}:R>` })
                   .setColor(0xef4444)
                   .setFooter({ text: 'PAWAKO FORMATION • Révision Requise' })
                   .setTimestamp();
 
                 const failRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                  new ButtonBuilder().setCustomId(`retry_quiz_${quiz.id}`).setLabel('🔄 Retenter le Quiz').setStyle(ButtonStyle.Danger),
+                  buildQuizButton(member, quiz, quiz.title),
                   new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
                 );
 
@@ -1067,10 +1144,7 @@ export class PawakoBotRunner {
               );
             }
             actionButtons.push(
-              new ButtonBuilder()
-                .setCustomId(`launch_quiz_${quiz?.id || 'quiz-1'}`)
-                .setLabel(`📝 Lancer le Quiz (${quiz?.title || mod.title})`)
-                .setStyle(ButtonStyle.Success),
+              buildQuizButton(member, quiz, mod.title),
               new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
             );
 

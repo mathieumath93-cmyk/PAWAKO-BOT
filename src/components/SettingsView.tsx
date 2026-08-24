@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send, Trash2, RefreshCw } from 'lucide-react';
+import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send, Trash2, RefreshCw, Zap } from 'lucide-react';
 import { discordService } from '../services/discordService';
+import { onboardingService } from '../services/onboardingService';
 
 interface SettingsViewProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
@@ -8,6 +9,21 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
   const currentConfig = discordService.getConfig();
+  const onboardingCfg = onboardingService.getConfig();
+
+  const defaultSarcastic = [
+    "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
+    "⚡ *Alerte mitraillage ! À ce rythme-là, tu vas démonter ton mulot avant d'avoir atteint le Module 2.*",
+    "☕ *Oula, mollo le ninja du mulot ! Prends une grande inspiration et un café, les données restent bien au chaud.*",
+    "🎯 *Quelle cadence de clics phénoménale ! Dommage que ça ne donne aucun point bonus pour valider le quiz.*",
+    "🛑 *Keep calm ! Cliquer 50 fois la seconde ne va pas débloquer la suite plus vite, promis juré !*"
+  ];
+
+  const [sarcasticMessagesText, setSarcasticMessagesText] = useState<string>(
+    (onboardingCfg.sarcasticSpamMessages && onboardingCfg.sarcasticSpamMessages.length > 0
+      ? onboardingCfg.sarcasticSpamMessages
+      : defaultSarcastic).join('\n')
+  );
 
   const [botName, setBotName] = useState(currentConfig.botName);
   const [botAvatarUrl, setBotAvatarUrl] = useState(currentConfig.botAvatarUrl);
@@ -93,7 +109,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
       clientSecret,
       webhookUrl,
     });
-    onShowToast('Paramètres Enregistrés', 'La configuration du bot a été enregistrée et synchronisée.', 'success');
+
+    const lines = sarcasticMessagesText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    onboardingService.updateConfig({
+      sarcasticSpamMessages: lines,
+    });
+
+    onShowToast('Paramètres Enregistrés', 'La configuration du bot et les répliques anti-spam ont été synchronisées.', 'success');
   };
 
   return (
@@ -244,6 +269,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
               )}
             </button>
           </div>
+        </div>
+
+        {/* Sarcastic Anti-Spam Bot Messages */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Messages Sarcastiques Bot Anti-Spam (1 ligne par réplique)
+              </h2>
+            </div>
+            <span className="text-[11px] text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 font-mono">
+              Déclenché à +3 clics en 3s
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Saisissez ou modifiez les répliques sarcastiques (1 message par ligne) que le bot enverra aléatoirement en réponse privée lorsqu'un membre mitraille les boutons :
+          </p>
+
+          <textarea
+            rows={5}
+            value={sarcasticMessagesText}
+            onChange={(e) => setSarcasticMessagesText(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-amber-300 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+            placeholder="Une réplique par ligne..."
+          />
         </div>
 
         {/* Submit */}

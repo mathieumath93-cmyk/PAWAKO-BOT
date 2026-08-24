@@ -1367,9 +1367,33 @@ ${statusText}
     const member = this.getMember(memberId);
     if (!member) throw new Error('Membre non trouvé');
     member.cooldownUntilTimestamp = null;
+    member.currentQuizAvailableAtTimestamp = null;
     member.candidateState = 'quiz_disponible';
     this.saveMembers();
     this.addLog('Anthony (Admin)', `Réinitialisation du cooldown pour ${member.username}`, 'member', member.username);
+    return member;
+  }
+
+  /**
+   * Reset current module state and cooldown for candidate
+   */
+  public resetCandidateCurrentModule(memberId: string): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+    member.cooldownUntilTimestamp = null;
+    member.currentQuizAvailableAtTimestamp = null;
+    member.candidateState = 'module_en_cours';
+
+    const curModId = member.currentModuleId || this.modules[0]?.id || '';
+    if (curModId && member.progress[curModId]) {
+      member.progress[curModId].attemptsCount = 0;
+      member.progress[curModId].status = 'en_cours';
+      member.progress[curModId].score = 0;
+      member.progress[curModId].quizPassed = false;
+    }
+
+    this.saveMembers();
+    this.addLog('Anthony (Admin)', `Réinitialisation du module en cours pour ${member.username}`, 'member', member.username);
     return member;
   }
 

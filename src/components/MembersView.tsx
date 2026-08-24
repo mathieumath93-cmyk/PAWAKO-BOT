@@ -285,19 +285,33 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     {/* Actions */}
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {member.cooldownUntilTimestamp && member.cooldownUntilTimestamp > Date.now() && (
-                          <button
-                            onClick={() => {
-                              memberService.resetCooldown(member.id);
+                        <button
+                          onClick={() => {
+                            memberService.resetCooldown(member.id);
+                            onRefresh();
+                            onShowToast('⚡ Cooldown Annulé', `Le candidat ${member.username} peut repasser son quiz immédiatement.`, 'success');
+                          }}
+                          className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-medium text-[10px] border border-amber-500/30 transition-colors flex items-center gap-1"
+                          title="Levée immédiate du cooldown & déblocage du quiz"
+                        >
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          <span>Annuler Cooldown</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (confirm(`Réinitialiser le module en cours pour ${member.username} ?`)) {
+                              memberService.resetCurrentModule(member.id);
                               onRefresh();
-                              onShowToast('Cooldown Réinitialisé', `Pour ${member.username}`, 'success');
-                            }}
-                            className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-medium text-[10px] border border-amber-500/30 transition-colors"
-                            title="Levée immédiate du cooldown"
-                          >
-                            🔓 Lever Cooldown
-                          </button>
-                        )}
+                              onShowToast('🔄 Module Réinitialisé', `Les tentatives du module en cours pour ${member.username} ont été réinitialisées.`, 'success');
+                            }
+                          }}
+                          className="px-2 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 font-medium text-[10px] border border-emerald-500/30 transition-colors flex items-center gap-1"
+                          title="Réinitialiser le module actuel et autoriser un nouvel essai"
+                        >
+                          <RefreshCw className="w-3 h-3 text-emerald-400" />
+                          <span>Reset Module</span>
+                        </button>
 
                         <button
                           onClick={() => {
@@ -311,13 +325,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
                           className="px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 font-medium text-[10px] border border-indigo-500/30 transition-colors"
                           title="Forcer un module"
                         >
-                          ⏩ Forcer Module
+                          ⏩ Forcer
                         </button>
 
                         <button
                           onClick={() => handleResetProgress(member.id, member.username)}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 transition-colors"
-                          title="Réinitialiser la progression"
+                          title="Réinitialiser TOUTE la progression"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                         </button>

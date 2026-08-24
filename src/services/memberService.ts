@@ -92,6 +92,14 @@ class MemberService {
     return updated;
   }
 
+  public resetCurrentModule(memberId: string): Member {
+    const updated = store.resetCandidateCurrentModule(memberId);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    return updated;
+  }
+
   public forceModule(memberId: string, moduleId: string): Member {
     const updated = store.forceCandidateModule(memberId, moduleId);
     firebaseSyncService.saveMember(updated).catch((err) =>

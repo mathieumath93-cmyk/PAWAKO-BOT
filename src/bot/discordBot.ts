@@ -717,6 +717,89 @@ export class PawakoBotRunner {
             return;
           }
 
+          // --- 2b. STAFF ALERT INTERACTIONS ---
+          if (customId.startsWith('staff_reset_cooldown_')) {
+            const targetId = customId.replace('staff_reset_cooldown_', '');
+            const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId);
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            store.resetCandidateCooldown(member.id);
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            if (member.personalChannelId) {
+              try {
+                const chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+                if (chan && 'send' in chan) {
+                  const mod = store.getModule(member.currentModuleId || '') || store.getModules()[0];
+                  const quiz = store.getQuiz(mod?.quizId || mod?.id || '');
+                  const notifyEmbed = new EmbedBuilder()
+                    .setTitle('🔓 COOLDOWN ANNULÉ PAR LE STAFF')
+                    .setDescription(`Un formateur de l'équipe (<@${user.id}>) vient d'annuler ton délai d'attente !\nTu peux repasser ton quiz **immédiatement**.`)
+                    .setColor(0x10b981)
+                    .setFooter({ text: 'PAWAKO FORMATION • Déblocage Rapide Staff' });
+
+                  const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    buildQuizButton(member, quiz, mod?.title || 'Quiz'),
+                    new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+                  );
+
+                  await (chan as any).send({
+                    content: `🔓 <@${member.discordId || member.id.replace('mem-', '')}>`,
+                    embeds: [notifyEmbed],
+                    components: [retryRow],
+                  }).catch(() => {});
+                }
+              } catch (e) {}
+            }
+
+            await interaction.editReply({
+              content: `✅ **Cooldown immédiatement levé pour <@${member.discordId || member.id.replace('mem-', '')}> !**\nLe candidat a été notifié dans son salon privé.`
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_encourage_member_')) {
+            const targetId = customId.replace('staff_encourage_member_', '');
+            const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId);
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            if (member.personalChannelId) {
+              try {
+                const chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+                if (chan && 'send' in chan) {
+                  const encourageEmbed = new EmbedBuilder()
+                    .setTitle('💬 MESSAGE D\'AIDE DE L\'ÉQUIPE STAFF')
+                    .setDescription(
+                      `Bonjour <@${member.discordId || member.id.replace('mem-', '')}> !\n\n` +
+                      `Un formateur du Staff (<@${user.id}>) a remarqué que tu rencontrais des difficultés sur ton module actuel.\n\n` +
+                      `💪 **Pas de panique !** L'équipe est là pour t'accompagner. N'hésite pas à poser tes questions directement ici pour débloquer la situation.`
+                    )
+                    .setColor(0x3b82f6)
+                    .setFooter({ text: 'PAWAKO FORMATION • Support Candidat' })
+                    .setTimestamp();
+
+                  await (chan as any).send({
+                    content: `💬 <@${member.discordId || member.id.replace('mem-', '')}>`,
+                    embeds: [encourageEmbed],
+                  }).catch(() => {});
+                }
+              } catch (e) {}
+            }
+
+            await interaction.editReply({
+              content: `💬 **Message d'aide et d'encouragement envoyé avec succès dans le salon privé de <@${member.discordId || member.id.replace('mem-', '')}> !**`
+            });
+            return;
+          }
+
           // --- 3. LAUNCH OR RETRY QUIZ ---
           if (customId.startsWith('launch_quiz') || customId.startsWith('retry_quiz')) {
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
@@ -1051,15 +1134,28 @@ export class PawakoBotRunner {
                 member.candidateState = 'cooldown_actif';
 
                 const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
+                const newAttempts = prevAttempts + 1;
                 member.progress[quiz.moduleId] = {
                   ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
-                  attemptsCount: prevAttempts + 1,
+                  attemptsCount: newAttempts,
                   score: finalScore,
                   quizPassed: false,
                 };
 
                 store.saveMembers();
                 firebaseSyncService.saveMember(member).catch(() => {});
+
+                // Trigger Staff Alert if candidate fails 2 or more times in a row
+                if (newAttempts >= 2) {
+                  this.sendStaffAlert(
+                    member,
+                    quiz.title,
+                    finalScore,
+                    totalQuestions,
+                    newAttempts,
+                    'consecutive_failures'
+                  ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
+                }
 
                 const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
                 const failEmbed = new EmbedBuilder()
@@ -1287,6 +1383,113 @@ export class PawakoBotRunner {
       return sent;
     } catch (err: any) {
       console.warn('[Notify Staff Module 5 Error]', err?.message || err);
+      return false;
+    }
+  }
+
+  /**
+   * Send Staff Alert for candidate in difficulty (e.g. 2-3 consecutive fails or stuck > 48h)
+   * Auto-creates #staff-alerts channel on Discord if it doesn't exist yet!
+   */
+  public async sendStaffAlert(
+    member: Member,
+    quizTitle: string,
+    score: number,
+    totalQuestions: number,
+    attemptsCount: number,
+    reasonType: 'consecutive_failures' | 'stuck_48h'
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const config = onboardingService.getConfig();
+      let staffChannel: TextChannel | null = null;
+
+      if (config.logChannelId && /^\d{17,20}$/.test(config.logChannelId)) {
+        staffChannel = (await this.client.channels.fetch(config.logChannelId).catch(() => null)) as TextChannel | null;
+      }
+
+      const guildId = config.guildId || this.client.guilds.cache.first()?.id;
+      let guild: any = null;
+      if (guildId) {
+        guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      }
+      if (!guild && this.client.guilds.cache.size > 0) {
+        guild = this.client.guilds.cache.first();
+      }
+
+      if (guild) {
+        if (!staffChannel) {
+          const channels = await guild.channels.fetch().catch(() => null);
+          if (channels) {
+            staffChannel = channels.find(
+              (c: any) =>
+                c &&
+                c.isTextBased() &&
+                (c.name.includes('staff-alert') ||
+                  c.name.includes('alertes-staff') ||
+                  c.name.includes('alerts-staff') ||
+                  c.name.includes('staff-alerts') ||
+                  c.name.includes('alert') ||
+                  c.name.includes('staff'))
+            ) as TextChannel | null;
+          }
+        }
+
+        // Auto-create #staff-alerts channel if it does not exist on Discord!
+        if (!staffChannel && guild) {
+          try {
+            staffChannel = (await guild.channels.create({
+              name: 'staff-alerts',
+              type: ChannelType.GuildText,
+              topic: '🚨 Alertes Automatiques — Candidats en difficulté sur l\'onboarding PAWAKO',
+            })) as TextChannel;
+            console.log('[PawakoBot] Salon #staff-alerts créé avec succès sur Discord.');
+          } catch (createErr) {
+            console.warn('[PawakoBot] Erreur création auto salon #staff-alerts:', createErr);
+          }
+        }
+      }
+
+      if (!staffChannel) return false;
+
+      const minScore = Math.round(totalQuestions * 0.8);
+      const isFailures = reasonType === 'consecutive_failures';
+
+      const alertEmbed = new EmbedBuilder()
+        .setTitle('🚨 ALERTE STAFF — CANDIDAT EN DIFFICULTÉ')
+        .setDescription(
+          `👤 **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n` +
+          `📚 **Module / Quiz :** **${quizTitle}**\n` +
+          `📍 **Salon privé du candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé'}\n\n` +
+          (isFailures
+            ? `⚠️ **Raison :** **${attemptsCount} échecs consécutifs** au quiz !\n` +
+              `📊 **Dernier score :** **${score}/${totalQuestions}** (Minimum requis : ${minScore}/${totalQuestions})`
+            : `⏱️ **Raison :** Inactif ou bloqué depuis **plus de 48 heures** sans valider le module.`)
+        )
+        .setColor(0xef4444)
+        .setFooter({ text: 'PAWAKO FORMATION • Notification Automatique Staff' })
+        .setTimestamp();
+
+      const alertRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_reset_cooldown_${member.id}`)
+          .setLabel('🔓 Accorder une tentative (Reset Cooldown)')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`staff_encourage_member_${member.id}`)
+          .setLabel('💬 Message de Soutien')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await staffChannel.send({
+        content: `🚨 **[ALERTE STAFF]** <@${member.discordId || member.id.replace('mem-', '')}> nécessite une assistance sur **${quizTitle}** !`,
+        embeds: [alertEmbed],
+        components: [alertRow],
+      }).catch((e) => console.warn('[Send Staff Alert Error]', e));
+
+      return true;
+    } catch (err) {
+      console.error('[PawakoBot] sendStaffAlert Exception:', err);
       return false;
     }
   }

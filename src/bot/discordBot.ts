@@ -28,6 +28,9 @@ export interface ActiveQuizSession {
   userAnswers: number[];
   score: number;
   startedAt: number;
+  questionTimer?: NodeJS.Timeout;
+  messageId?: string;
+  channelId?: string;
 }
 
 function formatMemberRolesDisplay(roles: string[] = []): string {
@@ -892,33 +895,12 @@ export class PawakoBotRunner {
 
             this.activeQuizSessions.set(attemptId, session);
 
-            // Display Question 1 / Total
-            const q1 = shuffledQuestions[0];
-            const requiredMinScore = getQuizMinScoreRequired(quiz, shuffledQuestions.length);
-            const qEmbed = new EmbedBuilder()
-              .setTitle(`📝 ${quiz.title} — Question 1 / ${shuffledQuestions.length}`)
-              .setDescription(`<@${user.id}>\n\n**${q1.text}**`)
-              .setColor(0x6366f1)
-              .setFooter({ text: `PAWAKO FORMATION • Score Minimum Requis : ${requiredMinScore}/${shuffledQuestions.length}` });
-
-            const optionRow = new ActionRowBuilder<ButtonBuilder>();
-            const optionLabels = ['A', 'B', 'C', 'D', 'E'];
-
-            q1.options.forEach((optText, optIdx) => {
-              const labelPrefix = optionLabels[optIdx] || `${optIdx + 1}`;
-              optionRow.addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`qa:${attemptId}:0:${optIdx}`)
-                  .setLabel(`${labelPrefix}. ${optText.slice(0, 70)}`)
-                  .setStyle(ButtonStyle.Primary)
-              );
-            });
-
-            await interaction.editReply({ embeds: [qEmbed], components: [optionRow] });
+            // Display Question 1 with 15-second per-question timer
+            await this.renderQuizQuestion(session, interaction);
             return;
           }
 
-          // --- 4. ANSWER QUIZ QUESTION (ONE AT A TIME) ---
+          // --- 4. ANSWER QUIZ QUESTION (ONE AT A TIME WITH 15S TIMER) ---
           if (customId.startsWith('qa:')) {
             const parts = customId.split(':');
             const attemptId = parts[1];
@@ -932,6 +914,12 @@ export class PawakoBotRunner {
                 content: '⚠️ Cette session de quiz n\'existe plus ou a expiré. Veuillez relancer le quiz.',
               }).catch(() => {});
               return;
+            }
+
+            // Clear active 15s question timer since candidate answered
+            if (session.questionTimer) {
+              clearTimeout(session.questionTimer);
+              session.questionTimer = undefined;
             }
 
             // Security check: candidate user ID match
@@ -960,225 +948,9 @@ export class PawakoBotRunner {
 
             session.currentIndex += 1;
 
-            // Render next question OR complete quiz
-            if (session.currentIndex < session.questions.length) {
-              const nextIndex = session.currentIndex;
-              const nextQ = session.questions[nextIndex];
-
-              const qEmbed = new EmbedBuilder()
-                .setTitle(`📝 ${session.quizTitle} — Question ${nextIndex + 1} / ${session.questions.length}`)
-                .setDescription(`<@${user.id}>\n\n**${nextQ.text}**`)
-                .setColor(0x6366f1)
-                .setFooter({ text: `PAWAKO FORMATION • Question ${nextIndex + 1} sur ${session.questions.length}` });
-
-              const optionRow = new ActionRowBuilder<ButtonBuilder>();
-              const optionLabels = ['A', 'B', 'C', 'D', 'E'];
-
-              nextQ.options.forEach((optText, optIdx) => {
-                const labelPrefix = optionLabels[optIdx] || `${optIdx + 1}`;
-                optionRow.addComponents(
-                  new ButtonBuilder()
-                    .setCustomId(`qa:${attemptId}:${nextIndex}:${optIdx}`)
-                    .setLabel(`${labelPrefix}. ${optText.slice(0, 70)}`)
-                    .setStyle(ButtonStyle.Primary)
-                );
-              });
-
-              await interaction.editReply({ embeds: [qEmbed], components: [optionRow] });
-              return;
-            } else {
-              // --- QUIZ COMPLETED ---
-              const finalScore = session.score;
-              const totalQuestions = session.questions.length;
-              const quiz = store.getQuiz(session.quizId) || store.getQuizzes()[0];
-              const minScore = getQuizMinScoreRequired(quiz, totalQuestions);
-              const passed = finalScore >= minScore;
-
-              this.activeQuizSessions.delete(attemptId);
-
-              const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
-              member.lastActiveAt = store.getFormattedNow();
-
-              // Record attempt in store
-              store.addQuizAttempt({
-                id: `att-${Date.now()}`,
-                quizId: quiz.id,
-                quizTitle: quiz.title,
-                memberId: member.id,
-                memberName: member.username,
-                score: finalScore,
-                passed,
-                answers: session.userAnswers,
-                date: store.getFormattedNow(),
-                attemptNumber: (member.progress[quiz.moduleId]?.attemptsCount || 0) + 1,
-              });
-
-              if (passed) {
-                // Log activity: Quiz success
-                store.addLog(
-                  user.username,
-                  `[QUIZ_SUCCESS] Quiz validé : ${quiz.title} - Score: ${finalScore}/${totalQuestions} (Minimum requis: ${minScore})`,
-                  'quiz',
-                  user.username,
-                  quiz.title,
-                  quiz.moduleId
-                );
-
-                // Mark module validated
-                const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
-                member.progress[quiz.moduleId] = {
-                  moduleId: quiz.moduleId,
-                  status: 'valide',
-                  validatedAt: store.getFormattedNow(),
-                  quizPassed: true,
-                  score: finalScore,
-                  attemptsCount: prevAttempts + 1,
-                };
-
-                // Find next module in order
-                const currentMod = store.getModule(quiz.moduleId) || store.getModules()[0];
-                const nextMod = store.getModules().find((m) => m.order === (currentMod?.order || 1) + 1);
-                const isModule5OrFinal = !nextMod || quiz.moduleId === 'module-5' || quiz.id === 'quiz-5' || (currentMod && currentMod.order === 5);
-
-                if (nextMod) {
-                  member.progress[nextMod.id] = {
-                    moduleId: nextMod.id,
-                    status: 'en_cours',
-                    attemptsCount: 0,
-                  };
-                  member.currentModuleId = nextMod.id;
-                  member.candidateState = 'module_en_cours';
-
-                  const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
-                  const nextStepCfg = nextMod ? onboardingService.getStepConfigForModule(nextMod.id) : null;
-                  const nextQuiz = store.getQuiz(nextMod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === nextMod.id);
-                  const delayMins = nextQuiz?.delayMinutesBeforeQuiz ?? nextStepCfg?.delayMinutesBeforeQuiz ?? 0;
-                  member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
-
-                  const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
-                  const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
-                  const nextStartRoleName = nextStepCfg?.roleOnStartName || nextStepCfg?.roleOnStartId;
-
-                  let updatedRoles = [...(member.roles || [])];
-                  if (currentStartRole) {
-                    updatedRoles = updatedRoles.filter((r) => r !== currentStartRole);
-                  }
-                  if (passRoleName) updatedRoles.push(passRoleName);
-                  if (nextMod && nextStartRoleName) updatedRoles.push(nextStartRoleName);
-
-                  member.roles = Array.from(new Set(updatedRoles.filter(Boolean)));
-                  if (guild) {
-                    syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
-                  }
-                  discordService.assignDiscordRolesToMember(user.id, member.roles).catch((roleErr) => {
-                    console.warn('[Quiz Pass Role Sync Warning]', roleErr?.message || roleErr);
-                  });
-                } else {
-                  member.candidateState = 'formation_terminee';
-                  const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
-                  const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
-                  const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
-
-                  let updatedRoles = [...(member.roles || [])];
-                  if (currentStartRole) {
-                    updatedRoles = updatedRoles.filter((r) => r !== currentStartRole);
-                  }
-                  if (passRoleName) {
-                    updatedRoles.push(passRoleName);
-                  }
-                  member.roles = Array.from(new Set(updatedRoles.filter(Boolean)));
-                  if (guild) {
-                    syncMemberRolesOnGuild(guild, user.id, member.roles).catch(() => {});
-                  }
-                  discordService.assignDiscordRolesToMember(user.id, member.roles).catch(() => {});
-                }
-
-                if (isModule5OrFinal) {
-                  store.addLog(
-                    user.username,
-                    `🏆 [PARCOURS_VALIDÉ_MODULE_5] Le candidat ${user.username} a réussi le Quiz du Module 5 ! Staff notifié sur Discord.`,
-                    'quiz',
-                    user.username,
-                    quiz.title,
-                    quiz.moduleId
-                  );
-                  this.notifyStaffModule5Completion(member, quiz.title, finalScore, totalQuestions, minScore).catch(() => {});
-                }
-
-                store.saveMembers();
-                firebaseSyncService.saveMember(member).catch(() => {});
-
-                const passEmbed = new EmbedBuilder()
-                  .setTitle(`🎉 QUIZ RÉUSSI ! (${finalScore}/${totalQuestions})`)
-                  .setDescription(
-                    `Félicitations <@${user.id}> ! Tu as validé **${quiz.title}** avec un score de **${finalScore}/${totalQuestions}** (Seuil minimum : ${minScore}/${totalQuestions}).\n\n` +
-                    (nextMod
-                      ? `Le **${nextMod.title}** est maintenant débloqué dans ton espace !`
-                      : '🏆 Félicitations ! Tu as terminé l\'ensemble du parcours de formation PAWAKO !')
-                  )
-                  .setColor(0x10b981)
-                  .setFooter({ text: 'PAWAKO FORMATION • Validation Réussie' })
-                  .setTimestamp();
-
-                const passRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                  new ButtonBuilder().setCustomId(nextMod ? `start_module_${nextMod.id}` : 'btn_profile').setLabel(nextMod ? '📚 Module Suivant' : '🎓 Parcours Terminé').setStyle(ButtonStyle.Success),
-                  new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
-                );
-
-                await interaction.editReply({ embeds: [passEmbed], components: [passRow] });
-                return;
-              } else {
-                // Quiz Failed - Activate Cooldown
-                const cooldownMins = quiz?.cooldownMinutes ?? onboardingService.getConfig().cooldownMinutes ?? 15;
-                member.cooldownUntilTimestamp = Date.now() + cooldownMins * 60 * 1000;
-                member.candidateState = 'cooldown_actif';
-
-                const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
-                const newAttempts = prevAttempts + 1;
-                member.progress[quiz.moduleId] = {
-                  ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
-                  attemptsCount: newAttempts,
-                  score: finalScore,
-                  quizPassed: false,
-                };
-
-                store.saveMembers();
-                firebaseSyncService.saveMember(member).catch(() => {});
-
-                // Trigger Staff Alert if candidate fails 2 or more times in a row
-                if (newAttempts >= 2) {
-                  this.sendStaffAlert(
-                    member,
-                    quiz.title,
-                    finalScore,
-                    totalQuestions,
-                    newAttempts,
-                    'consecutive_failures'
-                  ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
-                }
-
-                const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
-                const failEmbed = new EmbedBuilder()
-                  .setTitle(`❌ QUIZ NON VALIDÉ (${finalScore}/${totalQuestions})`)
-                  .setDescription(
-                    `Score obtenu : **${finalScore}/${totalQuestions}**\nScore minimum requis : **${minScore}/${totalQuestions}**.\n\n` +
-                    `⏳ Un cooldown de **${cooldownMins} minutes** est activé.\nTu pourras retenter ce quiz <t:${cooldownTsSec}:R> (dans **${cooldownMins} minutes**).\n` +
-                    `Prends le temps de relire les fiches de formation avant ta prochaine tentative.`
-                  )
-                  .addFields({ name: '⏱️ Déblocage du Quiz', value: `<t:${cooldownTsSec}:R>` })
-                  .setColor(0xef4444)
-                  .setFooter({ text: 'PAWAKO FORMATION • Révision Requise' })
-                  .setTimestamp();
-
-                const failRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                  buildQuizButton(member, quiz, quiz.title),
-                  new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
-                );
-
-                await interaction.editReply({ embeds: [failEmbed], components: [failRow] });
-                return;
-              }
-            }
+            // Render next question (or finish if last question) with 15s timer
+            await this.renderQuizQuestion(session, interaction);
+            return;
           }
 
           // --- 5. START / CONTINUE MODULE ---
@@ -1491,6 +1263,334 @@ export class PawakoBotRunner {
     } catch (err) {
       console.error('[PawakoBot] sendStaffAlert Exception:', err);
       return false;
+    }
+  }
+
+  /**
+   * Render and manage quiz questions with 15-second per question timer
+   */
+  private async renderQuizQuestion(
+    session: ActiveQuizSession,
+    interaction?: any,
+    isTimeoutTransition: boolean = false
+  ) {
+    // Clear any existing timer for this session
+    if (session.questionTimer) {
+      clearTimeout(session.questionTimer);
+      session.questionTimer = undefined;
+    }
+
+    const currentIndex = session.currentIndex;
+    const questions = session.questions;
+
+    // Check if session completed
+    if (currentIndex >= questions.length) {
+      await this.completeQuizSession(session, interaction);
+      return;
+    }
+
+    const q = questions[currentIndex];
+    const quiz = store.getQuiz(session.quizId) || store.getQuizzes()[0];
+    const requiredMinScore = getQuizMinScoreRequired(quiz, questions.length);
+
+    const expiresAt = Date.now() + 15000;
+    const tsSec = Math.floor(expiresAt / 1000);
+
+    const qEmbed = new EmbedBuilder()
+      .setTitle(`📝 ${session.quizTitle} — Question ${currentIndex + 1} / ${questions.length}`)
+      .setDescription(
+        `<@${session.discordUserId}>\n\n` +
+        `⏱️ **Temps restant : 15 secondes** (<t:${tsSec}:R>)\n\n` +
+        `**${q.text}**`
+      )
+      .setColor(0x6366f1)
+      .setFooter({
+        text: `PAWAKO FORMATION • 15s max par question • Minimum requis : ${requiredMinScore}/${questions.length}`,
+      });
+
+    const optionRow = new ActionRowBuilder<ButtonBuilder>();
+    const optionLabels = ['A', 'B', 'C', 'D', 'E'];
+
+    q.options.forEach((optText, optIdx) => {
+      const labelPrefix = optionLabels[optIdx] || `${optIdx + 1}`;
+      optionRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`qa:${session.attemptId}:${currentIndex}:${optIdx}`)
+          .setLabel(`${labelPrefix}. ${optText.slice(0, 70)}`)
+          .setStyle(ButtonStyle.Primary)
+      );
+    });
+
+    if (interaction) {
+      try {
+        const msg = await interaction.editReply({ embeds: [qEmbed], components: [optionRow] });
+        if (msg) {
+          session.messageId = msg.id;
+          session.channelId = msg.channelId;
+        }
+      } catch (err) {
+        console.warn('[renderQuizQuestion interaction reply error]', err);
+      }
+    } else if (session.channelId && session.messageId && this.client) {
+      try {
+        const chan = await this.client.channels.fetch(session.channelId).catch(() => null);
+        if (chan && 'messages' in chan) {
+          const msg = await (chan as any).messages.fetch(session.messageId).catch(() => null);
+          if (msg) {
+            await msg.edit({ embeds: [qEmbed], components: [optionRow] });
+          } else {
+            const newMsg = await (chan as any).send({ embeds: [qEmbed], components: [optionRow] });
+            session.messageId = newMsg.id;
+          }
+        }
+      } catch (err) {
+        console.warn('[renderQuizQuestion timer edit error]', err);
+      }
+    }
+
+    // Set 15-second timer for this question
+    session.questionTimer = setTimeout(() => {
+      const activeSession = this.activeQuizSessions.get(session.attemptId);
+      if (!activeSession || activeSession.currentIndex !== currentIndex) return;
+
+      // Unanswered question -> mark as false (-1)
+      activeSession.userAnswers.push(-1);
+      activeSession.currentIndex += 1;
+
+      // Automatically advance to next question
+      this.renderQuizQuestion(activeSession, undefined, true).catch((e) =>
+        console.warn('[renderQuizQuestion timeout advance error]', e)
+      );
+    }, 15000);
+  }
+
+  /**
+   * Finalize quiz attempt session and assign pass/fail roles and cooldowns
+   */
+  private async completeQuizSession(session: ActiveQuizSession, interaction?: any) {
+    if (session.questionTimer) {
+      clearTimeout(session.questionTimer);
+      session.questionTimer = undefined;
+    }
+
+    this.activeQuizSessions.delete(session.attemptId);
+
+    const discordUserId = session.discordUserId;
+    const member =
+      store.getMember(discordUserId) ||
+      store.getMembers().find((m) => m.discordId === discordUserId || m.id === discordUserId) ||
+      store.getOrCreateCandidate(discordUserId, discordUserId);
+
+    const finalScore = session.score;
+    const totalQuestions = session.questions.length;
+    const quiz = store.getQuiz(session.quizId) || store.getQuizzes()[0];
+    const minScore = getQuizMinScoreRequired(quiz, totalQuestions);
+    const passed = finalScore >= minScore;
+
+    member.lastActiveAt = store.getFormattedNow();
+
+    // Record attempt in store
+    store.addQuizAttempt({
+      id: `att-${Date.now()}`,
+      quizId: quiz.id,
+      quizTitle: quiz.title,
+      memberId: member.id,
+      memberName: member.username,
+      score: finalScore,
+      passed,
+      answers: session.userAnswers,
+      date: store.getFormattedNow(),
+      attemptNumber: (member.progress[quiz.moduleId]?.attemptsCount || 0) + 1,
+    });
+
+    const config = onboardingService.getConfig();
+    const guildId = config.guildId || this.client?.guilds.cache.first()?.id;
+    let guild: any = null;
+    if (guildId && this.client) {
+      guild = await this.client.guilds.fetch(guildId).catch(() => null);
+    }
+
+    let resultEmbed: EmbedBuilder;
+    let resultRow: ActionRowBuilder<ButtonBuilder>;
+
+    if (passed) {
+      // Log activity: Quiz success
+      store.addLog(
+        member.username,
+        `[QUIZ_SUCCESS] Quiz validé : ${quiz.title} - Score: ${finalScore}/${totalQuestions} (Minimum requis: ${minScore})`,
+        'quiz',
+        member.username,
+        quiz.title,
+        quiz.moduleId
+      );
+
+      // Mark module validated
+      const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
+      member.progress[quiz.moduleId] = {
+        moduleId: quiz.moduleId,
+        status: 'valide',
+        validatedAt: store.getFormattedNow(),
+        quizPassed: true,
+        score: finalScore,
+        attemptsCount: prevAttempts + 1,
+      };
+
+      // Find next module in order
+      const currentMod = store.getModule(quiz.moduleId) || store.getModules()[0];
+      const nextMod = store.getModules().find((m) => m.order === (currentMod?.order || 1) + 1);
+      const isModule5OrFinal = !nextMod || quiz.moduleId === 'module-5' || quiz.id === 'quiz-5' || (currentMod && currentMod.order === 5);
+
+      if (nextMod) {
+        member.progress[nextMod.id] = {
+          moduleId: nextMod.id,
+          status: 'en_cours',
+          attemptsCount: 0,
+        };
+        member.currentModuleId = nextMod.id;
+        member.candidateState = 'module_en_cours';
+
+        const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
+        const nextStepCfg = nextMod ? onboardingService.getStepConfigForModule(nextMod.id) : null;
+        const nextQuiz = store.getQuiz(nextMod.quizId || '') || store.getQuizzes().find((q) => q.moduleId === nextMod.id);
+        const delayMins = nextQuiz?.delayMinutesBeforeQuiz ?? nextStepCfg?.delayMinutesBeforeQuiz ?? 0;
+        member.currentQuizAvailableAtTimestamp = delayMins > 0 ? Date.now() + delayMins * 60 * 1000 : 0;
+
+        const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
+        const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
+        const nextStartRoleName = nextStepCfg?.roleOnStartName || nextStepCfg?.roleOnStartId;
+
+        let updatedRoles = [...(member.roles || [])];
+        if (currentStartRole) {
+          updatedRoles = updatedRoles.filter((r) => r !== currentStartRole);
+        }
+        if (passRoleName) updatedRoles.push(passRoleName);
+        if (nextMod && nextStartRoleName) updatedRoles.push(nextStartRoleName);
+
+        member.roles = Array.from(new Set(updatedRoles.filter(Boolean)));
+        if (guild) {
+          syncMemberRolesOnGuild(guild, discordUserId, member.roles).catch(() => {});
+        }
+        discordService.assignDiscordRolesToMember(discordUserId, member.roles).catch(() => {});
+      } else {
+        member.candidateState = 'formation_terminee';
+        const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
+        const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
+        const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
+
+        let updatedRoles = [...(member.roles || [])];
+        if (currentStartRole) {
+          updatedRoles = updatedRoles.filter((r) => r !== currentStartRole);
+        }
+        if (passRoleName) {
+          updatedRoles.push(passRoleName);
+        }
+        member.roles = Array.from(new Set(updatedRoles.filter(Boolean)));
+        if (guild) {
+          syncMemberRolesOnGuild(guild, discordUserId, member.roles).catch(() => {});
+        }
+        discordService.assignDiscordRolesToMember(discordUserId, member.roles).catch(() => {});
+      }
+
+      if (isModule5OrFinal) {
+        store.addLog(
+          member.username,
+          `🏆 [PARCOURS_VALIDÉ_MODULE_5] Le candidat ${member.username} a réussi le Quiz du Module 5 ! Staff notifié sur Discord.`,
+          'quiz',
+          member.username,
+          quiz.title,
+          quiz.moduleId
+        );
+        this.notifyStaffModule5Completion(member, quiz.title, finalScore, totalQuestions, minScore).catch(() => {});
+      }
+
+      store.saveMembers();
+      firebaseSyncService.saveMember(member).catch(() => {});
+
+      resultEmbed = new EmbedBuilder()
+        .setTitle(`🎉 QUIZ RÉUSSI ! (${finalScore}/${totalQuestions})`)
+        .setDescription(
+          `Félicitations <@${discordUserId}> ! Tu as validé **${quiz.title}** avec un score de **${finalScore}/${totalQuestions}** (Seuil minimum : ${minScore}/${totalQuestions}).\n\n` +
+          (nextMod
+            ? `Le **${nextMod.title}** est maintenant débloqué dans ton espace !`
+            : '🏆 Félicitations ! Tu as terminé l\'ensemble du parcours de formation PAWAKO !')
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Validation Réussie' })
+        .setTimestamp();
+
+      resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(nextMod ? `start_module_${nextMod.id}` : 'btn_profile')
+          .setLabel(nextMod ? '📚 Module Suivant' : '🎓 Parcours Terminé')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+      );
+    } else {
+      // Quiz Failed - Activate Cooldown
+      const cooldownMins = quiz?.cooldownMinutes ?? onboardingService.getConfig().cooldownMinutes ?? 15;
+      member.cooldownUntilTimestamp = Date.now() + cooldownMins * 60 * 1000;
+      member.candidateState = 'cooldown_actif';
+
+      const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
+      const newAttempts = prevAttempts + 1;
+      member.progress[quiz.moduleId] = {
+        ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
+        attemptsCount: newAttempts,
+        score: finalScore,
+        quizPassed: false,
+      };
+
+      store.saveMembers();
+      firebaseSyncService.saveMember(member).catch(() => {});
+
+      // Trigger Staff Alert if candidate fails 2 or more times in a row
+      if (newAttempts >= 2) {
+        this.sendStaffAlert(
+          member,
+          quiz.title,
+          finalScore,
+          totalQuestions,
+          newAttempts,
+          'consecutive_failures'
+        ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
+      }
+
+      const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
+      resultEmbed = new EmbedBuilder()
+        .setTitle(`❌ QUIZ NON VALIDÉ (${finalScore}/${totalQuestions})`)
+        .setDescription(
+          `Score obtenu : **${finalScore}/${totalQuestions}**\nScore minimum requis : **${minScore}/${totalQuestions}**.\n\n` +
+          `⏳ Un cooldown de **${cooldownMins} minutes** est activé.\nTu pourras retenter ce quiz <t:${cooldownTsSec}:R> (dans **${cooldownMins} minutes**).\n` +
+          `Prends le temps de relire les fiches de formation avant ta prochaine tentative.`
+        )
+        .addFields({ name: '⏱️ Déblocage du Quiz', value: `<t:${cooldownTsSec}:R>` })
+        .setColor(0xef4444)
+        .setFooter({ text: 'PAWAKO FORMATION • Révision Requise' })
+        .setTimestamp();
+
+      resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        buildQuizButton(member, quiz, quiz.title),
+        new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+      );
+    }
+
+    // Send or Edit message
+    if (interaction) {
+      await interaction.editReply({ embeds: [resultEmbed], components: [resultRow] }).catch(() => {});
+    } else if (session.channelId && session.messageId && this.client) {
+      try {
+        const chan = await this.client.channels.fetch(session.channelId).catch(() => null);
+        if (chan && 'messages' in chan) {
+          const msg = await (chan as any).messages.fetch(session.messageId).catch(() => null);
+          if (msg) {
+            await msg.edit({ embeds: [resultEmbed], components: [resultRow] });
+          } else {
+            await (chan as any).send({ embeds: [resultEmbed], components: [resultRow] });
+          }
+        }
+      } catch (err) {
+        console.warn('[completeQuizSession send error]', err);
+      }
     }
   }
 

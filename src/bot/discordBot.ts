@@ -15,7 +15,7 @@ import { discordService } from '../services/discordService';
 import { discordSyncService } from '../services/discordSyncService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
-import { QuizQuestion, Member } from '../types';
+import { QuizQuestion, Member, Quiz } from '../types';
 
 export interface ActiveQuizSession {
   attemptId: string;
@@ -81,11 +81,33 @@ async function syncMemberRolesOnGuild(guild: any, discordUserId: string, roleIde
   }
 }
 
+function getQuizMinScoreRequired(quiz: Quiz | undefined, totalQuestions: number = 20): number {
+  if (!quiz) return Math.round(totalQuestions * 0.8);
+  const val = quiz.minScore;
+  if (val === undefined || val === null || val <= 0) return Math.round(totalQuestions * 0.8);
+  if (val > totalQuestions) {
+    if (val <= 100) {
+      return Math.round((val / 100) * totalQuestions);
+    }
+    return totalQuestions;
+  }
+  return val;
+}
+
 export class PawakoBotRunner {
   private client: Client | null = null;
   private isConnected: boolean = false;
   private isConnecting: boolean = false;
   private activeQuizSessions = new Map<string, ActiveQuizSession>();
+  private userClickTracker = new Map<string, { count: number; lastClickTime: number }>();
+
+  private SARCASTIC_SPAM_MESSAGES = [
+    "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
+    "⚡ *Alerte mitraillage ! À ce rythme-là, tu vas démonter ton mulot avant d'avoir atteint le Module 2.*",
+    "☕ *Oula, mollo le ninja du mulot ! Prends une grande inspiration et un café, les données restent bien au chaud.*",
+    "🎯 *Quelle cadence de clics phénoménale ! Dommage que ça ne donne aucun point bonus pour valider le quiz.*",
+    "🛑 *Keep calm ! Cliquer 50 fois la seconde ne va pas débloquer la suite plus vite, promis juré !*"
+  ];
 
   constructor() {
     // Single instance initialization at startup
@@ -203,15 +225,48 @@ export class PawakoBotRunner {
 
         if (content === '!profile') {
           const m = store.getOrCreateCandidate(message.author.id, message.author.username, message.author.displayAvatarURL());
+          const modules = store.getModules();
           const validatedCount = Object.values(m.progress || {}).filter((p: any) => p.status === 'valide').length;
 
+          let cooldownNoticeFriendly = '🟢 **Libre !** Tu peux lancer ton prochain quiz dès maintenant.';
+          if (m.cooldownUntilTimestamp && Date.now() < m.cooldownUntilTimestamp) {
+            const remainingMs = m.cooldownUntilTimestamp - Date.now();
+            const mins = Math.floor(remainingMs / 60000);
+            const secs = Math.floor((remainingMs % 60000) / 1000);
+            cooldownNoticeFriendly = `⏳ **En attente** (Délai d'attente actif : ${mins}m ${secs}s restantes avant la prochaine tentative)`;
+          }
+
+          const memberAttempts = store.getQuizAttemptsForMember(m.id);
+          let quizResultsFormatted = 'Aucun quiz effectué pour le moment.';
+          if (memberAttempts.length > 0) {
+            quizResultsFormatted = memberAttempts
+              .map((att) => `• **${att.quizTitle}** : **${att.score}/20** ${att.passed ? '✅ (Validé !)' : '❌ (Échec)'}`)
+              .join('\n');
+          } else if (m.progress && Object.keys(m.progress).length > 0) {
+            const entries = Object.entries(m.progress);
+            quizResultsFormatted = entries
+              .map(([modId, prog]: [string, any]) => {
+                const mod = store.getModule(modId);
+                const title = mod ? mod.title : modId;
+                const score20 = Math.round(((prog.score || 0) / 100) * 20);
+                return `• **${title}** : **${score20}/20** ${prog.status === 'valide' ? '✅ (Validé !)' : '❌ (Échec)'}`;
+              })
+              .join('\n');
+          }
+
           const embed = new EmbedBuilder()
-            .setTitle(`👤 Profil de ${message.author.username}`)
-            .setColor(0x06b6d4)
+            .setTitle(`🌟 Carnet de Formation — ${message.author.username}`)
+            .setDescription('🎈 Bienvenue sur ton tableau de bord ! Chaque étape te rapproche de la validation finale.')
+            .setColor(0xF59E0B)
+            .setThumbnail(m.avatarUrl || message.author.displayAvatarURL())
             .addFields(
-              { name: 'Modules Validés', value: `${validatedCount} / ${store.getModules().length}` }
+              { name: '👤 Candidat(e)', value: `<@${m.discordId}> (**${m.username}**)`, inline: true },
+              { name: '🏆 Avancement du Parcours', value: `🎯 **${validatedCount} sur ${modules.length}** modules réussis avec succès !`, inline: true },
+              { name: '📚 Relevé des Quiz', value: quizResultsFormatted, inline: false },
+              { name: '⚡ Statut d\'accès', value: cooldownNoticeFriendly, inline: false }
             )
-            .setThumbnail(message.author.displayAvatarURL());
+            .setFooter({ text: '🎓 PAWAKO Formation • L\'équipe est avec toi !' })
+            .setTimestamp();
 
           await message.reply({ embeds: [embed] }).catch(() => {});
         }
@@ -250,6 +305,29 @@ export class PawakoBotRunner {
         const customId = interaction.customId;
         const user = interaction.user;
         const guild = interaction.guild;
+
+        // Anti-spam rate limiting: detect >3 clicks in 3 seconds
+        const now = Date.now();
+        const userClickData = this.userClickTracker.get(user.id) || { count: 0, lastClickTime: 0 };
+        if (now - userClickData.lastClickTime < 3000) {
+          userClickData.count += 1;
+        } else {
+          userClickData.count = 1;
+        }
+        userClickData.lastClickTime = now;
+        this.userClickTracker.set(user.id, userClickData);
+
+        if (userClickData.count >= 4) {
+          const cfgMsgs = onboardingService.getConfig().sarcasticSpamMessages;
+          const pool = cfgMsgs && cfgMsgs.length > 0 ? cfgMsgs : this.SARCASTIC_SPAM_MESSAGES;
+          const sarcasticMsg = pool[Math.floor(Math.random() * pool.length)];
+          if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({ content: sarcasticMsg, ephemeral: true }).catch(() => {});
+          } else {
+            await interaction.followUp({ content: sarcasticMsg, ephemeral: true }).catch(() => {});
+          }
+          return;
+        }
 
         try {
           // Defer reply or update IMMEDIATELY (<10ms) to prevent Discord timeout errors
@@ -522,29 +600,49 @@ export class PawakoBotRunner {
             const modules = store.getModules();
             const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
 
-            let cooldownNotice = 'Aucun cooldown actif';
+            let cooldownNoticeFriendly = '🟢 **Libre !** Tu peux lancer ton prochain quiz dès maintenant.';
             if (member.cooldownUntilTimestamp && Date.now() < member.cooldownUntilTimestamp) {
               const remainingMs = member.cooldownUntilTimestamp - Date.now();
               const mins = Math.floor(remainingMs / 60000);
               const secs = Math.floor((remainingMs % 60000) / 1000);
-              cooldownNotice = `⚠️ Cooldown actif (${mins}m ${secs}s restantes)`;
+              cooldownNoticeFriendly = `⏳ **En attente** (Délai d'attente actif : ${mins}m ${secs}s restantes avant la prochaine tentative)`;
             }
 
             const isStaffViewer = user.id !== member.discordId && user.id !== member.id.replace('mem-', '');
 
+            const memberAttempts = store.getQuizAttemptsForMember(member.id);
+            let quizResultsFormatted = 'Aucun quiz effectué pour le moment.';
+            if (memberAttempts.length > 0) {
+              quizResultsFormatted = memberAttempts
+                .map((att) => `• **${att.quizTitle}** : **${att.score}/20** ${att.passed ? '✅ (Validé !)' : '❌ (Échec)'}`)
+                .join('\n');
+            } else if (member.progress && Object.keys(member.progress).length > 0) {
+              const entries = Object.entries(member.progress);
+              quizResultsFormatted = entries
+                .map(([modId, prog]: [string, any]) => {
+                  const mod = store.getModule(modId);
+                  const title = mod ? mod.title : modId;
+                  const score20 = Math.round(((prog.score || 0) / 100) * 20);
+                  return `• **${title}** : **${score20}/20** ${prog.status === 'valide' ? '✅ (Validé !)' : '❌ (Échec)'}`;
+                })
+                .join('\n');
+            }
+
             const embed = new EmbedBuilder()
-              .setTitle(`👤 Profil Candidat — ${member.username}`)
-              .setColor(0x06b6d4)
+              .setTitle(`🌟 Carnet de Formation — ${member.username}`)
+              .setDescription('🎈 Bienvenue sur ton tableau de bord ! Chaque étape te rapproche de la validation finale.')
+              .setColor(0xF59E0B)
               .setThumbnail(member.avatarUrl || user.displayAvatarURL())
               .addFields(
-                { name: '🆔 Identifiant Discord', value: `<@${member.discordId || member.id.replace('mem-', '')}>`, inline: true },
-                { name: '📊 Progression', value: `**${validatedCount} / ${modules.length}** modules validés`, inline: true },
-                { name: '⏳ Statut Cooldown', value: cooldownNotice, inline: false }
+                { name: '👤 Candidat(e)', value: `<@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)`, inline: true },
+                { name: '🏆 Avancement du Parcours', value: `🎯 **${validatedCount} sur ${modules.length}** modules réussis avec succès !`, inline: true },
+                { name: '📚 Relevé des Quiz', value: quizResultsFormatted, inline: false },
+                { name: '⚡ Statut d\'accès', value: cooldownNoticeFriendly, inline: false }
               )
               .setFooter({
                 text: isStaffViewer
                   ? `PAWAKO FORMATION • Consulté par le staff @${user.username}`
-                  : 'PAWAKO FORMATION • Suivi Individuel Sécurisé',
+                  : '🎓 PAWAKO Formation • L\'équipe est avec toi !',
               })
               .setTimestamp();
 
@@ -576,9 +674,10 @@ export class PawakoBotRunner {
               const mins = Math.floor(remainingMs / 60000);
               const secs = Math.floor((remainingMs % 60000) / 1000);
 
+              const requiredMin = getQuizMinScoreRequired(quiz, 20);
               const cooldownEmbed = new EmbedBuilder()
                 .setTitle('❌ Quiz Indisponible - Cooldown Actif')
-                .setDescription(`Tu n'as pas obtenu le score nécessaire (minimum **${quiz?.minScore || 16}/20**) lors de ton dernier essai.\n\nTu pourras retenter ce quiz dans :`)
+                .setDescription(`Tu n'as pas obtenu le score nécessaire (minimum **${requiredMin}/20**) lors de ton dernier essai.\n\nTu pourras retenter ce quiz dans :`)
                 .addFields({ name: '⏳ Temps d\'attente restant', value: `**${mins} minutes ${secs} secondes**` })
                 .setColor(0xef4444)
                 .setFooter({ text: 'PAWAKO FORMATION • Système de Cooldown Serveur' });
@@ -637,11 +736,12 @@ export class PawakoBotRunner {
 
             // Display Question 1 / Total
             const q1 = shuffledQuestions[0];
+            const requiredMinScore = getQuizMinScoreRequired(quiz, shuffledQuestions.length);
             const qEmbed = new EmbedBuilder()
               .setTitle(`📝 ${quiz.title} — Question 1 / ${shuffledQuestions.length}`)
               .setDescription(`<@${user.id}>\n\n**${q1.text}**`)
               .setColor(0x6366f1)
-              .setFooter({ text: `PAWAKO FORMATION • Score Minimum Requis : ${quiz.minScore || 16}/20` });
+              .setFooter({ text: `PAWAKO FORMATION • Score Minimum Requis : ${requiredMinScore}/${shuffledQuestions.length}` });
 
             const optionRow = new ActionRowBuilder<ButtonBuilder>();
             const optionLabels = ['A', 'B', 'C', 'D', 'E'];
@@ -733,7 +833,7 @@ export class PawakoBotRunner {
               const finalScore = session.score;
               const totalQuestions = session.questions.length;
               const quiz = store.getQuiz(session.quizId) || store.getQuizzes()[0];
-              const minScore = quiz?.minScore || 16;
+              const minScore = getQuizMinScoreRequired(quiz, totalQuestions);
               const passed = finalScore >= minScore;
 
               this.activeQuizSessions.delete(attemptId);

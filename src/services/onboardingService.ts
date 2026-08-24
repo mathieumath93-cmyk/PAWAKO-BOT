@@ -26,6 +26,13 @@ const defaultConfig: OnboardingFlowConfig = {
     unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
     unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
   },
+  sarcasticSpamMessages: [
+    "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
+    "⚡ *Alerte mitraillage ! À ce rythme-là, tu vas démonter ton mulot avant d'avoir atteint le Module 2.*",
+    "☕ *Oula, mollo le ninja du mulot ! Prends une grande inspiration et un café, les données restent bien au chaud.*",
+    "🎯 *Quelle cadence de clics phénoménale ! Dommage que ça ne donne aucun point bonus pour valider le quiz.*",
+    "🛑 *Keep calm ! Cliquer 50 fois la seconde ne va pas débloquer la suite plus vite, promis juré !*"
+  ],
 };
 
 class OnboardingService {

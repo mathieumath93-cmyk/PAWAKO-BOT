@@ -182,7 +182,8 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
     const totalQuestions = currentQuiz.questions.length || 1;
     // Scale score to maxScore (e.g. 20)
     const calculatedScore = Math.round((correctCount / totalQuestions) * maxScore);
-    const passed = calculatedScore >= currentQuiz.minScore;
+    const requiredMinScore = currentQuiz.minScore > 20 ? Math.round((currentQuiz.minScore / 100) * maxScore) : (currentQuiz.minScore || 16);
+    const passed = calculatedScore >= requiredMinScore;
 
     setQuizScore(calculatedScore);
     setQuizPassed(passed);
@@ -384,12 +385,13 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="space-y-2 text-slate-200 leading-relaxed whitespace-pre-line bg-slate-950/80 p-4 rounded-xl border border-indigo-500/20">
-                  <p>Candidat : <strong className="text-white">{memberName}</strong></p>
-                  <p>📊 <strong>Progression :</strong> {step === 'module2_active' ? '████████░░ 80%' : '████░░░░░░ 40%'}</p>
-                  <p>📚 <strong>Module actuel :</strong> {step === 'module2_active' ? (modules[1]?.title || 'Module suivant') : (modules[0]?.title || 'Module de formation')}</p>
-                  <p>🏷️ <strong>Rôles Discord actuels :</strong> {assignedRoles.length > 0 ? assignedRoles.map(r => `@${r}`).join(', ') : 'Aucun rôle'}</p>
-                  <p>⏱️ <strong>Statut Cooldown :</strong> {cooldownSeconds > 0 ? `⏳ Actif (${Math.floor(cooldownSeconds/60)}m)` : '✅ Disponible'}</p>
+                <div className="space-y-2 text-slate-200 leading-relaxed whitespace-pre-line bg-slate-950/80 p-4 rounded-xl border border-amber-500/30">
+                  <p className="text-amber-400 font-bold text-sm border-b border-amber-500/20 pb-1">🌟 Carnet de Formation — {memberName}</p>
+                  <p className="text-slate-300 italic text-[11px]">🎈 Bienvenue sur ton tableau de bord ! Chaque étape te rapproche de la validation finale.</p>
+                  <p>👤 <strong>Candidat(e) :</strong> <strong className="text-amber-200">@{memberName}</strong> ({memberName})</p>
+                  <p>🏆 <strong>Avancement :</strong> 🎯 <strong>{step === 'module2_active' ? '4 sur 5' : '1 sur 5'}</strong> modules réussis avec succès !</p>
+                  <p>📚 <strong>Relevé des Quiz :</strong> {step === 'module2_active' ? `• ${modules[0]?.title || 'Module 1'} : 18/20 ✅ (Validé !)` : `• ${modules[0]?.title || 'Module 1'} : 18/20 ✅ (Validé !)`}</p>
+                  <p>⚡ <strong>Statut d'accès :</strong> {cooldownSeconds > 0 ? `⏳ En attente (${Math.floor(cooldownSeconds/60)}m ${cooldownSeconds%60}s restantes)` : '🟢 Libre ! Tu peux lancer ton prochain quiz dès maintenant.'}</p>
                 </div>
               </div>
             )}
@@ -546,7 +548,7 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                     </div>
 
                     <p className="text-xs text-slate-200 leading-relaxed">
-                      Score obtenu : <strong>{quizScore}/20</strong> (Minimum requis : {currentQuiz?.minScore || 16}/20).
+                      Score obtenu : <strong>{quizScore}/20</strong> (Minimum requis : {currentQuiz?.minScore > 20 ? Math.round((currentQuiz.minScore / 100) * 20) : (currentQuiz?.minScore || 16)}/20).
                       Vous n'avez pas réussi, vous pouvez réessayer après <strong>{config.cooldownMinutes} minutes</strong>.
                     </p>
 

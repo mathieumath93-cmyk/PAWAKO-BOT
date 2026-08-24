@@ -487,7 +487,7 @@ export const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-1',
     title: 'Quiz de Validation - Module 1',
     description: 'Onboarding & Base PAWAKO',
-    minScore: 60,
+    minScore: 16,
     cooldownMinutes: 30,
     delayMinutesBeforeQuiz: 0,
     questions: [
@@ -512,7 +512,7 @@ export const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-2',
     title: 'Quiz de Validation - Module 2',
     description: 'Psychologie Fan & Chatting',
-    minScore: 60,
+    minScore: 16,
     cooldownMinutes: 30,
     delayMinutesBeforeQuiz: 0,
     questions: [
@@ -537,7 +537,7 @@ export const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-3',
     title: 'Quiz de Validation - Module 3',
     description: 'Structure de Script & Closing',
-    minScore: 60,
+    minScore: 16,
     cooldownMinutes: 30,
     delayMinutesBeforeQuiz: 0,
     questions: [
@@ -562,7 +562,7 @@ export const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-4',
     title: 'Quiz de Validation - Module 4',
     description: 'Follow-up & Relances',
-    minScore: 60,
+    minScore: 16,
     cooldownMinutes: 30,
     delayMinutesBeforeQuiz: 0,
     questions: [
@@ -587,7 +587,7 @@ export const defaultQuizzes: Quiz[] = [
     moduleId: 'mod-5',
     title: 'Quiz de Validation - Module 5',
     description: 'Négociation Spenders & Tag TW',
-    minScore: 60,
+    minScore: 16,
     cooldownMinutes: 30,
     delayMinutesBeforeQuiz: 0,
     questions: [
@@ -961,7 +961,10 @@ class StoreService {
   }
 
   public updateQuiz(id: string, data: Partial<Quiz>): Quiz {
-    const idx = this.quizzes.findIndex((q) => q.id === id);
+    let idx = this.quizzes.findIndex((q) => q.id === id || q.moduleId === id);
+    if (idx === -1) {
+      idx = this.quizzes.findIndex((q) => q.id.toLowerCase() === id.toLowerCase() || q.moduleId.toLowerCase() === id.toLowerCase());
+    }
     if (idx === -1) throw new Error('Quiz non trouvé');
     this.quizzes[idx] = { ...this.quizzes[idx], ...data };
     this.addLog('Anthony (Admin)', `Modification du quiz "${this.quizzes[idx].title}"`, 'quiz');
@@ -1129,6 +1132,11 @@ class StoreService {
 
   public getQuizAttempts(): QuizAttempt[] {
     return this.quizAttempts;
+  }
+
+  public getQuizAttemptsForMember(memberId: string): QuizAttempt[] {
+    if (!memberId) return [];
+    return this.quizAttempts.filter((att) => att.memberId === memberId || att.memberId.replace('mem-', '') === memberId.replace('mem-', ''));
   }
 
   // --- Members ---
@@ -1332,24 +1340,24 @@ class StoreService {
     }
 
     return `━━━━━━━━━━━━━━━━━━━━
-       👤 MON PROFIL
+🌟 CARNET DE FORMATION — ${member.username}
+🎈 Bienvenue sur ton tableau de bord !
 ━━━━━━━━━━━━━━━━━━━━
 
-Candidat : **${member.username}**
+👤 **Candidat(e)** : <@${member.discordId}> (**${member.username}**)
 
-📊 **Progression**
+🏆 **Avancement du Parcours**
+🎯 **${completedCount} sur ${totalModules}** modules réussis avec succès !
 \`${progressBar}\` **${progressPercent}%**
 
-📚 **Modules terminés** : ${completedCount}/${totalModules}
-📖 **Module actuel** : ${currentModTitle}
-
-📝 **Résultats des quiz**
+📚 **Relevé des Quiz** :
 ${quizResultsText}
 
-🎯 **Statut** :
+⚡ **Statut d'accès** :
 ${statusText}
 
-━━━━━━━━━━━━━━━━━━━━`;
+━━━━━━━━━━━━━━━━━━━━
+🎓 PAWAKO Formation • L'équipe est avec toi !`;
   }
 
   /**

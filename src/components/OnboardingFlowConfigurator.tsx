@@ -1162,6 +1162,45 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               </div>
             </div>
           </div>
+
+          {/* Sarcastic Anti-Spam Bot Messages */}
+          <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Messages Sarcastiques Bot Anti-Spam (1 ligne par réplique)
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                Déclenché si un membre clique plus de 3 fois en 3 secondes
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Saisissez ou modifiez les répliques sarcastiques (1 message par ligne) que le bot enverra aléatoirement en réponse privée :
+            </p>
+
+            <textarea
+              rows={5}
+              value={(config.sarcasticSpamMessages || [
+                "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
+                "⚡ *Alerte mitraillage ! À ce rythme-là, tu vas démonter ton mulot avant d'avoir atteint le Module 2.*",
+                "☕ *Oula, mollo le ninja du mulot ! Prends une grande inspiration et un café, les données restent bien au chaud.*",
+                "🎯 *Quelle cadence de clics phénoménale ! Dommage que ça ne donne aucun point bonus pour valider le quiz.*",
+                "🛑 *Keep calm ! Cliquer 50 fois la seconde ne va pas débloquer la suite plus vite, promis juré !*"
+              ]).join('\n')}
+              onChange={(e) => {
+                const lines = e.target.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                setConfig({
+                  ...config,
+                  sarcasticSpamMessages: lines
+                });
+              }}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-amber-300 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+              placeholder="Une réplique par ligne..."
+            />
+          </div>
         </div>
 
         {/* Submit Main Config */}

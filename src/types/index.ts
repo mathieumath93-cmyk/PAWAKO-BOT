@@ -449,6 +449,7 @@ export interface OnboardingFlowConfig {
   hideQuizSolutions: boolean; // default true
   stepConfigs: ModuleStepConfig[];
   autoReminders?: AutoReminderConfig;
+  sarcasticSpamMessages?: string[];
 }
 
 export interface UserSession {

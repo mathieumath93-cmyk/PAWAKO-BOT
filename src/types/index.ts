@@ -179,6 +179,8 @@ export interface Member {
   autoReminderReason?: string;
   remindersSent?: Record<string, number>;
   lastReminderAt?: string;
+  simulationScheduledTimestamp?: number | null;
+  simulationReminderSent?: boolean;
 }
 
 export interface TicketMessage {

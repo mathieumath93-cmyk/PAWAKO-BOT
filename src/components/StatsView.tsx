@@ -19,6 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Member, TrainingModule } from '../types';
+import { store } from '../services/store';
 
 interface StatsViewProps {
   members: Member[];
@@ -178,6 +179,60 @@ export const StatsView: React.FC<StatsViewProps> = ({ members, modules }) => {
               <span>Échec : 11.5%</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Quiz Difficulty & Analytics Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-indigo-400" />
+              <span>Analyse de Difficulté des Quiz (Taux d'échec & Tentatives)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Identifiez les modules les plus difficiles pour adapter l'accompagnement pédagogique Staff.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+          {store.getQuizAnalytics().map((qa) => {
+            const badgeColors = {
+              Facile: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+              Modéré: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+              Difficile: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+              Extrême: 'bg-red-500/10 text-red-400 border-red-500/20',
+            };
+            return (
+              <div key={qa.quizId} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-bold text-white line-clamp-1">{qa.quizTitle}</div>
+                    <div className="text-[11px] text-slate-400">{qa.moduleTitle}</div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColors[qa.difficulty as keyof typeof badgeColors]}`}>
+                    {qa.difficulty}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-1 text-center border-t border-slate-900">
+                  <div>
+                    <div className="text-[10px] text-slate-400">Tentatives</div>
+                    <div className="text-xs font-bold text-slate-200">{qa.totalAttempts}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400">Réussite</div>
+                    <div className="text-xs font-bold text-emerald-400">{qa.passRate}%</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400">Moyenne</div>
+                    <div className="text-xs font-bold text-indigo-400">{qa.avgScore}/20</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

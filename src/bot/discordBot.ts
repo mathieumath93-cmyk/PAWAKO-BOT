@@ -52,6 +52,27 @@ function formatMemberRolesDisplay(roles: string[] = []): string {
   return Array.from(new Set(formattedList)).join(', ');
 }
 
+/**
+ * Calculates epoch timestamp for next 14h00 HF (Europe/Paris timezone).
+ * If current time in Paris is < 14h00, returns 14h00 today.
+ * If current time in Paris is >= 14h00, returns 14h00 tomorrow.
+ */
+function getNext14hParisTimestamp(): number {
+  const now = new Date();
+  const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
+  const parisDate = new Date(parisString);
+
+  const targetParis = new Date(parisDate);
+  targetParis.setHours(14, 0, 0, 0);
+
+  if (parisDate.getTime() >= targetParis.getTime()) {
+    targetParis.setDate(targetParis.getDate() + 1);
+  }
+
+  const diffMs = targetParis.getTime() - parisDate.getTime();
+  return now.getTime() + diffMs;
+}
+
 async function syncMemberRolesOnGuild(guild: any, discordUserId: string, roleIdentifiers: string[]) {
   try {
     if (!guild || !discordUserId || !roleIdentifiers || roleIdentifiers.length === 0) return;
@@ -374,7 +395,11 @@ export class PawakoBotRunner {
             .setColor(0x10b981);
 
           await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
         }
+
+        // Auto-responder for candidate questions about bot operation
+        await this.handleCandidateQuestion(message).catch(() => {});
       });
 
       // Exclusively handle button interactions via Gateway
@@ -1318,6 +1343,318 @@ export class PawakoBotRunner {
   }
 
   /**
+   * Auto-create / update #classement-formation channel on Discord server
+   */
+  public async updateLeaderboardChannel(): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const config = onboardingService.getConfig();
+      const guildId = config.guildId || this.client.guilds.cache.first()?.id;
+      if (!guildId) return false;
+
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return false;
+
+      let classChannel = guild.channels.cache.find(
+        (c: any) => c.isTextBased() && (c.name.includes('classement') || c.name.includes('leaderboard'))
+      ) as TextChannel | null;
+
+      if (!classChannel) {
+        classChannel = (await guild.channels.create({
+          name: '🏆-classement-formation',
+          type: ChannelType.GuildText,
+          topic: '🏆 Classement Officiel PAWAKO FORMATION — Top Candidats & Avancement',
+        })) as TextChannel;
+      }
+
+      if (!classChannel) return false;
+
+      const members = store.getMembers().filter((m) => m.isActive !== false);
+      const totalModules = store.getModules().length || 5;
+
+      const sorted = [...members].sort((a, b) => {
+        const valA = Object.values(a.progress || {}).filter((p) => p.status === 'valide').length;
+        const valB = Object.values(b.progress || {}).filter((p) => p.status === 'valide').length;
+        if (valB !== valA) return valB - valA;
+
+        const attsA = store.getQuizAttemptsForMember(a.id);
+        const attsB = store.getQuizAttemptsForMember(b.id);
+        const avgA = attsA.length > 0 ? attsA.reduce((s, x) => s + x.score, 0) / attsA.length : 0;
+        const avgB = attsB.length > 0 ? attsB.reduce((s, x) => s + x.score, 0) / attsB.length : 0;
+        return avgB - avgA;
+      });
+
+      const top10 = sorted.slice(0, 10);
+      const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
+      const rankingLines = top10.map((m, idx) => {
+        const medal = medals[idx] || `${idx + 1}.`;
+        const valCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+        const attempts = store.getQuizAttemptsForMember(m.id);
+        const sumScores = attempts.reduce((acc, att) => acc + (att.score > 20 ? Math.round((att.score / 100) * 20) : att.score), 0);
+        const avg20 = attempts.length > 0 ? Math.round((sumScores / attempts.length) * 10) / 10 : '--';
+        const progressPill = '█'.repeat(valCount) + '░'.repeat(Math.max(0, totalModules - valCount));
+
+        return `${medal} <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)\n` +
+               `    └ \`[${progressPill}]\` **${valCount}/${totalModules} Modules** • Moyenne : **${avg20}/20**`;
+      });
+
+      const leaderEmbed = new EmbedBuilder()
+        .setTitle('🏆 CLASSEMENT OFFICIEL DES CANDIDATS PAWAKO')
+        .setDescription(
+          `🔥 **Top Candidats du Parcours de Formation**\n` +
+          `*(Mise à jour en temps réel à chaque validation de module)*\n\n` +
+          (rankingLines.length > 0 ? rankingLines.join('\n\n') : 'Aucun candidat enregistré pour le moment.') +
+          `\n\n💡 *Continue de réviser et de valider tes quiz pour grimper dans le classement !* 🚀`
+        )
+        .setColor(0xf59e0b)
+        .setFooter({ text: 'PAWAKO FORMATION • Gamification & Classement' })
+        .setTimestamp();
+
+      const messages = await classChannel.messages.fetch({ limit: 5 }).catch(() => null);
+      const botMsg = messages?.find((m: any) => m.author.id === this.client?.user?.id);
+
+      if (botMsg) {
+        await botMsg.edit({ embeds: [leaderEmbed] }).catch(() => {});
+      } else {
+        await classChannel.send({ embeds: [leaderEmbed] }).catch(() => {});
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('[updateLeaderboardChannel Error]', err);
+      return false;
+    }
+  }
+
+  /**
+   * Auto-responder for candidate questions about bot operation (no confidential data)
+   */
+  public async handleCandidateQuestion(message: Message): Promise<boolean> {
+    if (message.author.bot) return false;
+    const content = message.content.toLowerCase().trim();
+    if (content.startsWith('!')) return false;
+
+    const isQuestion =
+      content.includes('?') ||
+      content.includes('comment') ||
+      content.includes('pourquoi') ||
+      content.includes('quand') ||
+      content.includes('cooldown') ||
+      content.includes('quiz') ||
+      content.includes('module') ||
+      content.includes('bot') ||
+      content.includes('aide') ||
+      content.includes('staff') ||
+      content.includes('note') ||
+      content.includes('score') ||
+      content.includes('réponse') ||
+      content.includes('reponse');
+
+    if (!isQuestion) return false;
+
+    // Confidentiality guard
+    if (
+      content.includes('réponse') ||
+      content.includes('reponse') ||
+      content.includes('corrigé') ||
+      content.includes('solution') ||
+      content.includes('triche')
+    ) {
+      const embed = new EmbedBuilder()
+        .setTitle('🔒 INFORMATION CONFIDENTIELLE PAWAKO')
+        .setDescription(
+          `Salut <@${message.author.id}> ! 👋\n\n` +
+          `Les réponses et corrigés des quiz sont **strictement confidentiels**.\n` +
+          `📚 Tu trouveras l'intégralité des notions nécessaires dans le **support de cours** accessible avant chaque quiz.`
+        )
+        .setColor(0xf59e0b)
+        .setFooter({ text: 'PAWAKO FORMATION • Système Pédagogique' });
+
+      await message.reply({ embeds: [embed] }).catch(() => {});
+      return true;
+    }
+
+    // Cooldown & Wait time
+    if (
+      content.includes('cooldown') ||
+      content.includes('attendre') ||
+      content.includes('bloqué') ||
+      content.includes('bloque') ||
+      content.includes('temps d\'attente') ||
+      content.includes('déblocage') ||
+      content.includes('deblocage')
+    ) {
+      const embed = new EmbedBuilder()
+        .setTitle('🤖 RÈGLE DU COOLDOWN — PAWAKO FORMATION')
+        .setDescription(
+          `Salut <@${message.author.id}> ! 👋 Voici comment fonctionne le cooldown :\n\n` +
+          `⏳ **Pourquoi un cooldown ?** Si tu n'obtiens pas le score minimum (16/20), un cooldown obligatoire de 30 minutes s'active.\n` +
+          `💡 **Que faire pendant ce temps ?** Relis attentivement ton support de cours et tes notes !\n` +
+          `⏱️ **Déblocage :** Dès la fin du compte à rebours, le bouton **"🚀 Lancer le Quiz"** se réactive automatiquement.`
+        )
+        .setColor(0x6366f1)
+        .setFooter({ text: 'PAWAKO FORMATION • Assistance Bot' });
+
+      await message.reply({ embeds: [embed] }).catch(() => {});
+      return true;
+    }
+
+    // How to launch quiz / next module
+    if (
+      content.includes('lancer') ||
+      content.includes('démarrer') ||
+      content.includes('demarrer') ||
+      content.includes('suite') ||
+      content.includes('module suivant') ||
+      content.includes('continuer') ||
+      content.includes('accéder') ||
+      content.includes('acceder')
+    ) {
+      const embed = new EmbedBuilder()
+        .setTitle('🤖 DÉROULEMENT DES MODULES & QUIZ')
+        .setDescription(
+          `Salut <@${message.author.id}> ! 👋\n\n` +
+          `📚 **1. Consulter le cours :** Clique sur le bouton de support dans ce salon.\n` +
+          `📝 **2. Passer le quiz :** Clique sur **"🚀 Lancer le Quiz"** (15s max par question).\n` +
+          `🎉 **3. Valider le module :** Un score d'au moins 16/20 débloque immédiatement le module suivant !`
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Assistance Bot' });
+
+      await message.reply({ embeds: [embed] }).catch(() => {});
+      return true;
+    }
+
+    // Profile & Notes
+    if (
+      content.includes('note') ||
+      content.includes('score') ||
+      content.includes('profil') ||
+      content.includes('progression') ||
+      content.includes('résultat') ||
+      content.includes('resultat')
+    ) {
+      const embed = new EmbedBuilder()
+        .setTitle('📊 CONSULTATION DU PROFIL & DES NOTES')
+        .setDescription(
+          `Salut <@${message.author.id}> ! 👋\n\n` +
+          `Tu peux voir l'historique complet de tes scores et ton avancement :\n` +
+          `👉 Tape simplement **\`!profil\`** dans ce salon privé ou clique sur le bouton **"👤 Mon profil"**.`
+        )
+        .setColor(0x3b82f6)
+        .setFooter({ text: 'PAWAKO FORMATION • Assistance Bot' });
+
+      await message.reply({ embeds: [embed] }).catch(() => {});
+      return true;
+    }
+
+    // Staff Contact
+    if (
+      content.includes('staff') ||
+      content.includes('formateur') ||
+      content.includes('humain') ||
+      content.includes('contact') ||
+      content.includes('ticket')
+    ) {
+      const embed = new EmbedBuilder()
+        .setTitle('💬 CONTACT DU STAFF PAWAKO')
+        .setDescription(
+          `Salut <@${message.author.id}> ! 👋\n\n` +
+          `L'équipe Staff PAWAKO a un œil sur ce salon privé et reçoit des alertes automatiques à chaque étape clé.\n` +
+          `🎫 Si tu as une demande spécifique, tu peux créer un ticket direct en tapant **\`!ticket\`** dans ce salon.`
+        )
+        .setColor(0x8b5cf6)
+        .setFooter({ text: 'PAWAKO FORMATION • Assistance Bot' });
+
+      await message.reply({ embeds: [embed] }).catch(() => {});
+      return true;
+    }
+
+    // General bot question
+    if (
+      content.includes('bot') ||
+      content.includes('fonctionne') ||
+      content.includes('marche') ||
+      content.includes('aide')
+    ) {
+      const embed = new EmbedBuilder()
+        .setTitle('🤖 RÔLE DU BOT PAWAKO FORMATION')
+        .setDescription(
+          `Salut <@${message.author.id}> ! 👋 Je suis l'assistant automatisé de PAWAKO FORMATION.\n\n` +
+          `🔹 **Mes missions :**\n` +
+          `• Te délivrer les supports de cours et questionnaires de validation\n` +
+          `• Chronométrer les quiz (15 secondes par question)\n` +
+          `• Gérer les cooldowns de révision (30 min si score < 16/20)\n` +
+          `• Programmer ta convocation pour le **Test de Simulation final (14h00 HF)**\n\n` +
+          `💡 *Commande utile : tape \`!profil\` pour voir tes notes à tout moment.*`
+        )
+        .setColor(0x6366f1)
+        .setFooter({ text: 'PAWAKO FORMATION • Assistant Pédagogique' });
+
+      await message.reply({ embeds: [embed] }).catch(() => {});
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check and send 14h00 HF Simulation reminders for scheduled candidates
+   */
+  private checkSimulationReminders() {
+    if (!this.client || !this.isConnected) return;
+    const allMembers = store.getMembers();
+    const nowMs = Date.now();
+    for (const m of allMembers) {
+      if (
+        m.simulationScheduledTimestamp &&
+        nowMs >= m.simulationScheduledTimestamp &&
+        !m.simulationReminderSent
+      ) {
+        m.simulationReminderSent = true;
+        store.saveMembers();
+        firebaseSyncService.saveMember(m).catch(() => {});
+
+        if (m.personalChannelId) {
+          this.client.channels.fetch(m.personalChannelId).then((chan) => {
+            if (chan && 'send' in chan) {
+              const reminderEmbed = new EmbedBuilder()
+                .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
+                .setDescription(
+                  `📢 <@${m.discordId || m.id}>, **il est 14h00 HF !**\n\n` +
+                  `C'est le moment de passer ton **Test de Simulation** en direct avec le Staff PAWAKO.\n` +
+                  `L'équipe de formation t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
+                )
+                .setColor(0x10b981)
+                .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })
+                .setTimestamp();
+
+              (chan as any).send({
+                content: `🔔 **[RAPPEL SIMULATION 14H00 HF]** <@${m.discordId || m.id}>`,
+                embeds: [reminderEmbed],
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        }
+
+        const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
+        if (guildId) {
+          this.client.guilds.fetch(guildId).then((guild) => {
+            this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff').then((staffChan) => {
+              if (staffChan) {
+                staffChan.send({
+                  content: `🔔 **[SIMULATION 14H00 HF]** Le candidat <@${m.discordId || m.id}> (**${m.username}**) attend son test de simulation dans ${m.personalChannelId ? `<#${m.personalChannelId}>` : 'son salon privé'} !`,
+                }).catch(() => {});
+              }
+            }).catch(() => {});
+          }).catch(() => {});
+        }
+      }
+    }
+  }
+
+  /**
    * Generate net, non-redundant stats report and post to #stats channel.
    * Sends DM to members who haven't started yet ("se faire de l'argent").
    */
@@ -1502,6 +1839,12 @@ export class PawakoBotRunner {
         const pDate = new Date(parisStr);
         const hours = pDate.getHours();
         const minutes = pDate.getMinutes();
+
+        // Check 14h00 HF simulation reminders
+        this.checkSimulationReminders();
+
+        // Update leaderboard in #classement-formation
+        this.updateLeaderboardChannel().catch(() => {});
 
         // Check if 18h00 HF
         if (hours === 18 && minutes === 0) {
@@ -1877,7 +2220,42 @@ export class PawakoBotRunner {
           quiz.moduleId
         );
         this.notifyStaffModule5Completion(member, quiz.title, finalScore, totalQuestions, minScore).catch(() => {});
+
+        // Compute 14h00 HF Simulation Convocation
+        const simTimestamp = getNext14hParisTimestamp();
+        member.simulationScheduledTimestamp = simTimestamp;
+        member.simulationReminderSent = false;
+        store.saveMembers();
+        firebaseSyncService.saveMember(member).catch(() => {});
+
+        if (member.personalChannelId && this.client) {
+          const simTsSec = Math.floor(simTimestamp / 1000);
+          this.client.channels.fetch(member.personalChannelId).then((candChan) => {
+            if (candChan && 'send' in candChan) {
+              const simEmbed = new EmbedBuilder()
+                .setTitle('📅 CONVOCATION OFFICIELLE — TEST DE SIMULATION (14h00 HF)')
+                .setDescription(
+                  `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
+                  `🎯 **Étape Finale : Le Test de Simulation**\n` +
+                  `Ton évaluation pratique avec un membre de l'équipe Staff est programmée pour :\n\n` +
+                  `🗓️ **<t:${simTsSec}:F>** (<t:${simTsSec}:R>)\n\n` +
+                  `⏰ **Rendez-vous à 14h00 (Heure Française - HF)** dans ce salon privé !\n` +
+                  `🔔 *Un rappel automatique te sera envoyé à l'heure pile du rendez-vous. Sois prêt !* 🚀`
+                )
+                .setColor(0x3b82f6)
+                .setFooter({ text: 'PAWAKO FORMATION • Convocation Test de Simulation' })
+                .setTimestamp();
+
+              (candChan as any).send({
+                content: `<@${discordUserId}>`,
+                embeds: [simEmbed],
+              }).catch((e: any) => console.warn('[Sim Convocation Error]', e));
+            }
+          }).catch(() => {});
+        }
       }
+
+      this.updateLeaderboardChannel().catch(() => {});
 
       store.saveMembers();
       firebaseSyncService.saveMember(member).catch(() => {});
@@ -1986,17 +2364,25 @@ export class PawakoBotRunner {
       );
     }
 
-    // Send or Edit message
+    // Send or Edit message cleanly with fallback to direct message edit
+    let updatedViaInteraction = false;
     if (interaction) {
-      await interaction.editReply({ embeds: [resultEmbed], components: [resultRow] }).catch(() => {});
-    } else if (session.channelId && session.messageId && this.client) {
+      try {
+        await interaction.editReply({ embeds: [resultEmbed], components: [resultRow] });
+        updatedViaInteraction = true;
+      } catch (err) {
+        console.warn('[completeQuizSession editReply warning]', err);
+      }
+    }
+
+    if (session.channelId && session.messageId && this.client) {
       try {
         const chan = await this.client.channels.fetch(session.channelId).catch(() => null);
         if (chan && 'messages' in chan) {
           const msg = await (chan as any).messages.fetch(session.messageId).catch(() => null);
           if (msg) {
             await msg.edit({ embeds: [resultEmbed], components: [resultRow] });
-          } else {
+          } else if (!updatedViaInteraction) {
             await (chan as any).send({ embeds: [resultEmbed], components: [resultRow] });
           }
         }

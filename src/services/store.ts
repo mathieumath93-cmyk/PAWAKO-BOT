@@ -602,6 +602,19 @@ export const defaultQuizzes: Quiz[] = [
   },
 ];
 
+export interface QuizAnalyticsItem {
+  quizId: string;
+  quizTitle: string;
+  moduleId: string;
+  moduleTitle: string;
+  totalAttempts: number;
+  passedAttempts: number;
+  failedAttempts: number;
+  passRate: number; // percentage 0-100
+  avgScore: number; // out of 20
+  difficulty: 'Facile' | 'Modéré' | 'Difficile' | 'Extrême';
+}
+
 class StoreService {
   private branding: BrandingSettings = { ...defaultBranding };
   private modules: TrainingModule[] = [...defaultModules];
@@ -1137,6 +1150,44 @@ class StoreService {
   public getQuizAttemptsForMember(memberId: string): QuizAttempt[] {
     if (!memberId) return [];
     return this.quizAttempts.filter((att) => att.memberId === memberId || att.memberId.replace('mem-', '') === memberId.replace('mem-', ''));
+  }
+
+  public getQuizAnalytics(): QuizAnalyticsItem[] {
+    return this.quizzes.map((quiz) => {
+      const mod = this.getModule(quiz.moduleId) || this.modules.find((m) => m.id === quiz.moduleId);
+      const attempts = this.quizAttempts.filter(
+        (att) => att.quizId === quiz.id || att.quizTitle === quiz.title
+      );
+      const totalAttempts = attempts.length;
+      const passedAttempts = attempts.filter((att) => att.passed).length;
+      const failedAttempts = totalAttempts - passedAttempts;
+      const passRate = totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 100;
+      const sumScores = attempts.reduce((acc, att) => {
+        const score20 = att.score > 20 ? Math.round((att.score / 100) * 20) : att.score;
+        return acc + score20;
+      }, 0);
+      const avgScore = totalAttempts > 0 ? Math.round((sumScores / totalAttempts) * 10) / 10 : 20;
+
+      let difficulty: 'Facile' | 'Modéré' | 'Difficile' | 'Extrême' = 'Facile';
+      if (totalAttempts > 0) {
+        if (passRate < 40) difficulty = 'Extrême';
+        else if (passRate < 60) difficulty = 'Difficile';
+        else if (passRate < 80) difficulty = 'Modéré';
+      }
+
+      return {
+        quizId: quiz.id,
+        quizTitle: quiz.title,
+        moduleId: quiz.moduleId,
+        moduleTitle: mod ? mod.title : quiz.title,
+        totalAttempts,
+        passedAttempts,
+        failedAttempts,
+        passRate,
+        avgScore,
+        difficulty,
+      };
+    });
   }
 
   // --- Members ---

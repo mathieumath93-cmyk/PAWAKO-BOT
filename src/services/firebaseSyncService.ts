@@ -63,6 +63,12 @@ class FirebaseSyncService {
     const details: string[] = [];
     const nowMs = Date.now();
 
+    // Current Paris hour for time-of-day customization (0-23)
+    const nowLocal = new Date();
+    const parisStr = nowLocal.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
+    const pDate = new Date(parisStr);
+    const currentParisHour = pDate.getHours();
+
     for (const member of members) {
       if (!member.isActive || member.candidateState === 'formation_terminee') {
         continue;
@@ -104,10 +110,47 @@ class FirebaseSyncService {
         continue;
       }
 
-      // Format template message
-      const template = situation === 'unstarted' ? autoCfg.unstartedMessage : autoCfg.unfinishedQuizMessage;
       const buttonLabel = config.startTrainingButtonLabel || '🚀 Lancer la formation';
       const moduleTitle = currentMod?.title || 'ton module actuel';
+
+      // Build unique reminder message tailored to threshold hour + time of day
+      let timeContext = '';
+      if (currentParisHour >= 22 || currentParisHour < 8) {
+        timeContext = '🌙 **Session nocturne pour les déterminés !** ';
+      } else if (currentParisHour >= 8 && currentParisHour < 12) {
+        timeContext = '☀️ **Abonnez-vous au succès dès ce matin !** ';
+      } else if (currentParisHour >= 12 && currentParisHour < 18) {
+        timeContext = '⚡ **Boost de l\'après-midi !** ';
+      } else {
+        timeContext = '🌆 **Bonsoir & cap sur tes objectifs !** ';
+      }
+
+      // Select random template from pools or fallback
+      let template = '';
+      if (situation === 'unstarted') {
+        const pool = autoCfg.unstartedPool && autoCfg.unstartedPool.length > 0
+          ? autoCfg.unstartedPool
+          : [autoCfg.unstartedMessage];
+        template = pool[Math.floor(Math.random() * pool.length)];
+      } else {
+        // Unfinished module / quiz
+        let pool: string[] = [];
+        if (applicableThreshold <= 2) {
+          pool = autoCfg.inProgress2hPool || [];
+        } else if (applicableThreshold <= 6) {
+          pool = autoCfg.inProgress6hPool || [];
+        } else if (applicableThreshold <= 12) {
+          pool = autoCfg.inProgress12hPool || [];
+        } else {
+          pool = autoCfg.inProgress24hPool || [];
+        }
+
+        if (!pool || pool.length === 0) {
+          pool = [autoCfg.unfinishedQuizMessage];
+        }
+
+        template = pool[Math.floor(Math.random() * pool.length)];
+      }
 
       const formattedMessage = template
         .replace(/\{discordId\}/g, member.discordId)
@@ -129,10 +172,10 @@ class FirebaseSyncService {
               guildId: config.guildId || '',
               channelId: member.personalChannelId,
               embed: {
-                title: `⏰ Relance Automatique (${applicableThreshold}h d'inactivité)`,
+                title: `⏰ Relance Quiz & Formation (${applicableThreshold}h d'inactivité)`,
                 description: formattedMessage,
                 color: 0xf59e0b,
-                footer: { text: 'PAWAKO FORMATION • Relance Automatique' },
+                footer: { text: 'PAWAKO FORMATION • Boost Performance & Gains' },
                 timestamp: new Date().toISOString(),
               },
               content: `<@${member.discordId}>`,

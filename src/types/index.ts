@@ -428,6 +428,12 @@ export interface AutoReminderConfig {
   thresholdHours: number[]; // e.g. [2, 6, 8, 24]
   unstartedMessage: string;
   unfinishedQuizMessage: string;
+  // Pools of 5 messages each for varied reminders
+  unstartedPool?: string[];
+  inProgress2hPool?: string[];
+  inProgress6hPool?: string[];
+  inProgress12hPool?: string[];
+  inProgress24hPool?: string[];
 }
 
 export interface OnboardingFlowConfig {
@@ -449,6 +455,8 @@ export interface OnboardingFlowConfig {
   hideQuizSolutions: boolean; // default true
   stepConfigs: ModuleStepConfig[];
   autoReminders?: AutoReminderConfig;
+  repeatedFailurePool?: string[]; // Pool of advice messages sent when candidate fails 3+ times
+  cooldownSpamPool?: string[]; // Sarcastic messages sent when candidate clicks during active cooldown
   sarcasticSpamMessages?: string[];
 }
 

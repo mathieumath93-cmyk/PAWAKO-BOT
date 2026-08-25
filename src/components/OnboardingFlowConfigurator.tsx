@@ -1112,92 +1112,197 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Message de Relance : Module non démarré</span>
+            <div className="space-y-4">
+              <div className="border border-slate-800 rounded-xl p-4 bg-slate-950/80 space-y-2">
+                <label className="text-xs font-bold text-amber-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Pool de Relances : Membres N'ayant encore rien lancé (0 module démarré)</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-normal">1 message par ligne • Le bot pioche au hasard</span>
                 </label>
                 <textarea
-                  rows={2}
-                  value={config.autoReminders?.unstartedMessage || '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !'}
-                  onChange={(e) => setConfig({
-                    ...config,
-                    autoReminders: {
-                      ...(config.autoReminders || {
-                        enabled: true,
-                        thresholdHours: [2, 6, 8, 24],
-                        unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
-                        unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
-                      }),
-                      unstartedMessage: e.target.value
-                    }
-                  })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500"
+                  rows={4}
+                  value={(config.autoReminders?.unstartedPool || []).join('\n')}
+                  onChange={(e) => {
+                    const lines = e.target.value.split('\n').filter(l => l.trim().length > 0);
+                    setConfig({
+                      ...config,
+                      autoReminders: {
+                        ...(config.autoReminders || {
+                          enabled: true,
+                          thresholdHours: [2, 6, 8, 24],
+                          unstartedMessage: '',
+                          unfinishedQuizMessage: '',
+                        }),
+                        unstartedPool: lines,
+                      }
+                    });
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+                  placeholder="Une variante par ligne..."
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Message de Relance : Quiz / Module non terminé</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={config.autoReminders?.unfinishedQuizMessage || '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !'}
-                  onChange={(e) => setConfig({
-                    ...config,
-                    autoReminders: {
-                      ...(config.autoReminders || {
-                        enabled: true,
-                        thresholdHours: [2, 6, 8, 24],
-                        unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
-                        unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
-                      }),
-                      unfinishedQuizMessage: e.target.value
-                    }
-                  })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border border-slate-800 rounded-xl p-4 bg-slate-950/80 space-y-2">
+                  <label className="text-xs font-bold text-indigo-400 flex items-center justify-between">
+                    <span>Pool Relance Palier 2h (Inactivité 2h)</span>
+                    <span className="text-[11px] text-slate-400 font-normal">1 par ligne</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(config.autoReminders?.inProgress2hPool || []).join('\n')}
+                    onChange={(e) => {
+                      const lines = e.target.value.split('\n').filter(l => l.trim().length > 0);
+                      setConfig({
+                        ...config,
+                        autoReminders: {
+                          ...(config.autoReminders || { enabled: true, thresholdHours: [2, 6, 8, 24], unstartedMessage: '', unfinishedQuizMessage: '' }),
+                          inProgress2hPool: lines,
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-indigo-200 font-mono leading-relaxed focus:outline-none focus:border-indigo-500"
+                    placeholder="Variantes 2h..."
+                  />
+                </div>
+
+                <div className="border border-slate-800 rounded-xl p-4 bg-slate-950/80 space-y-2">
+                  <label className="text-xs font-bold text-sky-400 flex items-center justify-between">
+                    <span>Pool Relance Palier 6h (Inactivité 6h)</span>
+                    <span className="text-[11px] text-slate-400 font-normal">1 par ligne</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(config.autoReminders?.inProgress6hPool || []).join('\n')}
+                    onChange={(e) => {
+                      const lines = e.target.value.split('\n').filter(l => l.trim().length > 0);
+                      setConfig({
+                        ...config,
+                        autoReminders: {
+                          ...(config.autoReminders || { enabled: true, thresholdHours: [2, 6, 8, 24], unstartedMessage: '', unfinishedQuizMessage: '' }),
+                          inProgress6hPool: lines,
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-sky-200 font-mono leading-relaxed focus:outline-none focus:border-sky-500"
+                    placeholder="Variantes 6h..."
+                  />
+                </div>
+
+                <div className="border border-slate-800 rounded-xl p-4 bg-slate-950/80 space-y-2">
+                  <label className="text-xs font-bold text-emerald-400 flex items-center justify-between">
+                    <span>Pool Relance Palier 12h (Inactivité 12h)</span>
+                    <span className="text-[11px] text-slate-400 font-normal">1 par ligne</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(config.autoReminders?.inProgress12hPool || []).join('\n')}
+                    onChange={(e) => {
+                      const lines = e.target.value.split('\n').filter(l => l.trim().length > 0);
+                      setConfig({
+                        ...config,
+                        autoReminders: {
+                          ...(config.autoReminders || { enabled: true, thresholdHours: [2, 6, 8, 24], unstartedMessage: '', unfinishedQuizMessage: '' }),
+                          inProgress12hPool: lines,
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:outline-none focus:border-emerald-500"
+                    placeholder="Variantes 12h..."
+                  />
+                </div>
+
+                <div className="border border-slate-800 rounded-xl p-4 bg-slate-950/80 space-y-2">
+                  <label className="text-xs font-bold text-amber-400 flex items-center justify-between">
+                    <span>Pool Relance Palier 24h+ (Inactivité 24h+)</span>
+                    <span className="text-[11px] text-slate-400 font-normal">1 par ligne</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(config.autoReminders?.inProgress24hPool || []).join('\n')}
+                    onChange={(e) => {
+                      const lines = e.target.value.split('\n').filter(l => l.trim().length > 0);
+                      setConfig({
+                        ...config,
+                        autoReminders: {
+                          ...(config.autoReminders || { enabled: true, thresholdHours: [2, 6, 8, 24], unstartedMessage: '', unfinishedQuizMessage: '' }),
+                          inProgress24hPool: lines,
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+                    placeholder="Variantes 24h+..."
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Sarcastic Anti-Spam Bot Messages */}
+          {/* Advice Messages Pool for 3+ Quiz Failures */}
           <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-400" />
+                <BookOpen className="w-4 h-4 text-amber-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Messages Sarcastiques Bot Anti-Spam (1 ligne par réplique)
+                  Messages Automatiques d'Aide / Révision (3+ Échecs au Quiz)
                 </h3>
               </div>
               <span className="text-[11px] text-slate-400">
-                Déclenché si un membre clique plus de 3 fois en 3 secondes
+                Envoyé dans le salon privé du candidat dès le 3ème échec
               </span>
             </div>
 
             <p className="text-xs text-slate-400">
-              Saisissez ou modifiez les répliques sarcastiques (1 message par ligne) que le bot enverra aléatoirement en réponse privée :
+              Saisissez les variantes de conseils incitant à bien relire le module avant de retenter (séparées par une ligne vide entre chaque message) :
+            </p>
+
+            <textarea
+              rows={6}
+              value={(config.repeatedFailurePool || []).join('\n\n')}
+              onChange={(e) => {
+                const blocks = e.target.value.split('\n\n').map(b => b.trim()).filter(b => b.length > 0);
+                setConfig({
+                  ...config,
+                  repeatedFailurePool: blocks
+                });
+              }}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-amber-300 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+              placeholder="Saisissez un message par bloc (séparés par une ligne vide)..."
+            />
+          </div>
+
+          {/* Sarcastic Anti-Spam / Cooldown Bot Messages */}
+          <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-rose-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Répliques Sarcastiques Cooldown / Spam Clics
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                Déclenché si un membre clique sur le quiz pendant son cooldown actif
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Saisissez ou modifiez les répliques sarcastiques (1 message par ligne) que le bot affichera aléatoirement :
             </p>
 
             <textarea
               rows={5}
-              value={(config.sarcasticSpamMessages || [
-                "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
-                "⚡ *Alerte mitraillage ! À ce rythme-là, tu vas démonter ton mulot avant d'avoir atteint le Module 2.*",
-                "☕ *Oula, mollo le ninja du mulot ! Prends une grande inspiration et un café, les données restent bien au chaud.*",
-                "🎯 *Quelle cadence de clics phénoménale ! Dommage que ça ne donne aucun point bonus pour valider le quiz.*",
-                "🛑 *Keep calm ! Cliquer 50 fois la seconde ne va pas débloquer la suite plus vite, promis juré !*"
-              ]).join('\n')}
+              value={(config.cooldownSpamPool || config.sarcasticSpamMessages || []).join('\n')}
               onChange={(e) => {
                 const lines = e.target.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 setConfig({
                   ...config,
+                  cooldownSpamPool: lines,
                   sarcasticSpamMessages: lines
                 });
               }}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-amber-300 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-rose-300 font-mono leading-relaxed focus:outline-none focus:border-rose-500"
               placeholder="Une réplique par ligne..."
             />
           </div>

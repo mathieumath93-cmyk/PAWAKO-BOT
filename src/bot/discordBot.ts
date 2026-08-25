@@ -242,6 +242,9 @@ export class PawakoBotRunner {
         firebaseSyncService.revalidate().catch((err) => {
           console.warn('[Pawako Bot Sync Error on Ready]', err?.message || err);
         });
+
+        // Start 18h00 HF scheduled stats cron
+        this.startScheduledCron();
       });
 
       this.client.on('guildMemberAdd', async (member) => {
@@ -824,13 +827,34 @@ export class PawakoBotRunner {
               const secs = Math.floor((remainingMs % 60000) / 1000);
               const tsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
 
+              const cfg = onboardingService.getConfig();
+              const spamPool = cfg.cooldownSpamPool && cfg.cooldownSpamPool.length > 0
+                ? cfg.cooldownSpamPool
+                : cfg.sarcasticSpamMessages || [];
+
+              const rawSarcastic = spamPool.length > 0
+                ? spamPool[Math.floor(Math.random() * spamPool.length)]
+                : "🤖 *Woah, doucement sur le bouton <@{discordId}> ! Le cooldown est actif, repasse <t:{tsSec}:R> !*";
+
+              const formattedSarcastic = rawSarcastic
+                .replace(/\{discordId\}/g, member.discordId)
+                .replace(/\{tsSec\}/g, String(tsSec))
+                .replace(/\{mins\}/g, String(mins))
+                .replace(/\{secs\}/g, String(secs))
+                .replace(/\{username\}/g, member.username);
+
               const requiredMin = getQuizMinScoreRequired(quiz, 20);
               const cooldownEmbed = new EmbedBuilder()
                 .setTitle('❌ Quiz Indisponible - Cooldown Actif')
-                .setDescription(`Tu n'as pas obtenu le score nécessaire (minimum **${requiredMin}/20**) lors de ton dernier essai.\n\nTu pourras retenter ce quiz <t:${tsSec}:R> (dans **${mins} minute(s) ${secs} seconde(s)**).`)
-                .addFields({ name: '⏳ Déblocage Automatique', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
+                .setDescription(
+                  `${formattedSarcastic}\n\n` +
+                  `📊 **Informations du quiz :**\n` +
+                  `• Score minimum requis : **${requiredMin}/20**\n` +
+                  `• Déblocage du quiz : <t:${tsSec}:R> (dans **${mins}m ${secs}s**)`
+                )
+                .addFields({ name: '⏳ Temps d\'attente obligatoire', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
                 .setColor(0xef4444)
-                .setFooter({ text: 'PAWAKO FORMATION • Système de Cooldown Serveur' });
+                .setFooter({ text: 'PAWAKO FORMATION • Cooldown Actif & Révisions Recommandées' });
 
               const cooldownRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
@@ -1081,6 +1105,58 @@ export class PawakoBotRunner {
     }
   }
 
+  /**
+   * Helper to fetch or auto-create a staff-only channel on Discord with permission overwrites
+   */
+  public async getOrCreateStaffOnlyChannel(
+    guild: any,
+    channelName: string,
+    topic: string
+  ): Promise<TextChannel | null> {
+    try {
+      const channels = await guild.channels.fetch().catch(() => null);
+      if (channels) {
+        const existing = channels.find(
+          (c: any) => c && c.isTextBased() && c.name.toLowerCase() === channelName.toLowerCase()
+        ) as TextChannel | null;
+        if (existing) return existing;
+      }
+
+      const staffRole = guild.roles.cache.find(
+        (r: any) =>
+          r.name.toLowerCase().includes('staff') ||
+          r.name.toLowerCase().includes('admin') ||
+          r.name.toLowerCase().includes('formateur')
+      );
+
+      const overwrites: any[] = [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionFlagsBits.ViewChannel],
+        },
+      ];
+
+      if (staffRole) {
+        overwrites.push({
+          id: staffRole.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+        });
+      }
+
+      const created = (await guild.channels.create({
+        name: channelName,
+        type: ChannelType.GuildText,
+        topic,
+        permissionOverwrites: overwrites,
+      })) as TextChannel;
+      console.log(`[PawakoBot] Salon #${channelName} (Staff Only) créé avec succès sur Discord.`);
+      return created;
+    } catch (err) {
+      console.warn(`[PawakoBot] Erreur création auto salon #${channelName}:`, err);
+      return null;
+    }
+  }
+
   public async notifyStaffModule5Completion(
     member: Member,
     quizTitle: string,
@@ -1091,72 +1167,268 @@ export class PawakoBotRunner {
     if (!this.client || !this.isConnected) return false;
     try {
       const config = onboardingService.getConfig();
-      let staffChannel: any = null;
-
-      if (config.logChannelId && /^\d{17,20}$/.test(config.logChannelId)) {
-        staffChannel = await this.client.channels.fetch(config.logChannelId).catch(() => null);
+      const guildId = config.guildId || this.client.guilds.cache.first()?.id;
+      let guild: any = null;
+      if (guildId) {
+        guild = await this.client.guilds.fetch(guildId).catch(() => null);
       }
-
-      if (!staffChannel && config.guildId) {
-        const guild = await this.client.guilds.fetch(config.guildId).catch(() => null);
-        if (guild) {
-          const channels = await guild.channels.fetch().catch(() => null);
-          if (channels) {
-            staffChannel = channels.find(
-              (c: any) =>
-                c &&
-                c.isTextBased() &&
-                (c.name.includes('staff') ||
-                  c.name.includes('formateur') ||
-                  c.name.includes('log') ||
-                  c.name.includes('equipe') ||
-                  c.name.includes('alert'))
-            );
-          }
-        }
+      if (!guild && this.client.guilds.cache.size > 0) {
+        guild = this.client.guilds.cache.first();
       }
+      if (!guild) return false;
+
+      // Auto-create or fetch #module-ok channel (Staff only)
+      const moduleOkChannel = await this.getOrCreateStaffOnlyChannel(
+        guild,
+        'module-ok',
+        '🎓 Notifications exclusives — Membres ayant validé l\'intégralité des modules PAWAKO (Staff Only)'
+      );
+
+      if (!moduleOkChannel) return false;
+
+      const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
+      const totalModules = store.getModules().length || 5;
 
       const staffEmbed = new EmbedBuilder()
-        .setTitle('🏆 VALIDATION FINALE MODULE 5 — NOTIFICATION STAFF')
+        .setTitle('🏆 PARCOURS INTÉGRALEMENT VALIDÉ — MODULE OK')
         .setDescription(
-          `🎉 **Excellente nouvelle !** Le candidat <@${member.discordId}> (**${member.username}**) a validé avec succès le **Module 5 (${quizTitle})** !\n\n` +
+          `🎉 **Excellente nouvelle !** Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**) a validé avec succès l'intégralité du parcours (**${quizTitle}**) !\n\n` +
           `📊 **Résultats du Quiz Final :**\n` +
-          `• **Score obtenu :** **${score}/${totalQuestions}** (Minimum requis : ${minScore}/${totalQuestions})\n` +
-          `• **Statut :** **PARCOURS INTÉGRALEMENT TERMINÉ** 🏆\n` +
+          `• **Score au Quiz Final :** **${score}/${totalQuestions}** (Minimum requis : ${minScore}/${totalQuestions})\n` +
+          `• **Modules validés :** **${validatedCount}/${totalModules}** (100% du parcours terminé)\n` +
+          `• **Statut :** **FORMATION INTÉGRALEMENT VALIDÉE** 🏆\n` +
           `• **Salon du candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé'}\n\n` +
-          `🔔 **Action requise :** Le staff est notifié afin d'effectuer la validation administrative et l'accueil officiel.`
+          `✅ **Le candidat a terminé avec succès tous ses modules. L'équipe staff est notifiée pour l'accueil final.**`
         )
         .setColor(0x10b981)
         .setThumbnail(member.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80')
-        .setFooter({ text: 'PAWAKO FORMATION • Notification Automatique Staff' })
+        .setFooter({ text: 'PAWAKO FORMATION • Notification Module OK Staff' })
         .setTimestamp();
 
-      let sent = false;
-
-      if (staffChannel && 'send' in staffChannel) {
-        await (staffChannel as any).send({
-          content: '📢 **[ALERTE STAFF]** Un candidat vient de réussir le Module 5 et termine sa formation !',
-          embeds: [staffEmbed],
-        }).catch((e: any) => console.warn('[Staff Send Warning]', e));
-        sent = true;
-      }
+      await moduleOkChannel.send({
+        content: `📢 **[MODULE OK]** <@${member.discordId || member.id.replace('mem-', '')}> a terminé avec succès TOUS les modules de formation !`,
+        embeds: [staffEmbed],
+      }).catch((e: any) => console.warn('[Module OK Send Warning]', e));
 
       if (member.personalChannelId) {
         const candChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
-        if (candChan && 'send' in candChan && candChan.id !== staffChannel?.id) {
+        if (candChan && 'send' in candChan && candChan.id !== moduleOkChannel.id) {
           await (candChan as any).send({
-            content: '📢 **[NOTIFICATION STAFF & CANDIDAT]** Validation finale du Module 5 transmise à l\'équipe de formation !',
+            content: '📢 **[NOTIFICATION STAFF & CANDIDAT]** Validation finale transmise à l\'équipe de formation !',
             embeds: [staffEmbed],
           }).catch((e: any) => console.warn('[Cand Chan Staff Embed Warning]', e));
-          sent = true;
         }
       }
 
-      return sent;
+      return true;
     } catch (err: any) {
-      console.warn('[Notify Staff Module 5 Error]', err?.message || err);
+      console.warn('[Notify Staff Module OK Error]', err?.message || err);
       return false;
     }
+  }
+
+  /**
+   * Generate net, non-redundant stats report and post to #stats channel.
+   * Sends DM to members who haven't started yet ("se faire de l'argent").
+   */
+  public async sendStatsReport(
+    type: 'daily' | 'weekly' | 'monthly' = 'daily'
+  ): Promise<{ success: boolean; details?: string }> {
+    if (!this.client || !this.isConnected) return { success: false, details: 'Bot Discord non connecté' };
+
+    try {
+      const config = onboardingService.getConfig();
+      const guildId = config.guildId || this.client.guilds.cache.first()?.id;
+      if (!guildId) return { success: false, details: 'Guild Discord non trouvée' };
+
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return { success: false, details: 'Guild Discord inaccessible' };
+
+      const statsChannel = await this.getOrCreateStaffOnlyChannel(
+        guild,
+        'stats',
+        '📊 Statistiques automatiques du parcours de formation PAWAKO (Staff Only)'
+      );
+
+      if (!statsChannel) return { success: false, details: 'Salon #stats introuvable et création impossible' };
+
+      // Get all active members
+      const members = store.getMembers().filter((m) => m.isActive !== false);
+      const totalJoined = members.length;
+
+      const modules = store.getModules();
+      const totalModules = modules.length || 5;
+
+      // Categorize members strictly by their current / highest progression point (no duplicates)
+      let unstartedCount = 0;
+      const moduleInProgressCounts: Record<string, number> = {};
+      modules.forEach((mod) => {
+        moduleInProgressCounts[mod.id] = 0;
+      });
+      let completedAllCount = 0;
+
+      const unstartedMembers: Member[] = [];
+
+      members.forEach((m) => {
+        const validatedModulesCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+
+        if (m.candidateState === 'formation_terminee' || validatedModulesCount >= totalModules) {
+          completedAllCount++;
+        } else if (
+          validatedModulesCount === 0 &&
+          (m.candidateState === 'nouveau' || !m.candidateState || !m.progress || Object.keys(m.progress).length === 0)
+        ) {
+          unstartedCount++;
+          unstartedMembers.push(m);
+        } else {
+          // En cours sur son module actuel
+          const curModId = m.currentModuleId || (modules[validatedModulesCount]?.id) || modules[0]?.id;
+          if (curModId && moduleInProgressCounts[curModId] !== undefined) {
+            moduleInProgressCounts[curModId]++;
+          } else if (modules[0]) {
+            moduleInProgressCounts[modules[0].id] = (moduleInProgressCounts[modules[0].id] || 0) + 1;
+          } else {
+            unstartedCount++;
+            unstartedMembers.push(m);
+          }
+        }
+      });
+
+      const activeOrCompleted = totalJoined - unstartedCount;
+      const engagementPct = totalJoined > 0 ? Math.round((activeOrCompleted / totalJoined) * 100) : 0;
+      const completionPct = totalJoined > 0 ? Math.round((completedAllCount / totalJoined) * 100) : 0;
+
+      const periodTitles = {
+        daily: '📊 STATISTIQUES JOURNALIÈRES (18h00 HF)',
+        weekly: '📅 STATISTIQUES HEBDOMADAIRES (Vendredi 18h00 HF)',
+        monthly: '🗓️ STATISTIQUES MENSUELLES (Bilan Fin de Mois 18h00 HF)',
+      };
+
+      const modulesBreakdownLines = modules.map((mod, idx) => {
+        const count = moduleInProgressCounts[mod.id] || 0;
+        return `• **${mod.title}** (Niveau ${idx + 1}) : **${count} candidat(s)** en cours`;
+      });
+
+      const statsEmbed = new EmbedBuilder()
+        .setTitle(periodTitles[type] || periodTitles.daily)
+        .setDescription(
+          `📈 **Bilan Global de la Formation PAWAKO**\n` +
+          `*(Calcul basé exclusivement sur l'avancement réel des modules et quiz validés)*\n\n` +
+          `👥 **Total des Inscrits (Membres ayant rejoint) :** **${totalJoined}**\n\n` +
+          `😴 **N'ayant encore rien lancé (0 module démarré) :** **${unstartedCount} membre(s)**\n` +
+          `*(Un message privé de motivation "Boost Revenus" leur a été envoyé)*\n\n` +
+          `📚 **Répartition par Dernier Module Atteint (Sans redondance) :**\n` +
+          `${modulesBreakdownLines.join('\n')}\n\n` +
+          `🎓 **Formation 100% Terminée (Validés) :** **${completedAllCount} membre(s)** (${completionPct}%)\n\n` +
+          `📊 **Taux d'engagement global :** **${engagementPct}%** (${activeOrCompleted}/${totalJoined} membres actifs ou diplômés)`
+        )
+        .setColor(0x6366f1)
+        .setFooter({ text: 'PAWAKO FORMATION • Rapport Automatique Staff (18h00 HF)' })
+        .setTimestamp();
+
+      await statsChannel.send({ embeds: [statsEmbed] });
+
+      // Send DM "se faire de l'argent" to unstarted members
+      let dmSentCount = 0;
+      for (const m of unstartedMembers) {
+        if (!m.discordId) continue;
+        try {
+          const user = await this.client.users.fetch(m.discordId).catch(() => null);
+          if (user) {
+            const dmEmbed = new EmbedBuilder()
+              .setTitle('💼 C\'est le moment de se faire de l\'argent !')
+              .setDescription(
+                `Salut **${m.username}** ! 👋\n\n` +
+                `Tu as rejoint PAWAKO FORMATION mais tu n'as pas encore lancé ton Module 1.\n` +
+                `C'est le moment idéal pour concrétiser tes ambitions et générer tes premiers revenus ! 💰\n\n` +
+                `👉 **Rends-toi dans ton salon privé** ${m.personalChannelId ? `<#${m.personalChannelId}>` : ''} et clique sur le bouton **"🚀 Lancer la formation"** pour débloquer ton premier cours et ton quiz !`
+              )
+              .setColor(0x10b981)
+              .setFooter({ text: 'PAWAKO FORMATION • Boost Revenus & Motivation' });
+
+            const dmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId('start_training_module_1')
+                .setLabel('🚀 Lancer le Module 1')
+                .setStyle(ButtonStyle.Success)
+            );
+
+            let sent = false;
+            try {
+              await user.send({ embeds: [dmEmbed], components: [dmRow] });
+              sent = true;
+            } catch {
+              if (m.personalChannelId) {
+                const pChan = await this.client.channels.fetch(m.personalChannelId).catch(() => null);
+                if (pChan && 'send' in pChan) {
+                  await (pChan as any).send({ content: `<@${m.discordId}>`, embeds: [dmEmbed], components: [dmRow] }).catch(() => {});
+                  sent = true;
+                }
+              }
+            }
+            if (sent) dmSentCount++;
+          }
+        } catch (dmErr) {
+          console.warn(`[Stats DM Warning] DM non envoyé à ${m.username}:`, dmErr);
+        }
+      }
+
+      return {
+        success: true,
+        details: `Rapport ${type} publié sur #stats (${totalJoined} inscrits, ${unstartedCount} relancés par DM).`,
+      };
+    } catch (err: any) {
+      console.error('[sendStatsReport Error]', err);
+      return { success: false, details: err?.message || 'Erreur lors du rapport de statistiques' };
+    }
+  }
+
+  private lastCronRunDate: string = '';
+
+  /**
+   * Periodic runner checking 18h00 HF schedule for stats dispatch
+   */
+  private startScheduledCron() {
+    setInterval(() => {
+      if (!this.isConnected || !this.client) return;
+
+      try {
+        const now = new Date();
+        const parisStr = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
+        const pDate = new Date(parisStr);
+        const hours = pDate.getHours();
+        const minutes = pDate.getMinutes();
+
+        // Check if 18h00 HF
+        if (hours === 18 && minutes === 0) {
+          const year = pDate.getFullYear();
+          const month = String(pDate.getMonth() + 1).padStart(2, '0');
+          const day = String(pDate.getDate()).padStart(2, '0');
+          const todayKey = `${year}-${month}-${day}`;
+
+          if (this.lastCronRunDate !== todayKey) {
+            this.lastCronRunDate = todayKey;
+            const dayOfWeek = pDate.getDay(); // 5 = Friday
+            const dayOfMonth = pDate.getDate();
+            const totalDaysInMonth = new Date(pDate.getFullYear(), pDate.getMonth() + 1, 0).getDate();
+
+            console.log(`[PAWAKO BOT] Lancement automatique du rapport #stats à 18h00 HF (${todayKey})...`);
+
+            this.sendStatsReport('daily').catch((err) => console.warn('[Daily Stats Error]', err));
+
+            if (dayOfWeek === 5) {
+              this.sendStatsReport('weekly').catch((err) => console.warn('[Weekly Stats Error]', err));
+            }
+
+            if (dayOfMonth === totalDaysInMonth) {
+              this.sendStatsReport('monthly').catch((err) => console.warn('[Monthly Stats Error]', err));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Scheduled Cron Warning]', err);
+      }
+    }, 35 * 1000); // Check every 35 seconds
   }
 
   /**
@@ -1553,6 +1825,42 @@ export class PawakoBotRunner {
           newAttempts,
           'consecutive_failures'
         ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
+      }
+
+      // Send automatic pedagogical advice message if candidate fails 3+ times
+      if (newAttempts >= 3 && member.personalChannelId) {
+        try {
+          const cfg = onboardingService.getConfig();
+          const advicePool = cfg.repeatedFailurePool && cfg.repeatedFailurePool.length > 0
+            ? cfg.repeatedFailurePool
+            : [
+                "⚠️ **Conseil Formation PAWAKO**\n\n<@{discordId}>, nous avons remarqué que tu as échoué plus de 3 fois au quiz **{quizTitle}**.\n💡 Prends le temps de bien relire et maîtriser l'intégralité du module avant de retenter ta chance ! 📚"
+              ];
+
+          const rawAdvice = advicePool[Math.floor(Math.random() * advicePool.length)];
+          const formattedAdvice = rawAdvice
+            .replace(/\{discordId\}/g, member.discordId)
+            .replace(/\{quizTitle\}/g, quiz.title)
+            .replace(/\{username\}/g, member.username);
+
+          this.client?.channels.fetch(member.personalChannelId).then((chan) => {
+            if (chan && 'send' in chan) {
+              const adviceEmbed = new EmbedBuilder()
+                .setTitle('📖 CONSEIL PÉDAGOGIQUE — MAÎTRISE DU MODULE')
+                .setDescription(formattedAdvice)
+                .setColor(0xf59e0b)
+                .setFooter({ text: 'PAWAKO FORMATION • Conseil & Pédagogie' })
+                .setTimestamp();
+
+              (chan as any).send({
+                content: `<@${member.discordId}>`,
+                embeds: [adviceEmbed],
+              }).catch(() => {});
+            }
+          }).catch(() => {});
+        } catch (err) {
+          console.warn('[3+ Fails Advice Error]', err);
+        }
       }
 
       const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);

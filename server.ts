@@ -1592,6 +1592,18 @@ async function startServer() {
     res.json({ success: true, message: 'Connexion du bot Discord initiée.' });
   });
 
+  // Trigger manual or test stats report (#stats)
+  app.post('/api/discord/send-stats', async (req: Request, res: Response) => {
+    try {
+      const { type } = req.body || {};
+      const reportType = (type === 'weekly' || type === 'monthly') ? type : 'daily';
+      const result = await pawakoBot.sendStatsReport(reportType);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors du rapport de statistiques' });
+    }
+  });
+
   // Supabase API Status
   app.get('/api/supabase/status', (req: Request, res: Response) => {
     res.json({

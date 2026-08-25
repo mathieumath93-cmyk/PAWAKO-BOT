@@ -181,6 +181,7 @@ export class PawakoBotRunner {
   private isConnecting: boolean = false;
   private activeQuizSessions = new Map<string, ActiveQuizSession>();
   private userClickTracker = new Map<string, { count: number; lastClickTime: number }>();
+  private cooldownClickTracker = new Map<string, { count: number; cooldownUntil: number }>();
 
   private SARCASTIC_SPAM_MESSAGES = [
     "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
@@ -827,41 +828,78 @@ export class PawakoBotRunner {
               const secs = Math.floor((remainingMs % 60000) / 1000);
               const tsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
 
+              // Track clicks specifically during this active cooldown
+              const existingTrack = this.cooldownClickTracker.get(user.id);
+              let cooldownClicks = 1;
+              if (existingTrack && existingTrack.cooldownUntil === member.cooldownUntilTimestamp) {
+                cooldownClicks = existingTrack.count + 1;
+              }
+              this.cooldownClickTracker.set(user.id, {
+                count: cooldownClicks,
+                cooldownUntil: member.cooldownUntilTimestamp
+              });
+
+              const requiredMin = getQuizMinScoreRequired(quiz, 20);
+
+              // 1st click during active cooldown: Standard official informative notice
+              if (cooldownClicks === 1) {
+                const cooldownEmbed = new EmbedBuilder()
+                  .setTitle('❌ Quiz Indisponible - Cooldown Actif')
+                  .setDescription(
+                    `Tu n'as pas obtenu le score nécessaire (minimum **${requiredMin}/20**) lors de ton dernier essai.\n\n` +
+                    `⏳ Tu pourras retenter ce quiz <t:${tsSec}:R> (dans **${mins} minute(s) ${secs} seconde(s)**).\n\n` +
+                    `💡 *Prends ce temps d'attente obligatoire pour relire ton support de cours et consolider tes connaissances !*`
+                  )
+                  .addFields({ name: '⏱️ Déblocage Automatique', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
+                  .setColor(0xef4444)
+                  .setFooter({ text: 'PAWAKO FORMATION • Cooldown Actif & Révisions Recommandées' });
+
+                const cooldownRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
+                  new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+                );
+
+                await interaction.editReply({ embeds: [cooldownEmbed], components: [cooldownRow] });
+                return;
+              }
+
+              // 2nd click and beyond (insisting / clicking repeatedly during cooldown): Sarcastic message passes AFTER!
               const cfg = onboardingService.getConfig();
               const spamPool = cfg.cooldownSpamPool && cfg.cooldownSpamPool.length > 0
                 ? cfg.cooldownSpamPool
-                : cfg.sarcasticSpamMessages || [];
+                : (cfg.sarcasticSpamMessages && cfg.sarcasticSpamMessages.length > 0
+                    ? cfg.sarcasticSpamMessages
+                    : this.SARCASTIC_SPAM_MESSAGES);
 
               const rawSarcastic = spamPool.length > 0
                 ? spamPool[Math.floor(Math.random() * spamPool.length)]
                 : "🤖 *Woah, doucement sur le bouton <@{discordId}> ! Le cooldown est actif, repasse <t:{tsSec}:R> !*";
 
               const formattedSarcastic = rawSarcastic
-                .replace(/\{discordId\}/g, member.discordId)
+                .replace(/\{discordId\}/g, member.discordId || user.id)
                 .replace(/\{tsSec\}/g, String(tsSec))
                 .replace(/\{mins\}/g, String(mins))
                 .replace(/\{secs\}/g, String(secs))
                 .replace(/\{username\}/g, member.username);
 
-              const requiredMin = getQuizMinScoreRequired(quiz, 20);
-              const cooldownEmbed = new EmbedBuilder()
-                .setTitle('❌ Quiz Indisponible - Cooldown Actif')
+              const sarcasticEmbed = new EmbedBuilder()
+                .setTitle('🤖 ALERTE SARCASME — TENTATIVES RÉPÉTÉES EN COOLDOWN')
                 .setDescription(
                   `${formattedSarcastic}\n\n` +
-                  `📊 **Informations du quiz :**\n` +
+                  `📊 **Statut du quiz :**\n` +
                   `• Score minimum requis : **${requiredMin}/20**\n` +
                   `• Déblocage du quiz : <t:${tsSec}:R> (dans **${mins}m ${secs}s**)`
                 )
                 .addFields({ name: '⏳ Temps d\'attente obligatoire', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
-                .setColor(0xef4444)
-                .setFooter({ text: 'PAWAKO FORMATION • Cooldown Actif & Révisions Recommandées' });
+                .setColor(0xf59e0b)
+                .setFooter({ text: 'PAWAKO FORMATION • Système Anti-Spam Cooldown' });
 
               const cooldownRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
                 new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
               );
 
-              await interaction.editReply({ embeds: [cooldownEmbed], components: [cooldownRow] });
+              await interaction.editReply({ embeds: [sarcasticEmbed], components: [cooldownRow] });
               return;
             }
 

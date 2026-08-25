@@ -385,6 +385,46 @@ export class PawakoBotRunner {
         const user = interaction.user;
         const guild = interaction.guild;
 
+        // Block all module/quiz execution in Direct Messages (DM) and redirect user to the Discord server
+        if (!guild || interaction.channel?.isDMBased()) {
+          const member = store.getMembers().find((m) => m.discordId === user.id || m.id === user.id);
+          const targetGuildId = process.env.DISCORD_GUILD_ID || this.client?.guilds.cache.first()?.id || '';
+          const channelUrl = (member && member.personalChannelId)
+            ? `https://discord.com/channels/${targetGuildId}/${member.personalChannelId}`
+            : (targetGuildId ? `https://discord.com/channels/${targetGuildId}` : 'https://discord.com');
+
+          const redirectEmbed = new EmbedBuilder()
+            .setTitle('📌 Action réservée au Serveur Discord PAWAKO')
+            .setDescription(
+              `Salut <@${user.id}> ! 👋\n\n` +
+              `Les modules de formation, quiz et boutons interactifs ne s'exécutent pas en message privé (DM).\n` +
+              `Ils doivent être lancés directement dans ton **salon privé sur le serveur PAWAKO FORMATION**.\n\n` +
+              `👉 **Clique sur le bouton ci-dessous pour ouvrir ton salon sur le serveur :**`
+            )
+            .setColor(0x3b82f6)
+            .setFooter({ text: 'PAWAKO FORMATION • Redirection vers le Serveur' });
+
+          const redirectRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel('👉 Accéder à mon salon sur le serveur')
+              .setStyle(ButtonStyle.Link)
+              .setURL(channelUrl)
+          );
+
+          if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({
+              embeds: [redirectEmbed],
+              components: [redirectRow],
+            }).catch(() => {});
+          } else {
+            await interaction.followUp({
+              embeds: [redirectEmbed],
+              components: [redirectRow],
+            }).catch(() => {});
+          }
+          return;
+        }
+
         // Anti-spam rate limiting: detect >3 clicks in 3 seconds
         const now = Date.now();
         const userClickData = this.userClickTracker.get(user.id) || { count: 0, lastClickTime: 0 };
@@ -399,7 +439,19 @@ export class PawakoBotRunner {
         if (userClickData.count >= 4) {
           const cfgMsgs = onboardingService.getConfig().sarcasticSpamMessages;
           const pool = cfgMsgs && cfgMsgs.length > 0 ? cfgMsgs : this.SARCASTIC_SPAM_MESSAGES;
-          const sarcasticMsg = pool[Math.floor(Math.random() * pool.length)];
+          const rawMsg = pool[Math.floor(Math.random() * pool.length)];
+
+          const member = store.getMembers().find((m) => m.discordId === user.id || m.id === user.id);
+          let timeRemainingText = '';
+          if (member && member.cooldownUntilTimestamp && Date.now() < member.cooldownUntilTimestamp) {
+            const remainingMs = member.cooldownUntilTimestamp - Date.now();
+            const mins = Math.floor(remainingMs / 60000);
+            const secs = Math.floor((remainingMs % 60000) / 1000);
+            const tsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
+            timeRemainingText = `\n\n👉 **IL TE RESTE ${mins}MIN ${secs}SEC** (<t:${tsSec}:R>)`;
+          }
+
+          const sarcasticMsg = `### ${rawMsg}${timeRemainingText}`;
           if (!interaction.deferred && !interaction.replied) {
             await interaction.reply({ content: sarcasticMsg, ephemeral: true }).catch(() => {});
           } else {
@@ -847,10 +899,10 @@ export class PawakoBotRunner {
                   .setTitle('❌ Quiz Indisponible - Cooldown Actif')
                   .setDescription(
                     `Tu n'as pas obtenu le score nécessaire (minimum **${requiredMin}/20**) lors de ton dernier essai.\n\n` +
-                    `⏳ Tu pourras retenter ce quiz <t:${tsSec}:R> (dans **${mins} minute(s) ${secs} seconde(s)**).\n\n` +
+                    `⏳ **IL TE RESTE ${mins}MIN ${secs}SEC** (<t:${tsSec}:R>)\n\n` +
                     `💡 *Prends ce temps d'attente obligatoire pour relire ton support de cours et consolider tes connaissances !*`
                   )
-                  .addFields({ name: '⏱️ Déblocage Automatique', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
+                  .addFields({ name: '⏱️ Déblocage Automatique', value: `**Il te reste ${mins}min ${secs}sec** (<t:${tsSec}:R>)` })
                   .setColor(0xef4444)
                   .setFooter({ text: 'PAWAKO FORMATION • Cooldown Actif & Révisions Recommandées' });
 
@@ -863,7 +915,7 @@ export class PawakoBotRunner {
                 return;
               }
 
-              // 2nd click and beyond (insisting / clicking repeatedly during cooldown): Sarcastic message passes AFTER!
+              // 2nd click and beyond (insisting / clicking repeatedly during cooldown): Sarcastic message in BIG/BOLD text followed by "IL TE RESTE XMIN YSEC"!
               const cfg = onboardingService.getConfig();
               const spamPool = cfg.cooldownSpamPool && cfg.cooldownSpamPool.length > 0
                 ? cfg.cooldownSpamPool
@@ -885,12 +937,12 @@ export class PawakoBotRunner {
               const sarcasticEmbed = new EmbedBuilder()
                 .setTitle('🤖 ALERTE SARCASME — TENTATIVES RÉPÉTÉES EN COOLDOWN')
                 .setDescription(
-                  `${formattedSarcastic}\n\n` +
+                  `### ${formattedSarcastic}\n\n` +
+                  `👉 **IL TE RESTE ${mins}MIN ${secs}SEC** (<t:${tsSec}:R>)\n\n` +
                   `📊 **Statut du quiz :**\n` +
-                  `• Score minimum requis : **${requiredMin}/20**\n` +
-                  `• Déblocage du quiz : <t:${tsSec}:R> (dans **${mins}m ${secs}s**)`
+                  `• Score minimum requis : **${requiredMin}/20**`
                 )
-                .addFields({ name: '⏳ Temps d\'attente obligatoire', value: `<t:${tsSec}:R> (**${mins}m ${secs}s** restantes)` })
+                .addFields({ name: '⏳ Temps d\'attente obligatoire', value: `**Il te reste ${mins}min ${secs}sec** (<t:${tsSec}:R>)` })
                 .setColor(0xf59e0b)
                 .setFooter({ text: 'PAWAKO FORMATION • Système Anti-Spam Cooldown' });
 
@@ -1384,7 +1436,19 @@ export class PawakoBotRunner {
               .setColor(0x10b981)
               .setFooter({ text: 'PAWAKO FORMATION • Boost Revenus & Motivation' });
 
-            const dmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const guildId = process.env.DISCORD_GUILD_ID || this.client?.guilds.cache.first()?.id || '';
+            const channelUrl = m.personalChannelId
+              ? `https://discord.com/channels/${guildId}/${m.personalChannelId}`
+              : (guildId ? `https://discord.com/channels/${guildId}` : 'https://discord.com');
+
+            const dmLinkRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setLabel('👉 Accéder à mon salon sur le serveur')
+                .setStyle(ButtonStyle.Link)
+                .setURL(channelUrl)
+            );
+
+            const channelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
               new ButtonBuilder()
                 .setCustomId('start_training_module_1')
                 .setLabel('🚀 Lancer le Module 1')
@@ -1393,13 +1457,15 @@ export class PawakoBotRunner {
 
             let sent = false;
             try {
-              await user.send({ embeds: [dmEmbed], components: [dmRow] });
+              // In DM: Send Link button redirecting to the server only
+              await user.send({ embeds: [dmEmbed], components: [dmLinkRow] });
               sent = true;
             } catch {
               if (m.personalChannelId) {
                 const pChan = await this.client.channels.fetch(m.personalChannelId).catch(() => null);
                 if (pChan && 'send' in pChan) {
-                  await (pChan as any).send({ content: `<@${m.discordId}>`, embeds: [dmEmbed], components: [dmRow] }).catch(() => {});
+                  // In personal channel on server: Send action button
+                  await (pChan as any).send({ content: `<@${m.discordId}>`, embeds: [dmEmbed], components: [channelRow] }).catch(() => {});
                   sent = true;
                 }
               }

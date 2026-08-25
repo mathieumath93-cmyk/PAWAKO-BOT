@@ -151,6 +151,7 @@ export interface MemberProgress {
   quizPassed?: boolean;
   score?: number;
   attemptsCount: number;
+  cooldownUntilTimestamp?: number | null;
 }
 
 export interface Member {

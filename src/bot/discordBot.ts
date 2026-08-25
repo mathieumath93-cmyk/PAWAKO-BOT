@@ -804,7 +804,15 @@ export class PawakoBotRunner {
           // --- 2b. STAFF ALERT INTERACTIONS ---
           if (customId.startsWith('staff_reset_cooldown_')) {
             const targetId = customId.replace('staff_reset_cooldown_', '');
-            const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId);
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
 
             if (!member) {
               await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
@@ -814,29 +822,39 @@ export class PawakoBotRunner {
             store.resetCandidateCooldown(member.id);
             firebaseSyncService.saveMember(member).catch(() => {});
 
+            let chan: any = null;
             if (member.personalChannelId) {
+              chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+            }
+            if (!chan && guild) {
+              chan = guild.channels.cache.find(
+                (c: any) =>
+                  c.isTextBased() &&
+                  (c.name === member.personalChannelName ||
+                    (member.username && c.name.includes(member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 15))))
+              );
+            }
+
+            if (chan && 'send' in chan) {
               try {
-                const chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
-                if (chan && 'send' in chan) {
-                  const mod = store.getModule(member.currentModuleId || '') || store.getModules()[0];
-                  const quiz = store.getQuiz(mod?.quizId || mod?.id || '');
-                  const notifyEmbed = new EmbedBuilder()
-                    .setTitle('🔓 COOLDOWN ANNULÉ PAR LE STAFF')
-                    .setDescription(`Un formateur de l'équipe (<@${user.id}>) vient d'annuler ton délai d'attente !\nTu peux repasser ton quiz **immédiatement**.`)
-                    .setColor(0x10b981)
-                    .setFooter({ text: 'PAWAKO FORMATION • Déblocage Rapide Staff' });
+                const mod = store.getModule(member.currentModuleId || '') || store.getModules()[0];
+                const quiz = store.getQuiz(mod?.quizId || mod?.id || '') || store.getQuiz('quiz-1') || defaultQuizzes[0];
+                const notifyEmbed = new EmbedBuilder()
+                  .setTitle('🔓 COOLDOWN ANNULÉ PAR LE STAFF')
+                  .setDescription(`Un formateur de l'équipe (<@${user.id}>) vient d'annuler ton délai d'attente !\nTu peux repasser ton quiz **immédiatement**.`)
+                  .setColor(0x10b981)
+                  .setFooter({ text: 'PAWAKO FORMATION • Déblocage Rapide Staff' });
 
-                  const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    buildQuizButton(member, quiz, mod?.title || 'Quiz'),
-                    new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
-                  );
+                const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  buildQuizButton(member, quiz, mod?.title || 'Quiz'),
+                  new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+                );
 
-                  await (chan as any).send({
-                    content: `🔓 <@${member.discordId || member.id.replace('mem-', '')}>`,
-                    embeds: [notifyEmbed],
-                    components: [retryRow],
-                  }).catch(() => {});
-                }
+                await (chan as any).send({
+                  content: `🔓 <@${member.discordId || member.id.replace('mem-', '')}>`,
+                  embeds: [notifyEmbed],
+                  components: [retryRow],
+                }).catch((e: any) => console.warn('[Send Reset Cooldown Error]', e));
               } catch (e) {}
             }
 
@@ -848,33 +866,51 @@ export class PawakoBotRunner {
 
           if (customId.startsWith('staff_encourage_member_')) {
             const targetId = customId.replace('staff_encourage_member_', '');
-            const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId);
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
 
             if (!member) {
               await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
               return;
             }
 
+            let chan: any = null;
             if (member.personalChannelId) {
-              try {
-                const chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
-                if (chan && 'send' in chan) {
-                  const encourageEmbed = new EmbedBuilder()
-                    .setTitle('💬 MESSAGE D\'AIDE DE L\'ÉQUIPE STAFF')
-                    .setDescription(
-                      `Bonjour <@${member.discordId || member.id.replace('mem-', '')}> !\n\n` +
-                      `Un formateur du Staff (<@${user.id}>) a remarqué que tu rencontrais des difficultés sur ton module actuel.\n\n` +
-                      `💪 **Pas de panique !** L'équipe est là pour t'accompagner. N'hésite pas à poser tes questions directement ici pour débloquer la situation.`
-                    )
-                    .setColor(0x3b82f6)
-                    .setFooter({ text: 'PAWAKO FORMATION • Support Candidat' })
-                    .setTimestamp();
+              chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+            }
+            if (!chan && guild) {
+              chan = guild.channels.cache.find(
+                (c: any) =>
+                  c.isTextBased() &&
+                  (c.name === member.personalChannelName ||
+                    (member.username && c.name.includes(member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 15))))
+              );
+            }
 
-                  await (chan as any).send({
-                    content: `💬 <@${member.discordId || member.id.replace('mem-', '')}>`,
-                    embeds: [encourageEmbed],
-                  }).catch(() => {});
-                }
+            if (chan && 'send' in chan) {
+              try {
+                const encourageEmbed = new EmbedBuilder()
+                  .setTitle('💬 MESSAGE D\'AIDE DE L\'ÉQUIPE STAFF')
+                  .setDescription(
+                    `Bonjour <@${member.discordId || member.id.replace('mem-', '')}> !\n\n` +
+                    `Un formateur du Staff (<@${user.id}>) a remarqué que tu rencontrais des difficultés sur ton module actuel.\n\n` +
+                    `💪 **Pas de panique !** L'équipe est là pour t'accompagner. N'hésite pas à poser tes questions directement ici pour débloquer la situation.`
+                  )
+                  .setColor(0x3b82f6)
+                  .setFooter({ text: 'PAWAKO FORMATION • Support Candidat' })
+                  .setTimestamp();
+
+                await (chan as any).send({
+                  content: `💬 <@${member.discordId || member.id.replace('mem-', '')}>`,
+                  embeds: [encourageEmbed],
+                }).catch((e: any) => console.warn('[Send Encourage Error]', e));
               } catch (e) {}
             }
 
@@ -2309,23 +2345,28 @@ export class PawakoBotRunner {
         ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
       }
 
-      // Send automatic pedagogical advice message if candidate fails 3+ times
-      if (newAttempts >= 3 && member.personalChannelId) {
+      // Send automatic pedagogical advice message if candidate fails 2+ times
+      if (newAttempts >= 2) {
         try {
           const cfg = onboardingService.getConfig();
           const advicePool = cfg.repeatedFailurePool && cfg.repeatedFailurePool.length > 0
             ? cfg.repeatedFailurePool
             : [
-                "⚠️ **Conseil Formation PAWAKO**\n\n<@{discordId}>, nous avons remarqué que tu as échoué plus de 3 fois au quiz **{quizTitle}**.\n💡 Prends le temps de bien relire et maîtriser l'intégralité du module avant de retenter ta chance ! 📚"
+                "⚠️ **Conseil Formation PAWAKO**\n\n<@{discordId}>, nous avons remarqué que tu as 2 échecs ou plus au quiz **{quizTitle}**.\n💡 Prends le temps de bien relire et maîtriser l'intégralité du module avant de retenter ta chance ! 📚"
               ];
 
           const rawAdvice = advicePool[Math.floor(Math.random() * advicePool.length)];
           const formattedAdvice = rawAdvice
-            .replace(/\{discordId\}/g, member.discordId)
+            .replace(/\{discordId\}/g, member.discordId || member.id.replace('mem-', ''))
             .replace(/\{quizTitle\}/g, quiz.title)
             .replace(/\{username\}/g, member.username);
 
-          this.client?.channels.fetch(member.personalChannelId).then((chan) => {
+          let chanPromise: Promise<any> | null = null;
+          if (member.personalChannelId) {
+            chanPromise = this.client?.channels.fetch(member.personalChannelId).catch(() => null) as Promise<any>;
+          }
+
+          const sendAdvice = (chan: any) => {
             if (chan && 'send' in chan) {
               const adviceEmbed = new EmbedBuilder()
                 .setTitle('📖 CONSEIL PÉDAGOGIQUE — MAÎTRISE DU MODULE')
@@ -2335,13 +2376,17 @@ export class PawakoBotRunner {
                 .setTimestamp();
 
               (chan as any).send({
-                content: `<@${member.discordId}>`,
+                content: `<@${member.discordId || member.id.replace('mem-', '')}>`,
                 embeds: [adviceEmbed],
               }).catch(() => {});
             }
-          }).catch(() => {});
+          };
+
+          if (chanPromise) {
+            chanPromise.then(sendAdvice).catch(() => {});
+          }
         } catch (err) {
-          console.warn('[3+ Fails Advice Error]', err);
+          console.warn('[2+ Fails Advice Error]', err);
         }
       }
 

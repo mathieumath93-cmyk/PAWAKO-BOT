@@ -1240,17 +1240,17 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
             </div>
           </div>
 
-          {/* Advice Messages Pool for 3+ Quiz Failures */}
+          {/* Advice Messages Pool for 2+ Quiz Failures */}
           <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-amber-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Messages Automatiques d'Aide / Révision (3+ Échecs au Quiz)
+                  Messages Automatiques d'Aide / Révision (2+ Échecs au Quiz)
                 </h3>
               </div>
               <span className="text-[11px] text-slate-400">
-                Envoyé dans le salon privé du candidat dès le 3ème échec
+                Envoyé dans le salon privé du candidat dès le 2ème échec
               </span>
             </div>
 

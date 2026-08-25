@@ -1196,7 +1196,16 @@ class StoreService {
   }
 
   public getMember(id: string): Member | undefined {
-    return this.members.find((m) => m.id === id || m.discordId === id);
+    if (!id) return undefined;
+    const cleanId = id.replace('mem-', '');
+    return this.members.find(
+      (m) =>
+        m.id === id ||
+        m.discordId === id ||
+        m.id === cleanId ||
+        m.id === `mem-${cleanId}` ||
+        (m.discordId && m.discordId === cleanId)
+    );
   }
 
   public getOrCreateCandidate(discordUserId: string, username: string, avatarUrl?: string): Member {
@@ -1420,6 +1429,9 @@ ${statusText}
     member.cooldownUntilTimestamp = null;
     member.currentQuizAvailableAtTimestamp = null;
     member.candidateState = 'quiz_disponible';
+    if (member.currentModuleId && member.progress && member.progress[member.currentModuleId]) {
+      member.progress[member.currentModuleId].cooldownUntilTimestamp = null;
+    }
     this.saveMembers();
     this.addLog('Anthony (Admin)', `Réinitialisation du cooldown pour ${member.username}`, 'member', member.username);
     return member;

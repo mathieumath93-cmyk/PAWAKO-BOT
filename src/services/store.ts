@@ -1461,6 +1461,43 @@ ${statusText}
   }
 
   /**
+   * Validate simulation step for a candidate and schedule 10h00 HF Tools Formation
+   */
+  public validateCandidateSimulation(memberId: string, adminName: string = 'Staff'): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+
+    const now = new Date();
+    const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
+    const parisDate = new Date(parisString);
+
+    const targetParis = new Date(parisDate);
+    targetParis.setHours(10, 0, 0, 0);
+
+    if (parisDate.getTime() >= targetParis.getTime()) {
+      targetParis.setDate(targetParis.getDate() + 1);
+    }
+
+    const diffMs = targetParis.getTime() - parisDate.getTime();
+    const scheduledTs = now.getTime() + diffMs;
+
+    member.candidateState = 'formation_outils';
+    member.simulationValidatedAt = new Date().toLocaleString('fr-FR');
+    member.toolsFormationScheduledTimestamp = scheduledTs;
+    member.toolsFormationReminderSent = false;
+
+    this.saveMembers();
+    this.addLog(
+      adminName,
+      `Validation de la simulation pour ${member.username}. Formation Outils programmée pour 10h00 HF.`,
+      'member',
+      member.username
+    );
+
+    return member;
+  }
+
+  /**
    * Force candidate to a specific module
    */
   public forceCandidateModule(memberId: string, moduleId: string): Member {

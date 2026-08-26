@@ -73,6 +73,27 @@ function getNext14hParisTimestamp(): number {
   return now.getTime() + diffMs;
 }
 
+/**
+ * Calculates epoch timestamp for next 10h00 HF (Europe/Paris timezone).
+ * If current time in Paris is < 10h00, returns 10h00 today.
+ * If current time in Paris is >= 10h00, returns 10h00 tomorrow.
+ */
+function getNext10hParisTimestamp(): number {
+  const now = new Date();
+  const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
+  const parisDate = new Date(parisString);
+
+  const targetParis = new Date(parisDate);
+  targetParis.setHours(10, 0, 0, 0);
+
+  if (parisDate.getTime() >= targetParis.getTime()) {
+    targetParis.setDate(targetParis.getDate() + 1);
+  }
+
+  const diffMs = targetParis.getTime() - parisDate.getTime();
+  return now.getTime() + diffMs;
+}
+
 async function syncMemberRolesOnGuild(guild: any, discordUserId: string, roleIdentifiers: string[]) {
   try {
     if (!guild || !discordUserId || !roleIdentifiers || roleIdentifiers.length === 0) return;
@@ -381,6 +402,35 @@ export class PawakoBotRunner {
           await message.reply({ embeds: [embed] }).catch(() => {});
         }
 
+        if (content.startsWith('!valider-simu') || content.startsWith('!valider-simulation') || content.startsWith('!simu-ok')) {
+          const mentionedUser = message.mentions.users.first();
+          const args = content.split(' ').slice(1);
+          const rawId = mentionedUser ? mentionedUser.id : args[0];
+
+          if (!rawId) {
+            await message.reply('⚠️ Veuillez mentionner le candidat ou fournir son ID Discord (ex: `!valider-simu @candidat`).').catch(() => {});
+            return;
+          }
+
+          const targetMember =
+            store.getMember(rawId) ||
+            store.getMembers().find(
+              (m) =>
+                m.id === rawId ||
+                m.discordId === rawId ||
+                m.id.replace('mem-', '') === rawId.replace('mem-', '')
+            );
+
+          if (!targetMember) {
+            await message.reply(`⚠️ Candidat non trouvé dans la base de données pour ID/mention \`${rawId}\`.`).catch(() => {});
+            return;
+          }
+
+          await this.validateSimulationAndTriggerToolsFormation(targetMember, message.author.id);
+          await message.reply(`🏆 **Simulation validée par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\nConvocation envoyée pour la Formation Outils à 10h00 HF.`).catch(() => {});
+          return;
+        }
+
         if (content === '!ticket') {
           const ticket = store.createTicket(
             message.author.id,
@@ -450,7 +500,7 @@ export class PawakoBotRunner {
           return;
         }
 
-        // Anti-spam rate limiting: detect >3 clicks in 3 seconds
+        // Anti-spam rate limiting: detect >1 click in 3 seconds (rapid click spam)
         const now = Date.now();
         const userClickData = this.userClickTracker.get(user.id) || { count: 0, lastClickTime: 0 };
         if (now - userClickData.lastClickTime < 3000) {
@@ -461,7 +511,7 @@ export class PawakoBotRunner {
         userClickData.lastClickTime = now;
         this.userClickTracker.set(user.id, userClickData);
 
-        if (userClickData.count >= 4) {
+        if (userClickData.count >= 2) {
           const cfgMsgs = onboardingService.getConfig().sarcasticSpamMessages;
           const pool = cfgMsgs && cfgMsgs.length > 0 ? cfgMsgs : this.SARCASTIC_SPAM_MESSAGES;
           const rawMsg = pool[Math.floor(Math.random() * pool.length)];
@@ -916,6 +966,31 @@ export class PawakoBotRunner {
 
             await interaction.editReply({
               content: `💬 **Message d'aide et d'encouragement envoyé avec succès dans le salon privé de <@${member.discordId || member.id.replace('mem-', '')}> !**`
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_validate_simu_')) {
+            const targetId = customId.replace('staff_validate_simu_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            await this.validateSimulationAndTriggerToolsFormation(member, user.id);
+
+            await interaction.editReply({
+              content: `🏆 **Simulation validée avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe candidat a été convoqué pour la Formation Outils à 10h00 HF, et la notification a été transmise au Staff.`
             });
             return;
           }
@@ -1691,6 +1766,204 @@ export class PawakoBotRunner {
   }
 
   /**
+   * Validate simulation step for a candidate and schedule 10h00 HF Tools Formation
+   */
+  public async validateSimulationAndTriggerToolsFormation(
+    memberInput: Member,
+    staffUserId?: string
+  ): Promise<boolean> {
+    const member = store.getMember(memberInput.id) || memberInput;
+    if (!member) return false;
+
+    const toolsScheduledTs = getNext10hParisTimestamp();
+    const tsSec = Math.floor(toolsScheduledTs / 1000);
+
+    member.candidateState = 'formation_outils';
+    member.simulationValidatedAt = new Date().toLocaleString('fr-FR');
+    member.toolsFormationScheduledTimestamp = toolsScheduledTs;
+    member.toolsFormationReminderSent = false;
+
+    store.saveMembers();
+    firebaseSyncService.saveMember(member).catch(() => {});
+
+    const cfg = onboardingService.getConfig();
+    const meetUrl = cfg.toolsFormationMeetUrl || 'https://meet.google.com/pawako-tools-formation';
+
+    // 1. Message to Candidate in their private channel
+    let candChan: any = null;
+    if (member.personalChannelId && this.client) {
+      candChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+    }
+    if (!candChan && this.client) {
+      const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+      if (guildId) {
+        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          candChan = guild.channels.cache.find(
+            (c: any) =>
+              c.isTextBased() &&
+              (c.name === member.personalChannelName ||
+                (member.username && c.name.includes(member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 15))))
+          );
+        }
+      }
+    }
+
+    if (candChan && 'send' in candChan) {
+      const candEmbed = new EmbedBuilder()
+        .setTitle('🏆 SIMULATION VALIDÉE ! PROCHAINE ÉTAPE : FORMATION OUTILS')
+        .setDescription(
+          `Félicitations <@${member.discordId || member.id.replace('mem-', '')}> ! Tu as réussi avec succès ton test de simulation en direct. 👏\n\n` +
+          `📅 **Prochain RDV : Formation Outils via Google Meet**\n` +
+          `⏰ **Date & Heure :** <t:${tsSec}:F> (<t:${tsSec}:R>) - **10h00 (Heure Française - HF)**\n` +
+          `🔗 **Lien Google Meet :** [Rejoindre la Formation Outils](${meetUrl})\n\n` +
+          `💡 *Un rappel te sera envoyé dans ce salon peu avant le début de la session à 10h00 HF.* 🚀`
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Validation Simulation & Session Outils 10h00 HF' })
+        .setTimestamp();
+
+      await candChan.send({
+        content: `🏆 <@${member.discordId || member.id.replace('mem-', '')}>`,
+        embeds: [candEmbed],
+      }).catch((e: any) => console.warn('[Send Simu Validated Error]', e));
+    }
+
+    // List all candidates scheduled for this same 10h00 HF timestamp
+    const scheduledMembers = store.getMembers().filter(
+      (m) => m.toolsFormationScheduledTimestamp === toolsScheduledTs && m.isActive !== false
+    );
+    const scheduledListStr = scheduledMembers.length > 0
+      ? scheduledMembers.map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`).join('\n')
+      : `1. <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)`;
+
+    // 2. Alert to Staff / Mahsa & Mathieu
+    if (this.client) {
+      const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+      if (guildId) {
+        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+          if (staffChan) {
+            const mahsaMention = cfg.mahsaDiscordId ? `<@${cfg.mahsaDiscordId}>` : '@Mahsa';
+            const mathieuMention = cfg.mathieuDiscordId ? `<@${cfg.mathieuDiscordId}>` : '@Mathieu';
+
+            const staffAlertEmbed = new EmbedBuilder()
+              .setTitle('🔔 SIMULATION VALIDÉE ➡️ FORMATION OUTILS (10h00 HF)')
+              .setDescription(
+                `📢 **Notification pour ${mahsaMention} et ${mathieuMention}**\n\n` +
+                `Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**) a été validé${staffUserId ? ` par <@${staffUserId}>` : ''} pour la **Formation Outils** !\n\n` +
+                `📅 **Session 10h00 HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
+                `🔗 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n` +
+                `🔗 **Lien Meet :** [Google Meet](${meetUrl})\n\n` +
+                `📋 **Liste des candidats inscrits à cette session 10h00 HF :**\n${scheduledListStr}`
+              )
+              .setColor(0x3b82f6)
+              .setFooter({ text: 'PAWAKO FORMATION • Programme Formation Outils 10h00 HF' })
+              .setTimestamp();
+
+            await staffChan.send({
+              content: `🔔 **[FORMATION OUTILS 10H00 HF]** ${mahsaMention} ${mathieuMention}`,
+              embeds: [staffAlertEmbed],
+            }).catch((e) => console.warn('[Staff Alert Simu Validated Error]', e));
+          }
+        }
+      }
+    }
+
+    // 3. Log event
+    store.addLog(
+      staffUserId ? `Staff (<@${staffUserId}>)` : 'System',
+      `Validation de la simulation pour ${member.username}. Convocation Formation Outils 10h00 HF envoyée.`,
+      'member',
+      member.username
+    );
+
+    return true;
+  }
+
+  /**
+   * Check and send 10h00 HF Tools Formation reminders for scheduled candidates
+   */
+  private checkToolsFormationReminders() {
+    if (!this.client || !this.isConnected) return;
+    const allMembers = store.getMembers();
+    const nowMs = Date.now();
+    const cfg = onboardingService.getConfig();
+    const meetUrl = cfg.toolsFormationMeetUrl || 'https://meet.google.com/pawako-tools-formation';
+
+    const dueMembers = allMembers.filter(
+      (m) =>
+        m.toolsFormationScheduledTimestamp &&
+        nowMs >= m.toolsFormationScheduledTimestamp &&
+        !m.toolsFormationReminderSent
+    );
+
+    if (dueMembers.length === 0) return;
+
+    for (const m of dueMembers) {
+      m.toolsFormationReminderSent = true;
+      store.saveMembers();
+      firebaseSyncService.saveMember(m).catch(() => {});
+
+      if (m.personalChannelId) {
+        this.client.channels.fetch(m.personalChannelId).then((chan) => {
+          if (chan && 'send' in chan) {
+            const reminderEmbed = new EmbedBuilder()
+              .setTitle('🔔 C\'EST L\'HEURE — FORMATION OUTILS (10h00 HF)')
+              .setDescription(
+                `📢 <@${m.discordId || m.id.replace('mem-', '')}>, **il est 10h00 HF !**\n\n` +
+                `C'est le moment de rejoindre la session de **Formation Outils** en direct avec l'équipe !\n\n` +
+                `🔗 **Lien Google Meet :** [Rejoindre le Meet](${meetUrl}) 🚀`
+              )
+              .setColor(0x10b981)
+              .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Formation Outils 10h00 HF' })
+              .setTimestamp();
+
+            (chan as any).send({
+              content: `🔔 **[RAPPEL FORMATION OUTILS 10H00 HF]** <@${m.discordId || m.id.replace('mem-', '')}>`,
+              embeds: [reminderEmbed],
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    }
+
+    const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+    if (guildId) {
+      this.client.guilds.fetch(guildId).then((guild) => {
+        this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff').then((staffChan) => {
+          if (staffChan) {
+            const mahsaMention = cfg.mahsaDiscordId ? `<@${cfg.mahsaDiscordId}>` : '@Mahsa';
+            const mathieuMention = cfg.mathieuDiscordId ? `<@${cfg.mathieuDiscordId}>` : '@Mathieu';
+
+            const candListStr = dueMembers
+              .map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`)
+              .join('\n');
+
+            const staffReminderEmbed = new EmbedBuilder()
+              .setTitle('🔔 RAPPEL 10H00 HF — SESSION FORMATION OUTILS')
+              .setDescription(
+                `📢 **Rappel pour ${mahsaMention} et ${mathieuMention}**\n\n` +
+                `Il est **10h00 HF** ! La session de **Formation Outils** commence maintenant.\n\n` +
+                `🔗 **Lien Meet :** [Google Meet](${meetUrl})\n\n` +
+                `📋 **Candidats attendus pour cette session :**\n${candListStr}`
+              )
+              .setColor(0x10b981)
+              .setFooter({ text: 'PAWAKO FORMATION • Rappel Session 10h00 HF' })
+              .setTimestamp();
+
+            staffChan.send({
+              content: `🔔 **[SESSION 10H00 HF COMMENCÉE]** ${mahsaMention} ${mathieuMention}`,
+              embeds: [staffReminderEmbed],
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  }
+
+  /**
    * Generate net, non-redundant stats report and post to #stats channel.
    * Sends DM to members who haven't started yet ("se faire de l'argent").
    */
@@ -1878,6 +2151,9 @@ export class PawakoBotRunner {
 
         // Check 14h00 HF simulation reminders
         this.checkSimulationReminders();
+
+        // Check 10h00 HF tools formation reminders
+        this.checkToolsFormationReminders();
 
         // Update leaderboard in #classement-formation
         this.updateLeaderboardChannel().catch(() => {});
@@ -2321,11 +2597,11 @@ export class PawakoBotRunner {
       member.cooldownUntilTimestamp = Date.now() + cooldownMins * 60 * 1000;
       member.candidateState = 'cooldown_actif';
 
-      const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
-      const newAttempts = prevAttempts + 1;
+      // store.addQuizAttempt already incremented attemptsCount in member.progress
+      const currentAttempts = member.progress[quiz.moduleId]?.attemptsCount || 1;
       member.progress[quiz.moduleId] = {
         ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
-        attemptsCount: newAttempts,
+        attemptsCount: currentAttempts,
         score: finalScore,
         quizPassed: false,
       };
@@ -2334,19 +2610,20 @@ export class PawakoBotRunner {
       firebaseSyncService.saveMember(member).catch(() => {});
 
       // Trigger Staff Alert if candidate fails 2 or more times in a row
-      if (newAttempts >= 2) {
+      if (currentAttempts >= 2) {
         this.sendStaffAlert(
           member,
           quiz.title,
           finalScore,
           totalQuestions,
-          newAttempts,
+          currentAttempts,
           'consecutive_failures'
         ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
       }
 
       // Send automatic pedagogical advice message if candidate fails 2+ times
-      if (newAttempts >= 2) {
+      let adviceMessageFormatted = '';
+      if (currentAttempts >= 2) {
         try {
           const cfg = onboardingService.getConfig();
           const advicePool = cfg.repeatedFailurePool && cfg.repeatedFailurePool.length > 0
@@ -2356,34 +2633,35 @@ export class PawakoBotRunner {
               ];
 
           const rawAdvice = advicePool[Math.floor(Math.random() * advicePool.length)];
-          const formattedAdvice = rawAdvice
+          adviceMessageFormatted = rawAdvice
             .replace(/\{discordId\}/g, member.discordId || member.id.replace('mem-', ''))
             .replace(/\{quizTitle\}/g, quiz.title)
             .replace(/\{username\}/g, member.username);
 
-          let chanPromise: Promise<any> | null = null;
-          if (member.personalChannelId) {
-            chanPromise = this.client?.channels.fetch(member.personalChannelId).catch(() => null) as Promise<any>;
+          // Find candidate channel in priority order
+          let targetChan: any = null;
+          if (member.personalChannelId && this.client) {
+            targetChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+          }
+          if (!targetChan && session.channelId && this.client) {
+            targetChan = await this.client.channels.fetch(session.channelId).catch(() => null);
+          }
+          if (!targetChan && interaction?.channel) {
+            targetChan = interaction.channel;
           }
 
-          const sendAdvice = (chan: any) => {
-            if (chan && 'send' in chan) {
-              const adviceEmbed = new EmbedBuilder()
-                .setTitle('📖 CONSEIL PÉDAGOGIQUE — MAÎTRISE DU MODULE')
-                .setDescription(formattedAdvice)
-                .setColor(0xf59e0b)
-                .setFooter({ text: 'PAWAKO FORMATION • Conseil & Pédagogie' })
-                .setTimestamp();
+          if (targetChan && 'send' in targetChan) {
+            const adviceEmbed = new EmbedBuilder()
+              .setTitle(`📖 CONSEIL PÉDAGOGIQUE — TENTATIVE N°${currentAttempts}`)
+              .setDescription(adviceMessageFormatted)
+              .setColor(0xf59e0b)
+              .setFooter({ text: 'PAWAKO FORMATION • Conseil & Pédagogie (2+ Échecs)' })
+              .setTimestamp();
 
-              (chan as any).send({
-                content: `<@${member.discordId || member.id.replace('mem-', '')}>`,
-                embeds: [adviceEmbed],
-              }).catch(() => {});
-            }
-          };
-
-          if (chanPromise) {
-            chanPromise.then(sendAdvice).catch(() => {});
+            await targetChan.send({
+              content: `📖 <@${member.discordId || member.id.replace('mem-', '')}>`,
+              embeds: [adviceEmbed],
+            }).catch((err: any) => console.warn('[Send Advice Error]', err));
           }
         } catch (err) {
           console.warn('[2+ Fails Advice Error]', err);
@@ -2402,6 +2680,13 @@ export class PawakoBotRunner {
         .setColor(0xef4444)
         .setFooter({ text: 'PAWAKO FORMATION • Révision Requise' })
         .setTimestamp();
+
+      if (adviceMessageFormatted) {
+        resultEmbed.addFields({
+          name: '📖 Conseil de Révision Automatique',
+          value: adviceMessageFormatted.length > 1024 ? adviceMessageFormatted.slice(0, 1021) + '...' : adviceMessageFormatted,
+        });
+      }
 
       resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         buildQuizButton(member, quiz, quiz.title),

@@ -107,6 +107,20 @@ class MemberService {
     );
     return updated;
   }
+
+  public validateSimulation(memberId: string, adminName: string = 'Staff'): Member {
+    const updated = store.validateCandidateSimulation(memberId, adminName);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    try {
+      const { discordBot } = require('../bot/discordBot');
+      if (discordBot && typeof discordBot.validateSimulationAndTriggerToolsFormation === 'function') {
+        discordBot.validateSimulationAndTriggerToolsFormation(updated, adminName);
+      }
+    } catch (e) {}
+    return updated;
+  }
 }
 
 export const memberService = new MemberService();

@@ -47,6 +47,8 @@ export type CandidateState =
   | 'module_en_cours'
   | 'quiz_disponible'
   | 'cooldown_actif'
+  | 'simulation_validee'
+  | 'formation_outils'
   | 'formation_terminee';
 
 export interface QuizQuestion {
@@ -182,6 +184,13 @@ export interface Member {
   lastReminderAt?: string;
   simulationScheduledTimestamp?: number | null;
   simulationReminderSent?: boolean;
+  toolsFormationScheduledTimestamp?: number | null;
+  toolsFormationReminderSent?: boolean;
+  simulationValidatedAt?: string;
+  toolsFormationValidatedAt?: string;
+  email?: string;
+  whatsapp?: string;
+  shift?: string;
 }
 
 export interface TicketMessage {
@@ -461,6 +470,9 @@ export interface OnboardingFlowConfig {
   repeatedFailurePool?: string[]; // Pool of advice messages sent when candidate fails 3+ times
   cooldownSpamPool?: string[]; // Sarcastic messages sent when candidate clicks during active cooldown
   sarcasticSpamMessages?: string[];
+  toolsFormationMeetUrl?: string; // Google Meet link for Tools Formation
+  mahsaDiscordId?: string; // Discord ID or tag for Mahsa
+  mathieuDiscordId?: string; // Discord ID or tag for Mathieu
 }
 
 export interface UserSession {

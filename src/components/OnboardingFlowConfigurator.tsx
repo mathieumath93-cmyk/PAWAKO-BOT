@@ -18,6 +18,8 @@ import {
   Trash2,
   HelpCircle,
   Edit3,
+  Video,
+  Users,
   ChevronDown,
   ChevronUp,
   Layers,
@@ -566,6 +568,53 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               label="Salon des Logs de Formation"
               helperText="Salon Discord où le Bot enregistrera l'historique et les alertes d'onboarding"
             />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-800">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Video className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Lien Google Meet (Formation Outils)</span>
+              </label>
+              <input
+                type="text"
+                value={config.toolsFormationMeetUrl || ''}
+                onChange={(e) => setConfig({ ...config, toolsFormationMeetUrl: e.target.value })}
+                placeholder="https://meet.google.com/..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+              <p className="text-[11px] text-slate-400">Transmis au candidat & au staff pour la session de 10h00 HF</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ID / Tag Discord @Mahsa</span>
+              </label>
+              <input
+                type="text"
+                value={config.mahsaDiscordId || ''}
+                onChange={(e) => setConfig({ ...config, mahsaDiscordId: e.target.value })}
+                placeholder="ID Discord ou Username (ex: 123456789)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+              <p className="text-[11px] text-slate-400">Mentionnée automatiquement lors des validations et rappels</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ID / Tag Discord @Mathieu</span>
+              </label>
+              <input
+                type="text"
+                value={config.mathieuDiscordId || ''}
+                onChange={(e) => setConfig({ ...config, mathieuDiscordId: e.target.value })}
+                placeholder="ID Discord ou Username (ex: 987654321)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+              <p className="text-[11px] text-slate-400">Mentionné automatiquement sur le programme 10h00 HF</p>
+            </div>
           </div>
 
           <div className="space-y-1.5">

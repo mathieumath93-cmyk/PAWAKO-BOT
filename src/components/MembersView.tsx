@@ -13,6 +13,7 @@ import {
   Bell,
   AlertTriangle,
   Zap,
+  Award,
 } from 'lucide-react';
 import { Member } from '../types';
 import { memberService } from '../services/memberService';
@@ -285,6 +286,21 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     {/* Actions */}
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => {
+                            if (confirm(`Valider la simulation pour ${member.username} et programmer la Formation Outils à 10h00 HF ?`)) {
+                              memberService.validateSimulation(member.id, 'Anthony (Admin Dashboard)');
+                              onRefresh();
+                              onShowToast('🏆 Simulation Validée', `Le candidat ${member.username} a été validé et convoqué pour la Formation Outils à 10h00 HF. Notifications transmises à Mahsa et Mathieu.`, 'success');
+                            }
+                          }}
+                          className="px-2 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/40 text-teal-300 font-medium text-[10px] border border-teal-500/30 transition-colors flex items-center gap-1"
+                          title="Valider la simulation du candidat et programmer sa Formation Outils à 10h00 HF"
+                        >
+                          <Award className="w-3 h-3 text-teal-400" />
+                          <span>Valider Simu (10h HF)</span>
+                        </button>
+
                         <button
                           onClick={() => {
                             memberService.resetCooldown(member.id);

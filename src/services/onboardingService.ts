@@ -19,6 +19,9 @@ const defaultConfig: OnboardingFlowConfig = {
   cooldownMinutes: 15,
   randomizeQuestions: true,
   hideQuizSolutions: true,
+  toolsFormationMeetUrl: 'https://meet.google.com/pawako-tools-formation',
+  mahsaDiscordId: '',
+  mathieuDiscordId: '',
   stepConfigs: defaultStepConfigs,
   autoReminders: {
     enabled: true,

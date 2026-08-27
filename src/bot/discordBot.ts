@@ -505,7 +505,26 @@ export class PawakoBotRunner {
           targetMember.currentQuizAvailableAtTimestamp = null;
 
           await this.validateSimulationAndTriggerToolsFormation(targetMember, message.author.id);
-          await message.reply(`🏆 **Formation & Simulation validées par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\nLe candidat a été validé sur tous les modules et convoqué pour la Formation Outils à 10h00 HF.`).catch(() => {});
+
+          const simuLogEmbed = new EmbedBuilder()
+            .setTitle('🏆 LOG STAFF — VALIDATION SIMULATION')
+            .setColor(0x3b82f6)
+            .setDescription(
+              `🏆 **Simulation validée par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\n\n` +
+              `Le candidat a été validé et convoqué pour la Formation Outils à 10h00 HF.`
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Validation Staff' })
+            .setTimestamp();
+
+          if (this.isStaffChannel(message.channel)) {
+            await message.reply({ embeds: [simuLogEmbed] }).catch(() => {});
+          } else {
+            await message.delete().catch(() => {});
+            await this.sendStaffLogNotification(simuLogEmbed);
+            await message.author.send({
+              content: `🏆 **[CONFIRMATION STAFF]** Simulation validée pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}>. Le log a été transmis dans le salon **#alertes-staff**.`
+            }).catch(() => {});
+          }
           return;
         }
 
@@ -615,7 +634,15 @@ export class PawakoBotRunner {
             .setFooter({ text: 'PAWAKO FORMATION • Validation Force Staff' })
             .setTimestamp();
 
-          await message.reply({ embeds: [reportEmbed] }).catch(() => {});
+          if (this.isStaffChannel(message.channel)) {
+            await message.reply({ embeds: [reportEmbed] }).catch(() => {});
+          } else {
+            await message.delete().catch(() => {});
+            await this.sendStaffLogNotification(reportEmbed);
+            await message.author.send({
+              content: `🏆 **[CONFIRMATION STAFF]** Validation Formation Outils enregistrée pour ${validatedMentions || 'candidats'}. Le log détaillé a été transmis dans le salon **#alertes-staff**.`
+            }).catch(() => {});
+          }
           return;
         }
 
@@ -633,6 +660,195 @@ export class PawakoBotRunner {
             .setColor(0x10b981);
 
           await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
+        }
+
+        if (content.startsWith('!infos') || content.startsWith('!dossier') || content.startsWith('!candidat')) {
+          const mentionedUser = message.mentions.users.first();
+          const args = content.split(' ').slice(1).filter(Boolean);
+          const rawId = mentionedUser ? mentionedUser.id : args[0];
+
+          let targetMember: Member | undefined = undefined;
+          if (mentionedUser) {
+            targetMember = store.getMember(mentionedUser.id) || store.getMembers().find((m) => m.discordId === mentionedUser.id);
+          } else if (rawId) {
+            const cleanId = rawId.replace('<@!', '').replace('<@', '').replace('>', '');
+            targetMember =
+              store.getMember(cleanId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === cleanId ||
+                  m.discordId === cleanId ||
+                  m.id.replace('mem-', '') === cleanId.replace('mem-', '') ||
+                  m.username.toLowerCase() === cleanId.toLowerCase()
+              );
+          } else {
+            targetMember = store.getMember(message.author.id) || store.getMembers().find((m) => m.discordId === message.author.id);
+          }
+
+          if (!targetMember) {
+            await message.reply('⚠️ Candidat non trouvé. Usage : `!infos @candidat` ou `!dossier <id_discord>`').catch(() => {});
+            return;
+          }
+
+          const modules = store.getModules();
+          const validatedCount = Object.values(targetMember.progress || {}).filter((p) => p.status === 'valide').length;
+
+          const stateLabels: Record<string, string> = {
+            nouveau: '🆕 Étape 1 : Inscription / Modules',
+            bienvenue_validee: '🆕 Étape 1 : Bienvenue Validée',
+            formation_commencee: '📚 Étape 1 : Modules en cours',
+            module_en_cours: '📚 Étape 1 : Module en cours',
+            quiz_disponible: '✏️ Étape 1 : Quiz à passer',
+            cooldown_actif: '⏱️ Étape 1 : Cooldown d\'attente',
+            simulation: '🎭 Étape 2 : Simulation Anthony',
+            simulation_validee: '🎭 Étape 2 : Simulation Validée',
+            formation_outils: '🛠️ Étape 3 : Formation Outils',
+            formation_terminee: '🏆 Parcours Terminé / Intégré',
+          };
+
+          const dossierEmbed = new EmbedBuilder()
+            .setTitle(`📋 Dossier Candidat — ${targetMember.username}`)
+            .setColor(0x3b82f6)
+            .setThumbnail(targetMember.avatarUrl || message.author.displayAvatarURL())
+            .addFields(
+              { name: '👤 Identité Discord', value: `<@${targetMember.discordId || targetMember.id.replace('mem-', '')}> (\`${targetMember.username}\`)`, inline: true },
+              { name: '📍 Statut Parcours', value: `**${stateLabels[targetMember.candidateState || 'nouveau'] || targetMember.candidateState}**`, inline: true },
+              { name: '🎯 Progression Modules', value: `**${validatedCount} / ${modules.length}** modules validés`, inline: true },
+              { name: '📧 E-mail d\'intégration', value: targetMember.email ? `\`${targetMember.email}\`` : '❌ *Non renseigné*', inline: true },
+              { name: '📱 WhatsApp', value: targetMember.whatsapp ? `\`${targetMember.whatsapp}\`` : '❌ *Non renseigné*', inline: true },
+              { name: '⏰ Shift / Horaires', value: targetMember.shift ? `\`${targetMember.shift}\`` : '❌ *Non renseigné*', inline: true },
+              { name: '📅 Date d\'Inscription', value: targetMember.joinedAt || 'N/A', inline: true },
+              { name: '🏆 Validation Simulation', value: targetMember.simulationValidatedAt || 'Non validée', inline: true },
+              { name: '✅ Validation Outils', value: targetMember.toolsFormationValidatedAt || 'Non validée', inline: true }
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Dossier Administrateur' })
+            .setTimestamp();
+
+          const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`fill_integration_form_${targetMember.id}`)
+              .setLabel('📝 Formulaire d\'Intégration')
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId(`staff_relaunch_form_${targetMember.id}`)
+              .setLabel('📩 Relancer Formulaire')
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId(`staff_reset_candidate_${targetMember.id}`)
+              .setLabel('🔄 Réinitialiser Parcours')
+              .setStyle(ButtonStyle.Danger)
+          );
+
+          await message.reply({ embeds: [dossierEmbed], components: [row] }).catch(() => {});
+          return;
+        }
+
+        if (content.startsWith('!relancer') || content.startsWith('!rappel') || content.startsWith('!relancer-formulaire')) {
+          const mentionedUser = message.mentions.users.first();
+          const args = content.split(' ').slice(1).filter(Boolean);
+          const rawId = mentionedUser ? mentionedUser.id : args[0];
+
+          if (!rawId) {
+            await message.reply('⚠️ Veuillez spécifier un candidat (ex: `!relancer @candidat`).').catch(() => {});
+            return;
+          }
+
+          const cleanId = rawId.replace('<@!', '').replace('<@', '').replace('>', '');
+          const targetMember =
+            store.getMember(cleanId) ||
+            store.getMembers().find(
+              (m) =>
+                m.id === cleanId ||
+                m.discordId === cleanId ||
+                m.id.replace('mem-', '') === cleanId.replace('mem-', '') ||
+                m.username.toLowerCase() === cleanId.toLowerCase()
+            );
+
+          if (!targetMember) {
+            await message.reply('⚠️ Candidat non trouvé dans la base de données.').catch(() => {});
+            return;
+          }
+
+          await this.validateToolsFormationAndSendIntegrationForm([targetMember], message.author.id);
+
+          const relanceEmbed = new EmbedBuilder()
+            .setTitle('📩 LOG STAFF — RELANCE FORMULAIRE INTÉGRATION')
+            .setColor(0x3b82f6)
+            .setDescription(
+              `📩 **Formulaire d'intégration relancé pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> par <@${message.author.id}> !**\n\n` +
+              `Le message avec le bouton vert a été posté dans son salon privé et envoyé en MP.`
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Audit Staff' })
+            .setTimestamp();
+
+          if (this.isStaffChannel(message.channel)) {
+            await message.reply({ embeds: [relanceEmbed] }).catch(() => {});
+          } else {
+            await message.delete().catch(() => {});
+            await this.sendStaffLogNotification(relanceEmbed);
+            await message.author.send({
+              content: `📩 **[CONFIRMATION STAFF]** Formulaire relancé avec succès pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}>.`
+            }).catch(() => {});
+          }
+          return;
+        }
+
+        if (content.startsWith('!reset-candidat') || content.startsWith('!reinit') || content.startsWith('!reset-profil')) {
+          const mentionedUser = message.mentions.users.first();
+          const args = content.split(' ').slice(1).filter(Boolean);
+          const rawId = mentionedUser ? mentionedUser.id : args[0];
+
+          if (!rawId) {
+            await message.reply('⚠️ Veuillez spécifier un candidat (ex: `!reset-candidat @candidat`).').catch(() => {});
+            return;
+          }
+
+          const cleanId = rawId.replace('<@!', '').replace('<@', '').replace('>', '');
+          const targetMember =
+            store.getMember(cleanId) ||
+            store.getMembers().find(
+              (m) =>
+                m.id === cleanId ||
+                m.discordId === cleanId ||
+                m.id.replace('mem-', '') === cleanId.replace('mem-', '') ||
+                m.username.toLowerCase() === cleanId.toLowerCase()
+            );
+
+          if (!targetMember) {
+            await message.reply('⚠️ Candidat non trouvé dans la base de données.').catch(() => {});
+            return;
+          }
+
+          targetMember.candidateState = 'nouveau';
+          targetMember.progress = {};
+          targetMember.simulationValidatedAt = undefined;
+          targetMember.toolsFormationValidatedAt = undefined;
+          targetMember.cooldownUntilTimestamp = null;
+          targetMember.currentQuizAvailableAtTimestamp = null;
+
+          store.saveMembers();
+          firebaseSyncService.saveMember(targetMember).catch(() => {});
+
+          const resetEmbed = new EmbedBuilder()
+            .setTitle('🔄 LOG STAFF — RÉINITIALISATION PARCOURS')
+            .setColor(0xef4444)
+            .setDescription(
+              `🔄 **Le parcours de <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> a été réinitialisé par <@${message.author.id}> !**\n\n` +
+              `Tous les modules et cooldowns ont été remis à zéro. Le candidat repart de l'Étape 1.`
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Audit Staff' })
+            .setTimestamp();
+
+          if (this.isStaffChannel(message.channel)) {
+            await message.reply({ embeds: [resetEmbed] }).catch(() => {});
+          } else {
+            await message.delete().catch(() => {});
+            await this.sendStaffLogNotification(resetEmbed);
+            await message.author.send({
+              content: `🔄 **[CONFIRMATION STAFF]** Parcours réinitialisé pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}>.`
+            }).catch(() => {});
+          }
           return;
         }
 
@@ -864,6 +1080,22 @@ export class PawakoBotRunner {
           const whatsapp = interaction.fields.getTextInputValue('integration_whatsapp').trim();
           const shift = interaction.fields.getTextInputValue('integration_shift').trim();
 
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            await interaction.editReply({
+              content: '⚠️ **Format d\'e-mail invalide.** Veuillez renseigner une adresse e-mail valide (ex: `nom@example.com`).'
+            }).catch(() => {});
+            return;
+          }
+
+          const cleanPhone = whatsapp.replace(/[\s\-\+\(\)]/g, '');
+          if (cleanPhone.length < 6 || !/^\d+$/.test(cleanPhone)) {
+            await interaction.editReply({
+              content: '⚠️ **Numéro WhatsApp invalide.** Veuillez renseigner un numéro de téléphone valide (ex: `+33 6 12 34 56 78` ou `0612345678`).'
+            }).catch(() => {});
+            return;
+          }
+
           member.email = email;
           member.whatsapp = whatsapp;
           member.shift = shift;
@@ -991,14 +1223,16 @@ export class PawakoBotRunner {
             customId.startsWith('start_onboarding') ||
             customId.startsWith('join_training');
 
+          const isStaffAction = customId.startsWith('staff_') || customId.startsWith('show_my_profile') || customId.startsWith('btn_profile');
+
           if (customId.startsWith('qa:')) {
             if (!interaction.deferred && !interaction.replied) {
               await interaction.deferUpdate().catch((e) => console.warn('[DeferUpdate Warning]', e?.message || e));
             }
           } else {
             if (!interaction.deferred && !interaction.replied) {
-              // Ephemeral MUST be true for start_onboarding in public channels so public chat isn't flooded!
-              await interaction.deferReply({ ephemeral: isStartOnboarding }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
+              // Ephemeral MUST be true for start_onboarding AND staff actions so public/candidate channels aren't flooded with staff logs!
+              await interaction.deferReply({ ephemeral: isStartOnboarding || isStaffAction }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
             }
           }
 
@@ -1492,6 +1726,63 @@ export class PawakoBotRunner {
 
             await interaction.editReply({
               content: `🏆 **Formation Outils validée avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe formulaire d'intégration (E-mail, WhatsApp, Shift) lui a été envoyé dans son salon privé et en MP.`
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_relaunch_form_')) {
+            const targetId = customId.replace('staff_relaunch_form_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            await this.validateToolsFormationAndSendIntegrationForm([member], user.id);
+            await interaction.editReply({
+              content: `📩 **Formulaire d'intégration relancé avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> !**`
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_reset_candidate_')) {
+            const targetId = customId.replace('staff_reset_candidate_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            member.candidateState = 'nouveau';
+            member.progress = {};
+            member.simulationValidatedAt = undefined;
+            member.toolsFormationValidatedAt = undefined;
+            member.cooldownUntilTimestamp = null;
+            member.currentQuizAvailableAtTimestamp = null;
+
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            await interaction.editReply({
+              content: `🔄 **Le parcours de <@${member.discordId || member.id.replace('mem-', '')}> a été réinitialisé !**`
             });
             return;
           }
@@ -2104,6 +2395,42 @@ export class PawakoBotRunner {
     } catch (err: any) {
       console.warn('[syncExistingFinishedCandidates Error]', err?.message || err);
       return 0;
+    }
+  }
+
+  public isStaffChannel(channel: any): boolean {
+    if (!channel || !('name' in channel)) return false;
+    const name = channel.name.toLowerCase();
+    return (
+      name.includes('staff') ||
+      name.includes('alert') ||
+      name.includes('logs') ||
+      name.includes('admin') ||
+      name.includes('integration') ||
+      name.includes('bureau') ||
+      name.includes('gestion')
+    );
+  }
+
+  public async sendStaffLogNotification(embed: EmbedBuilder, textContent?: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      const config = onboardingService.getConfig();
+      const guildId = config.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
+      if (!guildId) return;
+
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return;
+
+      const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'alertes-staff', 'Alertes & Logs Staff');
+      if (staffChan) {
+        await staffChan.send({
+          content: textContent || undefined,
+          embeds: [embed],
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[SendStaffLogNotification Error]', e);
     }
   }
 

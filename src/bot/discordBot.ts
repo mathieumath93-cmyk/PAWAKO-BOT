@@ -386,7 +386,7 @@ export class PawakoBotRunner {
           await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
         }
 
-        if (content === '!profile') {
+        if (content === '!profile' || content === '!profil') {
           const m = store.getOrCreateCandidate(message.author.id, message.author.username, message.author.displayAvatarURL());
           const modules = store.getModules();
           const validatedCount = Object.values(m.progress || {}).filter((p: any) => p.status === 'valide').length;
@@ -425,7 +425,20 @@ export class PawakoBotRunner {
             .setFooter({ text: '🎓 PAWAKO Formation • L\'équipe est avec toi !' })
             .setTimestamp();
 
-          await message.reply({ embeds: [embed] }).catch(() => {});
+          const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('show_my_profile').setLabel('🔄 Actualiser').setStyle(ButtonStyle.Secondary)
+          );
+
+          if (m.candidateState === 'formation_outils' || m.candidateState === 'formation_terminee') {
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`fill_integration_form_${m.id}`)
+                .setLabel("📝 Formulaire d'Intégration (Infos)")
+                .setStyle(ButtonStyle.Success)
+            );
+          }
+
+          await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
         }
 
         if (content === '!formation') {
@@ -438,7 +451,7 @@ export class PawakoBotRunner {
           await message.reply({ embeds: [embed] }).catch(() => {});
         }
 
-        if (content.startsWith('!valider-simu') || content.startsWith('!valider-simulation') || content.startsWith('!simu-ok') || content.startsWith('!valider')) {
+        if (content.startsWith('!valider-simu') || content.startsWith('!valider-simulation') || content.startsWith('!simu-ok') || content === '!valider') {
           const mentionedUser = message.mentions.users.first();
           const args = content.split(' ').slice(1);
           const rawId = mentionedUser ? mentionedUser.id : args[0];
@@ -1229,6 +1242,33 @@ export class PawakoBotRunner {
               new ButtonBuilder().setCustomId('show_my_profile').setLabel('🔄 Actualiser le profil').setStyle(ButtonStyle.Secondary)
             );
 
+            if (member.candidateState === 'formation_outils' || member.candidateState === 'formation_terminee') {
+              row.addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`fill_integration_form_${member.id}`)
+                  .setLabel("📝 Formulaire d'Intégration (Infos)")
+                  .setStyle(ButtonStyle.Success)
+              );
+            }
+
+            if (isStaffViewer) {
+              if (member.candidateState === 'simulation') {
+                row.addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`staff_validate_simu_${member.id}`)
+                    .setLabel('🏆 Valider Simulation')
+                    .setStyle(ButtonStyle.Success)
+                );
+              } else if (member.candidateState === 'formation_outils') {
+                row.addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`staff_validate_tools_${member.id}`)
+                    .setLabel('✅ Valider Formation Outils')
+                    .setStyle(ButtonStyle.Primary)
+                );
+              }
+            }
+
             await interaction.editReply({ embeds: [embed], components: [row] });
             return;
           }
@@ -1373,6 +1413,31 @@ export class PawakoBotRunner {
 
             await interaction.editReply({
               content: `🏆 **Simulation validée avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe candidat a été convoqué pour la Formation Outils à 10h00 HF, et la notification a été transmise au Staff.`
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_validate_tools_')) {
+            const targetId = customId.replace('staff_validate_tools_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            const result = await this.validateToolsFormationAndSendIntegrationForm([member], user.id);
+
+            await interaction.editReply({
+              content: `🏆 **Formation Outils validée avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe formulaire d'intégration (E-mail, WhatsApp, Shift) lui a été envoyé dans son salon privé et en MP.`
             });
             return;
           }

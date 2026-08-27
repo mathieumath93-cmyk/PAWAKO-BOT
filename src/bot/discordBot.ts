@@ -2923,7 +2923,7 @@ export class PawakoBotRunner {
   /**
    * Check and send 14h00 HF Simulation reminders for scheduled candidates
    */
-  private checkSimulationReminders() {
+  private async checkSimulationReminders() {
     if (!this.client || !this.isConnected) return;
     const allMembers = store.getMembers();
     const nowMs = Date.now();
@@ -2937,39 +2937,38 @@ export class PawakoBotRunner {
         store.saveMembers();
         firebaseSyncService.saveMember(m).catch(() => {});
 
-        if (m.personalChannelId) {
-          this.client.channels.fetch(m.personalChannelId).then((chan) => {
-            if (chan && 'send' in chan) {
-              const reminderEmbed = new EmbedBuilder()
-                .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
-                .setDescription(
-                  `📢 <@${m.discordId || m.id}>, **il est 14h00 HF !**\n\n` +
-                  `C'est le moment de passer ton **Test de Simulation** en direct avec le Staff PAWAKO.\n` +
-                  `L'équipe de formation t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
-                )
-                .setColor(0x10b981)
-                .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })
-                .setTimestamp();
+        const candChan = await this.getCandidateChannel(m, true);
+        if (candChan) {
+          const candMention = `<@${m.discordId || m.id.replace('mem-', '')}>`;
+          const reminderEmbed = new EmbedBuilder()
+            .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
+            .setDescription(
+              `📢 ${candMention}, **il est 14h00 HF !**\n\n` +
+              `C'est le moment de passer ton **Test de Simulation** en direct avec le Staff PAWAKO.\n` +
+              `L'équipe de formation t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
+            )
+            .setColor(0x10b981)
+            .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })
+            .setTimestamp();
 
-              (chan as any).send({
-                content: `🔔 **[RAPPEL SIMULATION 14H00 HF]** <@${m.discordId || m.id}>`,
-                embeds: [reminderEmbed],
-              }).catch(() => {});
-            }
-          }).catch(() => {});
+          await candChan.send({
+            content: `🔔 **[RAPPEL SIMULATION 14H00 HF]** ${candMention}`,
+            embeds: [reminderEmbed],
+          }).catch((e: any) => console.warn('[Simu Reminder Send Error]', e));
         }
 
         const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
         if (guildId) {
-          this.client.guilds.fetch(guildId).then((guild) => {
-            this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff').then((staffChan) => {
-              if (staffChan) {
-                staffChan.send({
-                  content: `🔔 **[SIMULATION 14H00 HF]** Le candidat <@${m.discordId || m.id}> (**${m.username}**) attend son test de simulation dans ${m.personalChannelId ? `<#${m.personalChannelId}>` : 'son salon privé'} !`,
-                }).catch(() => {});
-              }
-            }).catch(() => {});
-          }).catch(() => {});
+          const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+          if (guild) {
+            const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+            if (staffChan) {
+              const chanLink = m.personalChannelId ? `<#${m.personalChannelId}>` : 'son salon privé';
+              await staffChan.send({
+                content: `🔔 **[SIMULATION 14H00 HF]** Le candidat <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**) attend son test de simulation dans ${chanLink} !`,
+              }).catch(() => {});
+            }
+          }
         }
       }
     }
@@ -3170,27 +3169,25 @@ export class PawakoBotRunner {
       store.saveMembers();
       firebaseSyncService.saveMember(m).catch(() => {});
 
-      if (m.personalChannelId) {
-        this.client.channels.fetch(m.personalChannelId).then((chan) => {
-          if (chan && 'send' in chan) {
-            const reminderEmbed = new EmbedBuilder()
-              .setTitle('🔔 C\'EST L\'HEURE — FORMATION OUTILS (10h00 HF)')
-              .setDescription(
-                `📢 <@${m.discordId || m.id.replace('mem-', '')}>, **il est 10h00 HF !**\n\n` +
-                `C'est le moment de rejoindre la session de **Formation Outils** en direct avec l'équipe !\n\n` +
-                `🔊 **Rejoindre le Vocal :** ${voiceLinkStr}\n` +
-                `🔗 **Lien Google Meet (secours) :** [Rejoindre le Meet](${meetUrl}) 🚀`
-              )
-              .setColor(0x10b981)
-              .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Formation Outils 10h00 HF' })
-              .setTimestamp();
+      const candChan = await this.getCandidateChannel(m, true);
+      if (candChan) {
+        const candMention = `<@${m.discordId || m.id.replace('mem-', '')}>`;
+        const reminderEmbed = new EmbedBuilder()
+          .setTitle('🔔 C\'EST L\'HEURE — FORMATION OUTILS (10h00 HF)')
+          .setDescription(
+            `📢 ${candMention}, **il est 10h00 HF !**\n\n` +
+            `C'est le moment de rejoindre la session de **Formation Outils** en direct avec l'équipe !\n\n` +
+            `🔊 **Rejoindre le Vocal :** ${voiceLinkStr}\n` +
+            `🔗 **Lien Google Meet (secours) :** [Rejoindre le Meet](${meetUrl}) 🚀`
+          )
+          .setColor(0x10b981)
+          .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Formation Outils 10h00 HF' })
+          .setTimestamp();
 
-            (chan as any).send({
-              content: `🔔 **[RAPPEL FORMATION OUTILS 10H00 HF]** <@${m.discordId || m.id.replace('mem-', '')}>`,
-              embeds: [reminderEmbed],
-            }).catch(() => {});
-          }
-        }).catch(() => {});
+        await candChan.send({
+          content: `🔔 **[RAPPEL FORMATION OUTILS 10H00 HF]** ${candMention}`,
+          embeds: [reminderEmbed],
+        }).catch((e: any) => console.warn('[Tools Reminder Send Error]', e));
       }
     }
 

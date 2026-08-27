@@ -461,22 +461,51 @@ export class PawakoBotRunner {
             return;
           }
 
-          const targetMember =
-            store.getMember(rawId) ||
-            store.getMembers().find(
-              (m) =>
-                m.id === rawId ||
-                m.discordId === rawId ||
-                m.id.replace('mem-', '') === rawId.replace('mem-', '')
-            );
+          let targetMember: Member | undefined = undefined;
+
+          if (mentionedUser) {
+            targetMember = store.getOrCreateCandidate(mentionedUser.id, mentionedUser.username, mentionedUser.displayAvatarURL());
+          } else {
+            targetMember =
+              store.getMember(rawId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === rawId ||
+                  m.discordId === rawId ||
+                  m.id.replace('mem-', '') === rawId.replace('mem-', '') ||
+                  m.username.toLowerCase() === rawId.toLowerCase()
+              );
+
+            if (!targetMember) {
+              const fetched = await this.client?.users.fetch(rawId.replace('<@!', '').replace('<@', '').replace('>', '')).catch(() => null);
+              if (fetched) {
+                targetMember = store.getOrCreateCandidate(fetched.id, fetched.username, fetched.displayAvatarURL());
+              }
+            }
+          }
 
           if (!targetMember) {
             await message.reply(`⚠️ Candidat non trouvé dans la base de données pour ID/mention \`${rawId}\`.`).catch(() => {});
             return;
           }
 
+          // Force-validate all modules for candidate
+          const allMods = store.getModules();
+          if (!targetMember.progress) targetMember.progress = {};
+          for (const mod of allMods) {
+            targetMember.progress[mod.id] = {
+              moduleId: mod.id,
+              status: 'valide',
+              score: 20,
+              attemptsCount: targetMember.progress[mod.id]?.attemptsCount || 1,
+              validatedAt: new Date().toLocaleString('fr-FR'),
+            };
+          }
+          targetMember.cooldownUntilTimestamp = null;
+          targetMember.currentQuizAvailableAtTimestamp = null;
+
           await this.validateSimulationAndTriggerToolsFormation(targetMember, message.author.id);
-          await message.reply(`🏆 **Simulation validée par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\nConvocation envoyée pour la Formation Outils à 10h00 HF.`).catch(() => {});
+          await message.reply(`🏆 **Formation & Simulation validées par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\nLe candidat a été validé sur tous les modules et convoqué pour la Formation Outils à 10h00 HF.`).catch(() => {});
           return;
         }
 
@@ -502,63 +531,88 @@ export class PawakoBotRunner {
           content.startsWith('!valider-outils') ||
           content.startsWith('!valider-formation') ||
           content.startsWith('!valider-integration') ||
+          content.startsWith('!valider-tout') ||
+          content.startsWith('!force-valider') ||
+          content.startsWith('!valider-modules') ||
           content.startsWith('!formation-ok') ||
           content.startsWith('!outils-ok')
         ) {
-          const mentions = message.mentions.users.first() ? message.mentions.users : null;
+          const mentions = message.mentions.users;
           let targets: Member[] = [];
 
           if (mentions && mentions.size > 0) {
             mentions.forEach((u) => {
-              const m = store.getMembers().find((mb) => mb.discordId === u.id || mb.id === u.id || mb.id === `mem-${u.id}`);
-              if (m) targets.push(m);
+              const m = store.getOrCreateCandidate(u.id, u.username, u.displayAvatarURL());
+              targets.push(m);
             });
           } else {
             const args = content.split(' ').slice(1).filter(Boolean);
             if (args.length > 0) {
               for (const rawId of args) {
-                const m = store.getMembers().find(
+                const cleanId = rawId.replace('<@!', '').replace('<@', '').replace('>', '');
+                let m = store.getMembers().find(
                   (mb) =>
-                    mb.id === rawId ||
-                    mb.discordId === rawId ||
-                    mb.id.replace('mem-', '') === rawId.replace('mem-', '') ||
-                    mb.username.toLowerCase() === rawId.toLowerCase()
+                    mb.id === cleanId ||
+                    mb.discordId === cleanId ||
+                    mb.id.replace('mem-', '') === cleanId.replace('mem-', '') ||
+                    mb.username.toLowerCase() === cleanId.toLowerCase()
                 );
+
+                if (!m && this.client) {
+                  const fetched = await this.client.users.fetch(cleanId).catch(() => null);
+                  if (fetched) {
+                    m = store.getOrCreateCandidate(fetched.id, fetched.username, fetched.displayAvatarURL());
+                  }
+                }
+
                 if (m) targets.push(m);
               }
             }
           }
 
-          // If no specific candidates mentioned, pick all candidates currently in state 'formation_outils'
+          // If no specific candidates mentioned, pick all candidates currently in state 'formation_outils' or 'simulation'
           if (targets.length === 0) {
-            targets = store.getMembers().filter((m) => m.candidateState === 'formation_outils');
+            targets = store.getMembers().filter((m) => m.candidateState === 'formation_outils' || m.candidateState === 'simulation');
           }
 
           if (targets.length === 0) {
             await message.reply(
-              '⚠️ **Aucun candidat trouvé pour la Formation Outils.** Mentionnez les candidats (ex: `!valider-outils @candidat`) ou assurez-vous qu\'ils sont en statut `formation_outils`.'
+              '⚠️ **Aucun candidat spécifié.** Mentionnez un ou plusieurs candidats (ex: `!valider-formation @candidat`) pour valider immédiatement leur formation.'
             ).catch(() => {});
             return;
+          }
+
+          // Force-validate all modules for targets
+          const allMods = store.getModules();
+          for (const m of targets) {
+            if (!m.progress) m.progress = {};
+            for (const mod of allMods) {
+              m.progress[mod.id] = {
+                moduleId: mod.id,
+                status: 'valide',
+                score: 20,
+                attemptsCount: m.progress[mod.id]?.attemptsCount || 1,
+                validatedAt: new Date().toLocaleString('fr-FR'),
+              };
+            }
+            m.cooldownUntilTimestamp = null;
+            m.currentQuizAvailableAtTimestamp = null;
           }
 
           const result = await this.validateToolsFormationAndSendIntegrationForm(targets, message.author.id);
 
           const validatedMentions = result.validated.map((m) => `<@${m.discordId || m.id.replace('mem-', '')}>`).join(', ');
-          const absentMentions = result.absent.map((m) => `<@${m.discordId || m.id.replace('mem-', '')}>`).join(', ');
 
           const reportEmbed = new EmbedBuilder()
-            .setTitle('🏆 VALIDATION DE LA FORMATION OUTILS & DEMANDE D\'INTÉGRATION')
+            .setTitle('🏆 VALIDATION PARCOURS COMPLET & DEMANDE D\'INTÉGRATION')
             .setColor(0x10b981)
             .setDescription(
-              ` Session de Formation Outils validée par <@${message.author.id}> !\n\n` +
-              `✅ **Candidat(s) Présent(s) & Validé(s) (${result.validated.length}) :**\n` +
-              `${validatedMentions || 'Aucun'}\n` +
-              `*👉 Le message avec le formulaire d'intégration (Email, WhatsApp, Shift) a été envoyé dans leur salon privé et en MP !*\n\n` +
-              (result.absent.length > 0
-                ? `⚠️ **Rapport Candidats Absents / Non Validés (${result.absent.length}) :**\n${absentMentions}\n*Ces candidats n'ont pas encore finalisé l'étape.*`
-                : `🎉 **100% des candidats inscrits ont assisté et validé la formation !**`)
+              ` Formation validée par <@${message.author.id}> pour n'importe quel candidat (même sans modules faits) !\n\n` +
+              `✅ **Candidat(s) Validé(s) (${result.validated.length}) :**\n` +
+              `${validatedMentions || 'Aucun'}\n\n` +
+              `*👉 Tous les modules ont été marqués 100% validés (20/20) et le formulaire d'intégration (Email, WhatsApp, Shift) a été envoyé dans leur salon privé et en MP !*`
             )
-            .setFooter({ text: 'PAWAKO FORMATION • Validation Étape 3' })
+            .setFooter({ text: 'PAWAKO FORMATION • Validation Force Staff' })
             .setTimestamp();
 
           await message.reply({ embeds: [reportEmbed] }).catch(() => {});
@@ -2497,6 +2551,23 @@ export class PawakoBotRunner {
     const member = store.getMember(memberInput.id) || memberInput;
     if (!member) return false;
 
+    // Ensure all modules are marked validated
+    const allMods = store.getModules();
+    if (!member.progress) member.progress = {};
+    for (const mod of allMods) {
+      if (!member.progress[mod.id] || member.progress[mod.id].status !== 'valide') {
+        member.progress[mod.id] = {
+          moduleId: mod.id,
+          status: 'valide',
+          score: 20,
+          attemptsCount: member.progress[mod.id]?.attemptsCount || 1,
+          validatedAt: new Date().toLocaleString('fr-FR'),
+        };
+      }
+    }
+    member.cooldownUntilTimestamp = null;
+    member.currentQuizAvailableAtTimestamp = null;
+
     const toolsScheduledTs = getNext10hParisTimestamp();
     const tsSec = Math.floor(toolsScheduledTs / 1000);
 
@@ -3718,11 +3789,27 @@ export class PawakoBotRunner {
 
     const nowStr = new Date().toLocaleString('fr-FR');
 
+    const allMods = store.getModules();
     for (const rawMember of targetMembersInput) {
       const member = store.getMember(rawMember.id) || rawMember;
       member.candidateState = 'formation_terminee';
       member.toolsFormationValidatedAt = nowStr;
       member.lastActiveAt = store.getFormattedNow();
+
+      if (!member.progress) member.progress = {};
+      for (const mod of allMods) {
+        if (!member.progress[mod.id] || member.progress[mod.id].status !== 'valide') {
+          member.progress[mod.id] = {
+            moduleId: mod.id,
+            status: 'valide',
+            score: 20,
+            attemptsCount: member.progress[mod.id]?.attemptsCount || 1,
+            validatedAt: nowStr,
+          };
+        }
+      }
+      member.cooldownUntilTimestamp = null;
+      member.currentQuizAvailableAtTimestamp = null;
 
       store.saveMembers();
       firebaseSyncService.saveMember(member).catch(() => {});

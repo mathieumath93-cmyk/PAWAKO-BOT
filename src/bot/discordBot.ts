@@ -34,6 +34,26 @@ export interface ActiveQuizSession {
   channelId?: string;
 }
 
+export interface ActiveAnthonySession {
+  channelId: string;
+  candidateId: string;
+  candidateDiscordId: string;
+  candidateUsername: string;
+  startedAt: number;
+  lastCandidateMsgTimestamp: number;
+  lastFanMsgTimestamp: number;
+  extractedInfos: {
+    name: boolean;
+    age: boolean;
+    job: boolean;
+    location: boolean;
+    hobbies: boolean;
+    fantasy: boolean;
+  };
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+  inactivityTimer?: NodeJS.Timeout;
+}
+
 function formatMemberRolesDisplay(roles: string[] = []): string {
   const filtered = (roles || []).filter(Boolean);
   if (filtered.length === 0) return 'Aucun rôle attribué';
@@ -223,6 +243,7 @@ export class PawakoBotRunner {
   private isConnected: boolean = false;
   private isConnecting: boolean = false;
   private activeQuizSessions = new Map<string, ActiveQuizSession>();
+  private activeAnthonySessions = new Map<string, ActiveAnthonySession>();
   private userClickTracker = new Map<string, { count: number; lastClickTime: number }>();
   private cooldownClickTracker = new Map<string, { count: number; cooldownUntil: number }>();
 
@@ -476,6 +497,156 @@ export class PawakoBotRunner {
 
           await message.reply({ embeds: [embed] }).catch(() => {});
           return;
+        }
+
+        // --- COMMANDS TO LAUNCH ANTHONY SIMULATION DIRECTLY IN DISCORD ---
+        if (
+          content.startsWith('!lancer-anthony') ||
+          content.startsWith('!anthony') ||
+          content.startsWith('!lancer-simu') ||
+          (content.startsWith('!simu') && !content.startsWith('!simu-ok')) ||
+          content.startsWith('!start-anthony') ||
+          content.startsWith('!start-simu')
+        ) {
+          const mentionedUser = message.mentions.users.first();
+          const args = content.split(' ').filter(Boolean).slice(1);
+          const rawId = mentionedUser ? mentionedUser.id : args[0];
+
+          let targetMember: Member | undefined = undefined;
+
+          if (rawId) {
+            targetMember =
+              store.getMember(rawId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === rawId ||
+                  m.discordId === rawId ||
+                  m.id.replace('mem-', '') === rawId.replace('mem-', '') ||
+                  m.username.toLowerCase() === rawId.toLowerCase()
+              );
+          }
+
+          if (!targetMember) {
+            targetMember = store.getMembers().find((m) => m.personalChannelId === message.channel.id);
+          }
+
+          if (!targetMember && message.channel.isTextBased() && 'name' in message.channel) {
+            const chanName = (message.channel as any).name || '';
+            targetMember = store.getMembers().find((m) =>
+              m.username && chanName.includes(m.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 15))
+            );
+          }
+
+          if (!targetMember) {
+            await message.reply(
+              '⚠️ **Candidat non trouvé.** Mentionnez le candidat (ex: `!lancer-anthony @candidat`) ou exécutez la commande dans son salon privé.'
+            ).catch(() => {});
+            return;
+          }
+
+          let targetChan: any = message.channel;
+          if (targetMember.personalChannelId && this.client) {
+            const pChan = await this.client.channels.fetch(targetMember.personalChannelId).catch(() => null);
+            if (pChan) targetChan = pChan;
+          }
+
+          await this.startAnthonySimulationSession(targetMember, targetChan, message.author.id);
+
+          if (targetChan.id !== message.channel.id) {
+            await message.reply(
+              `🚀 **Simulation Anthony lancée pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> dans <#${targetChan.id}> !**`
+            ).catch(() => {});
+          }
+          return;
+        }
+
+        if (content.startsWith('!stop-anthony') || content.startsWith('!stop-simu') || content.startsWith('!fin-anthony') || content.startsWith('!fin-simu')) {
+          const session = this.activeAnthonySessions.get(message.channel.id);
+          if (session) {
+            if (session.inactivityTimer) clearTimeout(session.inactivityTimer);
+            this.activeAnthonySessions.delete(message.channel.id);
+            await message.reply('🛑 **Session de simulation Anthony arrêtée dans ce salon.**').catch(() => {});
+          } else {
+            await message.reply('ℹ️ Aucune simulation Anthony active dans ce salon.').catch(() => {});
+          }
+          return;
+        }
+
+        // --- CANDIDATE MESSAGES IN ACTIVE ANTHONY SIMULATION CHANNEL ---
+        if (!content.startsWith('!')) {
+          let session = this.activeAnthonySessions.get(message.channel.id);
+
+          // Auto-resume session if channel belongs to candidate in 'simulation' state
+          if (!session) {
+            const cand = store.getMembers().find((m) => m.personalChannelId === message.channel.id && m.candidateState === 'simulation');
+            if (cand) {
+              session = {
+                channelId: message.channel.id,
+                candidateId: cand.id,
+                candidateDiscordId: cand.discordId || cand.id.replace('mem-', ''),
+                candidateUsername: cand.username,
+                startedAt: Date.now(),
+                lastCandidateMsgTimestamp: Date.now(),
+                lastFanMsgTimestamp: Date.now(),
+                extractedInfos: { name: false, age: false, job: false, location: false, hobbies: false, fantasy: false },
+                conversationHistory: [],
+              };
+              this.activeAnthonySessions.set(message.channel.id, session);
+            }
+          }
+
+          if (session) {
+            // Cancel pending inactivity relance timer
+            if (session.inactivityTimer) {
+              clearTimeout(session.inactivityTimer);
+              session.inactivityTimer = undefined;
+            }
+
+            session.lastCandidateMsgTimestamp = Date.now();
+            session.conversationHistory.push({ role: 'user', content: message.content });
+
+            if ('sendTyping' in message.channel) {
+              (message.channel as any).sendTyping().catch(() => {});
+            }
+
+            const anthonyReply = await this.generateAnthonyResponse(message.content, session);
+
+            setTimeout(async () => {
+              session!.lastFanMsgTimestamp = Date.now();
+              session!.conversationHistory.push({ role: 'assistant', content: anthonyReply });
+
+              if ('send' in message.channel) {
+                await (message.channel as any).send(anthonyReply).catch(() => {});
+              }
+
+              // Set 5-minute inactivity relance timer
+              session!.inactivityTimer = setTimeout(async () => {
+                const curSession = this.activeAnthonySessions.get(session!.channelId);
+                if (!curSession) return;
+
+                const timeSinceLastMsg = Date.now() - curSession.lastCandidateMsgTimestamp;
+                if (timeSinceLastMsg >= 5 * 60 * 1000) {
+                  const relancePool = [
+                    'Tu m\'as oublié ? 😏',
+                    'Tu es toujours là mon ange ? 😉',
+                    'Dis-moi, tu es occupée ou tu réfléchis à ce qu\'on se disait ? ✨',
+                    'Tu as disparu... Tu me boudes ? 😈',
+                  ];
+                  const relanceText = relancePool[Math.floor(Math.random() * relancePool.length)];
+
+                  curSession.lastFanMsgTimestamp = Date.now();
+                  curSession.conversationHistory.push({ role: 'assistant', content: relanceText });
+
+                  const chan = await this.client?.channels.fetch(curSession.channelId).catch(() => null);
+                  if (chan && 'send' in chan) {
+                    await (chan as any).send(relanceText).catch(() => {});
+                  }
+                }
+              }, 5 * 60 * 1000);
+            }, 2000);
+
+            return;
+          }
         }
 
         // Auto-responder for candidate questions about bot operation
@@ -3114,6 +3285,179 @@ export class PawakoBotRunner {
         console.warn('[completeQuizSession send error]', err);
       }
     }
+  }
+
+  /**
+   * Launch Anthony simulation session for a candidate on Discord
+   */
+  public async startAnthonySimulationSession(
+    targetMemberInput: Member,
+    channel: any,
+    startedByStaffUserId?: string
+  ): Promise<boolean> {
+    const member = store.getMember(targetMemberInput.id) || targetMemberInput;
+    if (!member || !channel) return false;
+
+    // Clear existing session for this channel if any
+    const existingSession = this.activeAnthonySessions.get(channel.id);
+    if (existingSession?.inactivityTimer) {
+      clearTimeout(existingSession.inactivityTimer);
+    }
+
+    member.candidateState = 'simulation';
+    member.lastActiveAt = store.getFormattedNow();
+    store.saveMembers();
+    firebaseSyncService.saveMember(member).catch(() => {});
+
+    const candDiscordId = member.discordId || member.id.replace('mem-', '');
+    const candMention = `<@${candDiscordId}>`;
+
+    const newSession: ActiveAnthonySession = {
+      channelId: channel.id,
+      candidateId: member.id,
+      candidateDiscordId: candDiscordId,
+      candidateUsername: member.username,
+      startedAt: Date.now(),
+      lastCandidateMsgTimestamp: 0,
+      lastFanMsgTimestamp: Date.now(),
+      extractedInfos: {
+        name: false,
+        age: false,
+        job: false,
+        location: false,
+        hobbies: false,
+        fantasy: false,
+      },
+      conversationHistory: [],
+    };
+
+    this.activeAnthonySessions.set(channel.id, newSession);
+
+    // Initial context message sent to candidate channel (No "Anthony" in starting text, ending with "À toi <@candDiscordId> !")
+    const contextEmbed = new EmbedBuilder()
+      .setTitle('📌 CONTEXTE DE DÉPART DE LA SIMULATION')
+      .setDescription(
+        `Un nouveau fan s'est abonné et n'a **pas répondu** au message automatique de bienvenue.\n\n` +
+        `👉 **C'est à toi de le relancer et de commencer la discussion !**\n\n` +
+        `À toi ${candMention} !`
+      )
+      .setColor(0x3b82f6)
+      .setFooter({ text: 'PAWAKO FORMATION • Test de Simulation en Direct' })
+      .setTimestamp();
+
+    if ('send' in channel) {
+      await channel.send({
+        content: `📌 ${candMention}`,
+        embeds: [contextEmbed],
+      }).catch((e: any) => console.warn('[Start Anthony Context Error]', e));
+    }
+
+    store.addLog(
+      startedByStaffUserId ? `Staff (<@${startedByStaffUserId}>)` : 'System',
+      `Lancement de la simulation Anthony pour ${member.username} dans salon ${channel.name || channel.id}`,
+      'member',
+      member.username
+    );
+
+    return true;
+  }
+
+  /**
+   * Generate Anthony (AI Fan) response according to strict persona rules
+   */
+  private async generateAnthonyResponse(
+    candidateMsg: string,
+    session: ActiveAnthonySession
+  ): Promise<string> {
+    const rawLower = candidateMsg.toLowerCase().trim();
+
+    // 1. Check for Photo/Video proposals
+    const isAskingPhotoOrVideo =
+      rawLower.includes('photo') ||
+      rawLower.includes('vidéo') ||
+      rawLower.includes('video') ||
+      rawLower.includes('visuel') ||
+      rawLower.includes('montrer') ||
+      rawLower.includes('voir');
+
+    const isExplicitlyPaid =
+      rawLower.includes('payant') ||
+      rawLower.includes('paye') ||
+      rawLower.includes('$') ||
+      rawLower.includes('€') ||
+      rawLower.includes('prix') ||
+      rawLower.includes('tarif');
+
+    const isExplicitlyFree =
+      rawLower.includes('gratuit') ||
+      rawLower.includes('offert') ||
+      rawLower.includes('cadeau');
+
+    if (isAskingPhotoOrVideo) {
+      if (isExplicitlyPaid) {
+        return `Ah c'est payant ? 😕 Oula 25$ c'est un peu cher pour mon budget de la semaine... Tu peux pas me la donner ou me faire un petit geste ?`;
+      }
+      if (isExplicitlyFree) {
+        return `Oh super, merci mon ange ! Montre-moi ça avec plaisir 😏`;
+      }
+      // Neither free nor paid specified -> ALWAYS ask!
+      return `Mmmh pourquoi pas... Mais c'est gratuit ou c'est payant ? 😏`;
+    }
+
+    // If candidate replies to "c'est gratuit ou payant ?"
+    if (isExplicitlyPaid) {
+      return `Ah c'est payant ? 😕 Oula 25$ c'est un peu cher pour mon budget de la semaine... Tu peux pas me la donner ou me faire un petit geste ?`;
+    }
+    if (isExplicitlyFree) {
+      return `Oh super, merci mon ange ! Montre-moi ça avec plaisir 😏`;
+    }
+
+    // 2. Strict Retention of Information (only answer if explicitly asked)
+    const askedName = rawLower.includes('prénom') || rawLower.includes('prenom') || rawLower.includes('t\'appelles') || rawLower.includes('ton nom');
+    const askedAge = rawLower.includes('âge') || rawLower.includes('age') || rawLower.includes('quel âge') || rawLower.includes('ans');
+    const askedJob = rawLower.includes('fais quoi') || rawLower.includes('métier') || rawLower.includes('metier') || rawLower.includes('travail') || rawLower.includes('vie');
+    const askedLocation = rawLower.includes('où') || rawLower.includes('ou') || rawLower.includes('ville') || rawLower.includes('habites') || rawLower.includes('viens d\'où');
+    const askedFantasy = rawLower.includes('fantasme') || rawLower.includes('envie') || rawLower.includes('désir') || rawLower.includes('desir');
+
+    if (askedName) {
+      session.extractedInfos.name = true;
+      return `Je m'appelle Anthony ! Et toi ? 😊`;
+    }
+    if (askedAge) {
+      session.extractedInfos.age = true;
+      return `J'ai 29 ans mon ange. Et toi tu as quel âge ? 😉`;
+    }
+    if (askedJob) {
+      session.extractedInfos.job = true;
+      return `Je suis ingénieur commercial à Lyon ! Ça prend pas mal de temps. Tu aimes ce que tu fais toi ? ✨`;
+    }
+    if (askedLocation) {
+      session.extractedInfos.location = true;
+      return `J'habite à Lyon ! Et toi tu viens d'où ? 📍`;
+    }
+    if (askedFantasy) {
+      session.extractedInfos.fantasy = true;
+      return `Je suis un peu réservé au début... Mais j'avoue qu'une petite vidéo coquine sous la douche avec déshabillage ça me ferait très chaud... 😈`;
+    }
+
+    // 3. Initial relance response when candidate initiates conversation
+    if (session.conversationHistory.length <= 1) {
+      return `Coucou ! Oh pardon je n'avais pas vu le premier message automatique... Tu vas bien ? 😉`;
+    }
+
+    // 4. Progressive negotiation shields & general responses
+    if (rawLower.includes('comprends') || rawLower.includes('qualité') || rawLower.includes('exclusif')) {
+      return `Mmmh j'hésite encore un peu... Tu n'as pas un petit bonus à m'offrir dans le pack ? 😏`;
+    }
+    if (rawLower.includes('bonus') || rawLower.includes('photo') || rawLower.includes('offert') || rawLower.includes('ajout')) {
+      return `Mmmh d'accord tu me rajoutes 2 photos gratuites ? Mais 25$ ça reste un peu au-dessus de mon budget...`;
+    }
+    if (rawLower.includes('réduction') || rawLower.includes('reduction') || rawLower.includes('rabais') || rawLower.includes('18')) {
+      return `À 18$ avec tout le pack c'est parfait ! Mais ma paie n'arrive que vendredi... C'est bon si je te la débloque vendredi matin ? 😉`;
+    }
+
+    // Fallback friendly progressive response
+    return `Tu me plais bien, tu as l'air vraiment sympa ! Qu'est-ce que tu me proposes de beau par ici ? 😉`;
   }
 
   public getIsConnected(): boolean {

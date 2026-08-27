@@ -486,3 +486,53 @@ export interface UserSession {
   loginAt: string;
 }
 
+export interface StepGuide {
+  stepNumber: number;
+  title: string;
+  objective: string;
+  keyPhrases: string[];
+  forbiddenErrors: string[];
+}
+
+export interface PpvItem {
+  id: string;
+  mediaName: string;
+  minPrice: number;
+  maxPrice: number;
+  description: string;
+}
+
+export interface ObjectionHandler {
+  id: string;
+  objection: string;
+  strategy: string;
+  exampleResponse: string;
+}
+
+export interface FanPersona {
+  id: string;
+  name: string;
+  description: string;
+  budget: string;
+  difficulty: 'facile' | 'moyen' | 'difficile';
+  initialMessage: string;
+}
+
+export interface AiKnowledgeBase {
+  ofmRules: string;
+  ppvPricing: PpvItem[];
+  objectionHandlers: ObjectionHandler[];
+  fiveStepsGuide: StepGuide[];
+  fanPersonas: FanPersona[];
+}
+
+export interface AiPromptConfig {
+  analyzerPrompt: string;
+  fanPrompt: string;
+  coachPrompt: string;
+  modelName: string;
+  temperature: number;
+  openRouterApiKey: string;
+  enableLiveDiscordBot: boolean;
+}
+

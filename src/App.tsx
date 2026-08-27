@@ -10,6 +10,7 @@ import { ChannelsView } from './components/ChannelsView';
 import { DiscordSyncView } from './components/DiscordSyncView';
 import { LogsView } from './components/LogsView';
 import { SettingsView } from './components/SettingsView';
+import { AIKnowledgeConfigurator } from './components/AIKnowledgeConfigurator';
 import { BotTokenModal } from './components/BotTokenModal';
 
 import { serverService } from './services/serverService';
@@ -156,6 +157,8 @@ export function App() {
               onShowToast={showToast}
             />
           )}
+
+          {activeTab === 'ai-config' && <AIKnowledgeConfigurator onShowToast={showToast} />}
 
           {activeTab === 'members' && (
             <MembersView

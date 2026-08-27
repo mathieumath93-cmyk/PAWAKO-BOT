@@ -10,6 +10,9 @@ import {
   ChannelType,
   PermissionFlagsBits,
   TextChannel,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
@@ -482,6 +485,73 @@ export class PawakoBotRunner {
           return;
         }
 
+        if (
+          content.startsWith('!valider-outils') ||
+          content.startsWith('!valider-formation') ||
+          content.startsWith('!valider-integration') ||
+          content.startsWith('!formation-ok') ||
+          content.startsWith('!outils-ok')
+        ) {
+          const mentions = message.mentions.users.first() ? message.mentions.users : null;
+          let targets: Member[] = [];
+
+          if (mentions && mentions.size > 0) {
+            mentions.forEach((u) => {
+              const m = store.getMembers().find((mb) => mb.discordId === u.id || mb.id === u.id || mb.id === `mem-${u.id}`);
+              if (m) targets.push(m);
+            });
+          } else {
+            const args = content.split(' ').slice(1).filter(Boolean);
+            if (args.length > 0) {
+              for (const rawId of args) {
+                const m = store.getMembers().find(
+                  (mb) =>
+                    mb.id === rawId ||
+                    mb.discordId === rawId ||
+                    mb.id.replace('mem-', '') === rawId.replace('mem-', '') ||
+                    mb.username.toLowerCase() === rawId.toLowerCase()
+                );
+                if (m) targets.push(m);
+              }
+            }
+          }
+
+          // If no specific candidates mentioned, pick all candidates currently in state 'formation_outils'
+          if (targets.length === 0) {
+            targets = store.getMembers().filter((m) => m.candidateState === 'formation_outils');
+          }
+
+          if (targets.length === 0) {
+            await message.reply(
+              '⚠️ **Aucun candidat trouvé pour la Formation Outils.** Mentionnez les candidats (ex: `!valider-outils @candidat`) ou assurez-vous qu\'ils sont en statut `formation_outils`.'
+            ).catch(() => {});
+            return;
+          }
+
+          const result = await this.validateToolsFormationAndSendIntegrationForm(targets, message.author.id);
+
+          const validatedMentions = result.validated.map((m) => `<@${m.discordId || m.id.replace('mem-', '')}>`).join(', ');
+          const absentMentions = result.absent.map((m) => `<@${m.discordId || m.id.replace('mem-', '')}>`).join(', ');
+
+          const reportEmbed = new EmbedBuilder()
+            .setTitle('🏆 VALIDATION DE LA FORMATION OUTILS & DEMANDE D\'INTÉGRATION')
+            .setColor(0x10b981)
+            .setDescription(
+              ` Session de Formation Outils validée par <@${message.author.id}> !\n\n` +
+              `✅ **Candidat(s) Présent(s) & Validé(s) (${result.validated.length}) :**\n` +
+              `${validatedMentions || 'Aucun'}\n` +
+              `*👉 Le message avec le formulaire d'intégration (Email, WhatsApp, Shift) a été envoyé dans leur salon privé et en MP !*\n\n` +
+              (result.absent.length > 0
+                ? `⚠️ **Rapport Candidats Absents / Non Validés (${result.absent.length}) :**\n${absentMentions}\n*Ces candidats n'ont pas encore finalisé l'étape.*`
+                : `🎉 **100% des candidats inscrits ont assisté et validé la formation !**`)
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Validation Étape 3' })
+            .setTimestamp();
+
+          await message.reply({ embeds: [reportEmbed] }).catch(() => {});
+          return;
+        }
+
         if (content === '!ticket') {
           const ticket = store.createTicket(
             message.author.id,
@@ -653,13 +723,124 @@ export class PawakoBotRunner {
         await this.handleCandidateQuestion(message).catch(() => {});
       });
 
-      // Exclusively handle button interactions via Gateway
+      // Handle button & modal interactions via Gateway
       this.client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isButton()) return;
+        if (!interaction.isButton() && !interaction.isModalSubmit()) return;
 
         const customId = interaction.customId;
         const user = interaction.user;
         const guild = interaction.guild;
+
+        // --- HANDLER FOR CANDIDATE CLICKING "📝 Remplir mes Infos d'Intégration" ---
+        if (interaction.isButton() && customId.startsWith('fill_integration_form')) {
+          const targetId = customId.replace('fill_integration_form_', '');
+          const member =
+            store.getMember(targetId) ||
+            store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
+
+          const modal = new ModalBuilder()
+            .setCustomId(`modal_integration_form_${member ? member.id : user.id}`)
+            .setTitle("Formulaire d'Intégration PAWAKO");
+
+          const emailInput = new TextInputBuilder()
+            .setCustomId('integration_email')
+            .setLabel('📧 Adresse E-mail')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('exemple@gmail.com')
+            .setRequired(true);
+
+          if (member?.email) emailInput.setValue(member.email);
+
+          const whatsappInput = new TextInputBuilder()
+            .setCustomId('integration_whatsapp')
+            .setLabel('📱 Numéro WhatsApp')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('+33 6 12 34 56 78')
+            .setRequired(true);
+
+          if (member?.whatsapp) whatsappInput.setValue(member.whatsapp);
+
+          const shiftInput = new TextInputBuilder()
+            .setCustomId('integration_shift')
+            .setLabel('⏰ Shift / Horaires souhaités')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Ex: Shift du soir (18h-00h), 5 jours / 7')
+            .setRequired(true);
+
+          if (member?.shift) shiftInput.setValue(member.shift);
+
+          modal.addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(emailInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(whatsappInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(shiftInput)
+          );
+
+          await interaction.showModal(modal).catch((e) => console.warn('[ShowModal Error]', e));
+          return;
+        }
+
+        // --- HANDLER FOR CANDIDATE SUBMITTING THE INTEGRATION MODAL FORM ---
+        if (interaction.isModalSubmit() && customId.startsWith('modal_integration_form')) {
+          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+          const targetId = customId.replace('modal_integration_form_', '');
+          const member =
+            store.getMember(targetId) ||
+            store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
+
+          if (!member) {
+            await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base de données.' }).catch(() => {});
+            return;
+          }
+
+          const email = interaction.fields.getTextInputValue('integration_email').trim();
+          const whatsapp = interaction.fields.getTextInputValue('integration_whatsapp').trim();
+          const shift = interaction.fields.getTextInputValue('integration_shift').trim();
+
+          member.email = email;
+          member.whatsapp = whatsapp;
+          member.shift = shift;
+          member.candidateState = 'formation_terminee';
+          if (!member.toolsFormationValidatedAt) {
+            member.toolsFormationValidatedAt = new Date().toLocaleString('fr-FR');
+          }
+
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+
+          const confirmEmbed = new EmbedBuilder()
+            .setTitle("🏆 Formulaire d'Intégration Transmis avec Succès !")
+            .setDescription(
+              `Merci <@${user.id}> ! Tes informations d'intégration ont été enregistrées et transmises à l'équipe de Direction (@Mahsa).\n\n` +
+              `• 📧 **E-mail :** \`${email}\`\n` +
+              `• 📱 **WhatsApp :** \`${whatsapp}\`\n` +
+              `• ⏰ **Shift :** \`${shift}\`\n\n` +
+              `Félicitations pour ton parcours et bienvenue officiellement dans l'équipe PAWAKO ! 🎉`
+            )
+            .setColor(0x10b981)
+            .setFooter({ text: 'PAWAKO FORMATION • Dossier d\'Intégration Complété' });
+
+          await interaction.editReply({ embeds: [confirmEmbed] }).catch(() => {});
+
+          // Send confirmation note to candidate personal channel
+          if (member.personalChannelId && this.client) {
+            this.client.channels.fetch(member.personalChannelId).then((chan) => {
+              if (chan && 'send' in chan) {
+                const publicEmbed = new EmbedBuilder()
+                  .setTitle('✅ FORMULAIRE D\'INTÉGRATION COMPLÉTÉ')
+                  .setDescription(
+                    ` Bravo <@${user.id}> ! Tu as rempli tes coordonnées d'intégration. Le dossier a été transmis à @Mahsa.`
+                  )
+                  .setColor(0x10b981);
+                (chan as any).send({ embeds: [publicEmbed] }).catch(() => {});
+              }
+            }).catch(() => {});
+          }
+
+          // Trigger automatic Staff MP & Salon Intégration notification
+          await this.sendIntegrationSubmittedNotificationToStaff(member);
+          return;
+        }
 
         // Block all module/quiz execution in Direct Messages (DM) and redirect user to the Discord server
         if (!guild || interaction.channel?.isDMBased()) {
@@ -3458,6 +3639,151 @@ export class PawakoBotRunner {
 
     // Fallback friendly progressive response
     return `Tu me plais bien, tu as l'air vraiment sympa ! Qu'est-ce que tu me proposes de beau par ici ? 😉`;
+  }
+
+  /**
+   * Validate Tools Formation for candidates and send Étape 3 Integration Form (Email, WhatsApp, Shift)
+   */
+  public async validateToolsFormationAndSendIntegrationForm(
+    targetMembersInput: Member[],
+    staffUserId?: string
+  ): Promise<{ validated: Member[]; absent: Member[] }> {
+    const validated: Member[] = [];
+    const absent: Member[] = [];
+
+    const nowStr = new Date().toLocaleString('fr-FR');
+
+    for (const rawMember of targetMembersInput) {
+      const member = store.getMember(rawMember.id) || rawMember;
+      member.candidateState = 'formation_terminee';
+      member.toolsFormationValidatedAt = nowStr;
+      member.lastActiveAt = store.getFormattedNow();
+
+      store.saveMembers();
+      firebaseSyncService.saveMember(member).catch(() => {});
+      validated.push(member);
+
+      const candDiscordId = member.discordId || member.id.replace('mem-', '');
+      const candMention = `<@${candDiscordId}>`;
+
+      const formEmbed = new EmbedBuilder()
+        .setTitle("🏆 3️⃣ ÉTAPE 3 : SAISIE DES INFOS CANDIDAT (INTÉGRATION PAWAKO)")
+        .setDescription(
+          `Félicitations ${candMention} ! Tu as validé la **Formation Outils** en visio ! 👏\n\n` +
+          `Pour finaliser ton dossier d'intégration et recevoir tes accès de travail, merci de remplir tes informations ci-dessous en cliquant sur le bouton vert :\n\n` +
+          `📧 **E-mail**\n` +
+          `📱 **Numéro WhatsApp**\n` +
+          `⏰ **Shift / Horaires souhaités**\n\n` +
+          `👉 *Clique sur le bouton ci-dessous pour ouvrir le formulaire d'intégration.*`
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Étape 3 Intégration' })
+        .setTimestamp();
+
+      const formRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`fill_integration_form_${member.id}`)
+          .setLabel("📝 Remplir mes Infos d'Intégration")
+          .setStyle(ButtonStyle.Success)
+      );
+
+      // Send in candidate personal channel
+      if (member.personalChannelId && this.client) {
+        this.client.channels.fetch(member.personalChannelId).then((chan) => {
+          if (chan && 'send' in chan) {
+            (chan as any).send({
+              content: `📌 ${candMention}`,
+              embeds: [formEmbed],
+              components: [formRow],
+            }).catch((e: any) => console.warn('[Send Integration Form Error]', e));
+          }
+        }).catch(() => {});
+      }
+
+      // Also send direct message MP
+      if (this.client && candDiscordId) {
+        this.client.users.fetch(candDiscordId).then((u) => {
+          if (u) {
+            u.send({
+              embeds: [formEmbed],
+              components: [formRow],
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+
+      store.addLog(
+        staffUserId ? `Staff (<@${staffUserId}>)` : 'System',
+        `Validation Formation Outils & envoi formulaire d'intégration pour ${member.username}`,
+        'member',
+        member.username
+      );
+    }
+
+    // Identify absent candidates currently enrolled in formation_outils who were not validated
+    const allToolsCandidates = store.getMembers().filter((m) => m.candidateState === 'formation_outils');
+    for (const c of allToolsCandidates) {
+      if (!validated.some((v) => v.id === c.id)) {
+        absent.push(c);
+      }
+    }
+
+    return { validated, absent };
+  }
+
+  /**
+   * Send automatic staff notification MP & post in salon #integration when candidate submits integration form
+   */
+  public async sendIntegrationSubmittedNotificationToStaff(member: Member): Promise<void> {
+    const candDiscordId = member.discordId || member.id.replace('mem-', '');
+    const candMention = `<@${candDiscordId}>`;
+    const channelLinkStr = member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé';
+
+    const simuDate = member.simulationValidatedAt || 'Validée';
+    const toolsDate = member.toolsFormationValidatedAt || new Date().toLocaleString('fr-FR');
+
+    const staffEmbed = new EmbedBuilder()
+      .setTitle("📋 DOSSIER D'INTÉGRATION CANDIDAT SOUMIS")
+      .setColor(0x10b981)
+      .setDescription(
+        `👤 **Candidat :** ${candMention} (**${member.username}**)\n\n` +
+        `📧 **E-mail :** \`${member.email || 'Non renseigné'}\`\n` +
+        `📱 **WhatsApp :** \`${member.whatsapp || 'Non renseigné'}\`\n` +
+        `⏰ **Shift / Horaires :** \`${member.shift || 'Non renseigné'}\`\n\n` +
+        `📅 **Date Validation Simulation :** ${simuDate}\n` +
+        `📅 **Date Validation Formation Outils :** ${toolsDate}\n\n` +
+        `🔗 **Salon privé candidat :** ${channelLinkStr}`
+      )
+      .setFooter({ text: 'PAWAKO FORMATION • Notification Intégration' })
+      .setTimestamp();
+
+    // 1. Direct Message MP to Staff / @Mahsa
+    await this.sendDirectMessageToStaff(staffEmbed);
+
+    // 2. Post in #integration or #staff-alerts channel
+    if (this.client) {
+      const cfg = onboardingService.getConfig();
+      const guildId = cfg.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
+      if (guildId) {
+        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          const integrationChan = await this.getOrCreateStaffOnlyChannel(guild, 'integration', 'Dossiers Intégration');
+          if (integrationChan) {
+            await integrationChan.send({
+              content: `🔔 **[NOUVEAU DOSSIER INTÉGRATION]** Notification pour Staff — ${candMention} a soumis ses infos !`,
+              embeds: [staffEmbed],
+            }).catch(() => {});
+          }
+        }
+      }
+    }
+
+    store.addLog(
+      'Bot System',
+      `Formulaire d'intégration reçu de ${member.username} (Email: ${member.email}, WhatsApp: ${member.whatsapp}, Shift: ${member.shift})`,
+      'member',
+      member.username
+    );
   }
 
   public getIsConnected(): boolean {

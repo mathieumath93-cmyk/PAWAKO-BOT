@@ -286,6 +286,11 @@ export class PawakoBotRunner {
           console.warn('[Pawako Bot Sync Error on Ready]', err?.message || err);
         });
 
+        // Auto-sync candidates who completed modules on server start
+        this.syncExistingFinishedCandidates().catch((err) => {
+          console.warn('[Pawako Bot Candidates Sync Error]', err?.message || err);
+        });
+
         // Start 18h00 HF scheduled stats cron
         this.startScheduledCron();
       });
@@ -428,6 +433,24 @@ export class PawakoBotRunner {
 
           await this.validateSimulationAndTriggerToolsFormation(targetMember, message.author.id);
           await message.reply(`🏆 **Simulation validée par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\nConvocation envoyée pour la Formation Outils à 10h00 HF.`).catch(() => {});
+          return;
+        }
+
+        if (content === '!sync-finished' || content === '!sync-candidats' || content === '!synchro') {
+          const count = await this.syncExistingFinishedCandidates();
+          await message.reply(
+            `🔄 **Synchronisation des candidats effectuée !**\n${count} candidat(s) ayant terminé les modules ont été pris en compte pour la simulation et la formation outils.`
+          ).catch(() => {});
+          return;
+        }
+
+        if (content === '!fermer-formation' || content === '!close-formation' || content === '!fin-formation') {
+          const closed = await this.closeToolsVoiceChannel();
+          await message.reply(
+            closed
+              ? `🏁 **Session de Formation Outils terminée par <@${message.author.id}> !**\nLe salon vocal temporaire a été fermé.`
+              : `🏁 **Le salon vocal de formation était déjà fermé ou inexistant.**`
+          ).catch(() => {});
           return;
         }
 
@@ -995,6 +1018,16 @@ export class PawakoBotRunner {
             return;
           }
 
+          if (customId === 'staff_close_voice_session' || customId.startsWith('staff_close_voice_session')) {
+            const closed = await this.closeToolsVoiceChannel();
+            await interaction.editReply({
+              content: closed
+                ? `🏁 **Session de Formation Outils terminée par <@${user.id}> !**\nLe salon vocal d'accès temporaire a été fermé et les accès des candidats révoqués.`
+                : `🏁 **Session terminée.** Le salon vocal n'était plus actif.`,
+            });
+            return;
+          }
+
           // --- 3. LAUNCH OR RETRY QUIZ ---
           if (customId.startsWith('launch_quiz') || customId.startsWith('retry_quiz')) {
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
@@ -1328,6 +1361,263 @@ export class PawakoBotRunner {
     } catch (err: any) {
       console.warn(`[PawakoBot Reminder Send Warning] Channel ${channelId}:`, err?.message || err);
       return false;
+    }
+  }
+
+  /**
+   * Helper to send a direct message (MP) to Mahsa and Mathieu on Discord
+   */
+  public async sendDirectMessageToStaff(
+    embed: EmbedBuilder,
+    components?: ActionRowBuilder<ButtonBuilder>[]
+  ): Promise<void> {
+    if (!this.client) return;
+    const cfg = onboardingService.getConfig();
+    const staffIds = [cfg.mahsaDiscordId, cfg.mathieuDiscordId].filter(Boolean);
+
+    for (const rawId of staffIds) {
+      const cleanId = String(rawId).replace(/[<@!>]/g, '').trim();
+      if (!/^\d{17,20}$/.test(cleanId)) continue;
+      try {
+        const user = await this.client.users.fetch(cleanId).catch(() => null);
+        if (user) {
+          await user.send({
+            embeds: [embed],
+            components: components || [],
+          }).catch((e) => console.warn(`[MP Staff Error ${cleanId}]`, e));
+        }
+      } catch (err) {
+        console.warn(`[MP Staff Fetch Exception ${cleanId}]`, err);
+      }
+    }
+  }
+
+  /**
+   * Helper to fetch or create the private temporary Voice Channel for 10h00 HF Tools Formation
+   * Grants view/connect permissions ONLY to staff and enrolled candidates.
+   */
+  public async getOrCreateToolsVoiceChannel(
+    guild: any,
+    scheduledMembers: Member[]
+  ): Promise<any> {
+    try {
+      const channels = await guild.channels.fetch().catch(() => null);
+      let existingVoice = channels
+        ? channels.find((c: any) => c && c.type === ChannelType.GuildVoice && c.name.toLowerCase().includes('formation-outils'))
+        : null;
+
+      const staffRole = guild.roles.cache.find(
+        (r: any) =>
+          r && r.name &&
+          (r.name.toLowerCase().includes('staff') ||
+            r.name.toLowerCase().includes('admin') ||
+            r.name.toLowerCase().includes('formateur'))
+      );
+
+      const overwrites: any[] = [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+        },
+      ];
+
+      if (staffRole) {
+        overwrites.push({
+          id: staffRole.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+        });
+      }
+
+      const cfg = onboardingService.getConfig();
+      [cfg.mahsaDiscordId, cfg.mathieuDiscordId].forEach((rawId) => {
+        if (!rawId) return;
+        const cleanId = String(rawId).replace(/[<@!>]/g, '').trim();
+        if (/^\d{17,20}$/.test(cleanId)) {
+          overwrites.push({
+            id: cleanId,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+          });
+        }
+      });
+
+      for (const m of scheduledMembers) {
+        const cId = m.discordId || (m.id.startsWith('mem-') ? m.id.replace('mem-', '') : m.id);
+        if (cId && /^\d{17,20}$/.test(cId)) {
+          overwrites.push({
+            id: cId,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+          });
+        }
+      }
+
+      if (!existingVoice) {
+        existingVoice = await guild.channels.create({
+          name: '🔊 Formation Outils (10h00 HF)',
+          type: ChannelType.GuildVoice,
+          permissionOverwrites: overwrites,
+        });
+        console.log('[PawakoBot] Salon Vocal #Formation Outils créé avec succès.');
+      } else {
+        for (const ow of overwrites) {
+          await existingVoice.permissionOverwrites.edit(ow.id, ow).catch(() => {});
+        }
+      }
+
+      return existingVoice;
+    } catch (err) {
+      console.warn('[GetOrCreateToolsVoiceChannel Error]', err);
+      return null;
+    }
+  }
+
+  /**
+   * Helper to close/end the Tools Formation voice channel session.
+   * Revokes candidate access or deletes the voice channel.
+   */
+  public async closeToolsVoiceChannel(): Promise<boolean> {
+    try {
+      if (!this.client) return false;
+      const cfg = onboardingService.getConfig();
+      const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+      if (!guildId) return false;
+
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return false;
+
+      const channels = await guild.channels.fetch().catch(() => null);
+      const existingVoice = channels
+        ? channels.find((c: any) => c && c.type === ChannelType.GuildVoice && c.name.toLowerCase().includes('formation-outils'))
+        : null;
+
+      if (existingVoice) {
+        await existingVoice.delete('Fin de la session de Formation Outils').catch(async () => {
+          await existingVoice.permissionOverwrites.set([
+            {
+              id: guild.roles.everyone.id,
+              deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+            },
+          ]);
+        });
+        return true;
+      }
+    } catch (err) {
+      console.warn('[CloseToolsVoiceChannel Error]', err);
+    }
+    return false;
+  }
+
+  /**
+   * Sync and audit existing candidates on the server who have already completed modules.
+   * Ensures candidates who completed Module 5 are enrolled in Simulation & Tools Formation
+   * and that 1-click validation MP is sent to Mahsa & Mathieu.
+   */
+  public async syncExistingFinishedCandidates(): Promise<number> {
+    if (!this.client || !this.isConnected) return 0;
+    try {
+      const cfg = onboardingService.getConfig();
+      const guildId = cfg.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
+      if (!guildId) return 0;
+
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return 0;
+
+      // Fetch all guild members from Discord
+      const guildMembers = await guild.members.fetch().catch(() => null);
+      if (guildMembers) {
+        for (const gMember of guildMembers.values()) {
+          if (gMember.user.bot) continue;
+          store.getOrCreateCandidate(gMember.id, gMember.displayName || gMember.user.username, gMember.user.displayAvatarURL());
+        }
+      }
+
+      const allModules = store.getModules();
+      const lastModId = allModules.length > 0 ? allModules[allModules.length - 1].id : 'mod-5';
+      const allMembers = store.getMembers();
+      let syncedCount = 0;
+
+      for (const member of allMembers) {
+        const discordUserId = member.discordId || member.id.replace('mem-', '');
+        const gMember = guildMembers?.get(discordUserId);
+
+        const mod5Passed = member.progress?.[lastModId]?.quizPassed || member.progress?.[lastModId]?.status === 'valide';
+        
+        let hasCompletionRole = false;
+        if (gMember) {
+          hasCompletionRole = gMember.roles.cache.some((r) => {
+            const name = r.name.toLowerCase();
+            return name.includes('pass module 5') || name.includes('pass 5') || name.includes('simulation') || name.includes('formation outils') || name.includes('formé') || name.includes('equipe');
+          });
+        }
+
+        const isFinishedModules = mod5Passed || hasCompletionRole || member.candidateState === 'simulation' || member.candidateState === 'formation_outils' || member.candidateState === 'formation_terminee';
+
+        if (isFinishedModules) {
+          syncedCount++;
+
+          if (!member.progress[lastModId]) {
+            member.progress[lastModId] = { moduleId: lastModId, status: 'valide', attemptsCount: 1, quizPassed: true, score: 20 };
+          } else {
+            member.progress[lastModId].quizPassed = true;
+            member.progress[lastModId].status = 'valide';
+          }
+
+          if (!member.candidateState || member.candidateState === 'nouveau' || member.candidateState === 'module_en_cours' || member.candidateState === 'cooldown_actif' || member.candidateState === 'quiz_disponible') {
+            member.candidateState = 'simulation';
+          }
+
+          if (!member.simulationScheduledTimestamp || member.simulationScheduledTimestamp < Date.now()) {
+            member.simulationScheduledTimestamp = getNext14hParisTimestamp();
+            member.simulationReminderSent = false;
+          }
+
+          if (member.candidateState === 'simulation' && !member.simuMpSentToStaff) {
+            member.simuMpSentToStaff = true;
+            const simTsSec = Math.floor((member.simulationScheduledTimestamp || Date.now()) / 1000);
+
+            const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`staff_validate_simu_${member.id}`)
+                .setLabel(`🏆 Valider la Simulation de ${member.username}`)
+                .setStyle(ButtonStyle.Success)
+            );
+
+            const mpSimuEmbed = new EmbedBuilder()
+              .setTitle('📅 CANDIDAT EXISTANT EN ATTENTE DE SIMULATION (14h00 HF)')
+              .setDescription(
+                `📢 **Notification Privée Staff (Import / Reprise)**\n\n` +
+                `Le candidat <@${discordUserId}> (**${member.username}**) a terminé l'intégralité des modules théoriques ! 🏆\n\n` +
+                `🗓️ **Simulation Programmée :** <t:${simTsSec}:F> (<t:${simTsSec}:R>)\n` +
+                `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
+                `👉 **Pour valider sa simulation en 1-clic**, appuyez simplement sur le bouton vert ci-dessous :`
+              )
+              .setColor(0x3b82f6)
+              .setFooter({ text: 'PAWAKO FORMATION • Synchronisation Serveur & Validation 1-Clic' })
+              .setTimestamp();
+
+            this.sendDirectMessageToStaff(mpSimuEmbed, [simValidateRow]).catch(() => {});
+          }
+
+          if (member.candidateState === 'formation_outils' && (!member.toolsFormationScheduledTimestamp || member.toolsFormationScheduledTimestamp < Date.now())) {
+            member.toolsFormationScheduledTimestamp = getNext10hParisTimestamp();
+            member.toolsFormationReminderSent = false;
+          }
+
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+        }
+      }
+
+      if (syncedCount > 0) {
+        store.addLog(
+          'System Bot',
+          `🔄 [SYNCHRO ALIBABA] ${syncedCount} candidat(s) ayant terminé les modules synchronisés et prêts pour la simulation/formation outils.`,
+          'system'
+        );
+      }
+      return syncedCount;
+    } catch (err: any) {
+      console.warn('[syncExistingFinishedCandidates Error]', err?.message || err);
+      return 0;
     }
   }
 
@@ -1789,6 +2079,25 @@ export class PawakoBotRunner {
     const cfg = onboardingService.getConfig();
     const meetUrl = cfg.toolsFormationMeetUrl || 'https://meet.google.com/pawako-tools-formation';
 
+    // List all candidates scheduled for this same 10h00 HF timestamp
+    const scheduledMembers = store.getMembers().filter(
+      (m) => m.toolsFormationScheduledTimestamp === toolsScheduledTs && m.isActive !== false
+    );
+
+    // Get or Create Private Voice Channel for 10h00 HF Formation Outils
+    let voiceChan: any = null;
+    if (this.client) {
+      const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+      if (guildId) {
+        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          voiceChan = await this.getOrCreateToolsVoiceChannel(guild, scheduledMembers);
+        }
+      }
+    }
+
+    const voiceLinkStr = voiceChan ? `<#${voiceChan.id}>` : `[Google Meet](${meetUrl})`;
+
     // 1. Message to Candidate in their private channel
     let candChan: any = null;
     if (member.personalChannelId && this.client) {
@@ -1814,10 +2123,11 @@ export class PawakoBotRunner {
         .setTitle('🏆 SIMULATION VALIDÉE ! PROCHAINE ÉTAPE : FORMATION OUTILS')
         .setDescription(
           `Félicitations <@${member.discordId || member.id.replace('mem-', '')}> ! Tu as réussi avec succès ton test de simulation en direct. 👏\n\n` +
-          `📅 **Prochain RDV : Formation Outils via Google Meet**\n` +
+          `📅 **Prochain RDV : Formation Outils**\n` +
           `⏰ **Date & Heure :** <t:${tsSec}:F> (<t:${tsSec}:R>) - **10h00 (Heure Française - HF)**\n` +
-          `🔗 **Lien Google Meet :** [Rejoindre la Formation Outils](${meetUrl})\n\n` +
-          `💡 *Un rappel te sera envoyé dans ce salon peu avant le début de la session à 10h00 HF.* 🚀`
+          `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n` +
+          `🔗 **Lien Google Meet (secours) :** [Rejoindre la visio](${meetUrl})\n\n` +
+          `💡 *Un rappel te sera envoyé dans ce salon à 10h00 HF. Clique sur le salon vocal à l'heure du RDV !* 🚀`
         )
         .setColor(0x10b981)
         .setFooter({ text: 'PAWAKO FORMATION • Validation Simulation & Session Outils 10h00 HF' })
@@ -1829,15 +2139,18 @@ export class PawakoBotRunner {
       }).catch((e: any) => console.warn('[Send Simu Validated Error]', e));
     }
 
-    // List all candidates scheduled for this same 10h00 HF timestamp
-    const scheduledMembers = store.getMembers().filter(
-      (m) => m.toolsFormationScheduledTimestamp === toolsScheduledTs && m.isActive !== false
-    );
     const scheduledListStr = scheduledMembers.length > 0
       ? scheduledMembers.map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`).join('\n')
       : `1. <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)`;
 
-    // 2. Alert to Staff / Mahsa & Mathieu
+    const closeVoiceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('staff_close_voice_session')
+        .setLabel('🏁 Terminer / Fermer le Salon Vocal')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    // 2. Alert to Staff / #staff-alerts
     if (this.client) {
       const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
       if (guildId) {
@@ -1854,8 +2167,8 @@ export class PawakoBotRunner {
                 `📢 **Notification pour ${mahsaMention} et ${mathieuMention}**\n\n` +
                 `Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**) a été validé${staffUserId ? ` par <@${staffUserId}>` : ''} pour la **Formation Outils** !\n\n` +
                 `📅 **Session 10h00 HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
-                `🔗 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n` +
-                `🔗 **Lien Meet :** [Google Meet](${meetUrl})\n\n` +
+                `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n` +
+                `🔗 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
                 `📋 **Liste des candidats inscrits à cette session 10h00 HF :**\n${scheduledListStr}`
               )
               .setColor(0x3b82f6)
@@ -1865,13 +2178,32 @@ export class PawakoBotRunner {
             await staffChan.send({
               content: `🔔 **[FORMATION OUTILS 10H00 HF]** ${mahsaMention} ${mathieuMention}`,
               embeds: [staffAlertEmbed],
+              components: [closeVoiceRow],
             }).catch((e) => console.warn('[Staff Alert Simu Validated Error]', e));
           }
         }
       }
     }
 
-    // 3. Log event
+    // 3. Direct Message (MP) to Mahsa & Mathieu
+    const mpEmbed = new EmbedBuilder()
+      .setTitle('🔔 SIMULATION VALIDÉE — FORMATION OUTILS (10h00 HF)')
+      .setDescription(
+        `🏆 **Notification Privée Staff**\n\n` +
+        `Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**) a été validé${staffUserId ? ` par <@${staffUserId}>` : ''} pour la **Formation Outils** !\n\n` +
+        `📅 **Session 10h00 HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
+        `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n` +
+        `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
+        `📋 **Candidats inscrits pour cette session :**\n${scheduledListStr}\n\n` +
+        `*(Cliquez sur le bouton ci-dessous une fois la réunion terminée pour fermer l'accès au vocal)*`
+      )
+      .setColor(0x10b981)
+      .setFooter({ text: 'PAWAKO FORMATION • Notification MP Staff' })
+      .setTimestamp();
+
+    await this.sendDirectMessageToStaff(mpEmbed, [closeVoiceRow]);
+
+    // 4. Log event
     store.addLog(
       staffUserId ? `Staff (<@${staffUserId}>)` : 'System',
       `Validation de la simulation pour ${member.username}. Convocation Formation Outils 10h00 HF envoyée.`,
@@ -1885,7 +2217,7 @@ export class PawakoBotRunner {
   /**
    * Check and send 10h00 HF Tools Formation reminders for scheduled candidates
    */
-  private checkToolsFormationReminders() {
+  private async checkToolsFormationReminders() {
     if (!this.client || !this.isConnected) return;
     const allMembers = store.getMembers();
     const nowMs = Date.now();
@@ -1901,6 +2233,18 @@ export class PawakoBotRunner {
 
     if (dueMembers.length === 0) return;
 
+    // Get or Create Private Voice Channel
+    let voiceChan: any = null;
+    const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+    if (guildId) {
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (guild) {
+        voiceChan = await this.getOrCreateToolsVoiceChannel(guild, dueMembers);
+      }
+    }
+
+    const voiceLinkStr = voiceChan ? `<#${voiceChan.id}>` : `[Google Meet](${meetUrl})`;
+
     for (const m of dueMembers) {
       m.toolsFormationReminderSent = true;
       store.saveMembers();
@@ -1914,7 +2258,8 @@ export class PawakoBotRunner {
               .setDescription(
                 `📢 <@${m.discordId || m.id.replace('mem-', '')}>, **il est 10h00 HF !**\n\n` +
                 `C'est le moment de rejoindre la session de **Formation Outils** en direct avec l'équipe !\n\n` +
-                `🔗 **Lien Google Meet :** [Rejoindre le Meet](${meetUrl}) 🚀`
+                `🔊 **Rejoindre le Vocal :** ${voiceLinkStr}\n` +
+                `🔗 **Lien Google Meet (secours) :** [Rejoindre le Meet](${meetUrl}) 🚀`
               )
               .setColor(0x10b981)
               .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Formation Outils 10h00 HF' })
@@ -1929,38 +2274,48 @@ export class PawakoBotRunner {
       }
     }
 
-    const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+    const closeVoiceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('staff_close_voice_session')
+        .setLabel('🏁 Terminer / Fermer le Salon Vocal')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    const mahsaMention = cfg.mahsaDiscordId ? `<@${cfg.mahsaDiscordId}>` : '@Mahsa';
+    const mathieuMention = cfg.mathieuDiscordId ? `<@${cfg.mathieuDiscordId}>` : '@Mathieu';
+
+    const candListStr = dueMembers
+      .map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`)
+      .join('\n');
+
+    const staffReminderEmbed = new EmbedBuilder()
+      .setTitle('🔔 RAPPEL 10H00 HF — SESSION FORMATION OUTILS COMMENCÉE')
+      .setDescription(
+        `📢 **Rappel en direct pour ${mahsaMention} et ${mathieuMention}**\n\n` +
+        `Il est **10h00 HF** ! La session de **Formation Outils** commence maintenant.\n\n` +
+        `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n\n` +
+        `📋 **Candidats attendus pour cette session :**\n${candListStr}`
+      )
+      .setColor(0x10b981)
+      .setFooter({ text: 'PAWAKO FORMATION • Rappel Session 10h00 HF' })
+      .setTimestamp();
+
     if (guildId) {
       this.client.guilds.fetch(guildId).then((guild) => {
         this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff').then((staffChan) => {
           if (staffChan) {
-            const mahsaMention = cfg.mahsaDiscordId ? `<@${cfg.mahsaDiscordId}>` : '@Mahsa';
-            const mathieuMention = cfg.mathieuDiscordId ? `<@${cfg.mathieuDiscordId}>` : '@Mathieu';
-
-            const candListStr = dueMembers
-              .map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`)
-              .join('\n');
-
-            const staffReminderEmbed = new EmbedBuilder()
-              .setTitle('🔔 RAPPEL 10H00 HF — SESSION FORMATION OUTILS')
-              .setDescription(
-                `📢 **Rappel pour ${mahsaMention} et ${mathieuMention}**\n\n` +
-                `Il est **10h00 HF** ! La session de **Formation Outils** commence maintenant.\n\n` +
-                `🔗 **Lien Meet :** [Google Meet](${meetUrl})\n\n` +
-                `📋 **Candidats attendus pour cette session :**\n${candListStr}`
-              )
-              .setColor(0x10b981)
-              .setFooter({ text: 'PAWAKO FORMATION • Rappel Session 10h00 HF' })
-              .setTimestamp();
-
             staffChan.send({
               content: `🔔 **[SESSION 10H00 HF COMMENCÉE]** ${mahsaMention} ${mathieuMention}`,
               embeds: [staffReminderEmbed],
+              components: [closeVoiceRow],
             }).catch(() => {});
           }
         }).catch(() => {});
       }).catch(() => {});
     }
+
+    // Direct MP to Mahsa & Mathieu
+    await this.sendDirectMessageToStaff(staffReminderEmbed, [closeVoiceRow]);
   }
 
   /**
@@ -2542,6 +2897,14 @@ export class PawakoBotRunner {
 
         if (member.personalChannelId && this.client) {
           const simTsSec = Math.floor(simTimestamp / 1000);
+
+          const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`staff_validate_simu_${member.id}`)
+              .setLabel(`🏆 Valider la Simulation de ${member.username}`)
+              .setStyle(ButtonStyle.Success)
+          );
+
           this.client.channels.fetch(member.personalChannelId).then((candChan) => {
             if (candChan && 'send' in candChan) {
               const simEmbed = new EmbedBuilder()
@@ -2564,6 +2927,22 @@ export class PawakoBotRunner {
               }).catch((e: any) => console.warn('[Sim Convocation Error]', e));
             }
           }).catch(() => {});
+
+          // Direct MP to Mahsa & Mathieu
+          const mpSimuEmbed = new EmbedBuilder()
+            .setTitle('📅 NOUVELLE SIMULATION EN ATTENTE (14h00 HF)')
+            .setDescription(
+              `📢 **Notification Privée Staff**\n\n` +
+              `Le candidat <@${discordUserId}> (**${member.username}**) a validé l'intégralité du parcours théorique ! 🏆\n\n` +
+              `🗓️ **Convocation Simulation :** <t:${simTsSec}:F> (<t:${simTsSec}:R>)\n` +
+              `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
+              `👉 **Pour valider sa simulation en 1-clic**, appuyez simplement sur le bouton vert ci-dessous :`
+            )
+            .setColor(0x3b82f6)
+            .setFooter({ text: 'PAWAKO FORMATION • Validation Simulation 1-Clic' })
+            .setTimestamp();
+
+          this.sendDirectMessageToStaff(mpSimuEmbed, [simValidateRow]).catch(() => {});
         }
       }
 

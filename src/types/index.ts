@@ -47,6 +47,7 @@ export type CandidateState =
   | 'module_en_cours'
   | 'quiz_disponible'
   | 'cooldown_actif'
+  | 'simulation'
   | 'simulation_validee'
   | 'formation_outils'
   | 'formation_terminee';
@@ -184,6 +185,7 @@ export interface Member {
   lastReminderAt?: string;
   simulationScheduledTimestamp?: number | null;
   simulationReminderSent?: boolean;
+  simuMpSentToStaff?: boolean;
   toolsFormationScheduledTimestamp?: number | null;
   toolsFormationReminderSent?: boolean;
   simulationValidatedAt?: string;

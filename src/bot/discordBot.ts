@@ -1,6 +1,7 @@
 import {
   Client,
   GatewayIntentBits,
+  Partials,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -271,6 +272,12 @@ export class PawakoBotRunner {
           GatewayIntentBits.GuildMembers,
           GatewayIntentBits.GuildMessages,
           GatewayIntentBits.MessageContent,
+          GatewayIntentBits.DirectMessages,
+        ],
+        partials: [
+          Partials.Channel,
+          Partials.Message,
+          Partials.User,
         ],
       });
 
@@ -407,7 +414,7 @@ export class PawakoBotRunner {
           await message.reply({ embeds: [embed] }).catch(() => {});
         }
 
-        if (content.startsWith('!valider-simu') || content.startsWith('!valider-simulation') || content.startsWith('!simu-ok')) {
+        if (content.startsWith('!valider-simu') || content.startsWith('!valider-simulation') || content.startsWith('!simu-ok') || content.startsWith('!valider')) {
           const mentionedUser = message.mentions.users.first();
           const args = content.split(' ').slice(1);
           const rawId = mentionedUser ? mentionedUser.id : args[0];
@@ -1403,7 +1410,11 @@ export class PawakoBotRunner {
     try {
       const channels = await guild.channels.fetch().catch(() => null);
       let existingVoice = channels
-        ? channels.find((c: any) => c && c.type === ChannelType.GuildVoice && c.name.toLowerCase().includes('formation-outils'))
+        ? channels.find((c: any) => c && c.type === ChannelType.GuildVoice && (
+            c.name.toLowerCase().includes('formation-outils') ||
+            c.name.toLowerCase().includes('formation outils') ||
+            (c.name.toLowerCase().includes('formation') && c.name.toLowerCase().includes('outils'))
+          ))
         : null;
 
       const staffRole = guild.roles.cache.find(
@@ -1486,7 +1497,11 @@ export class PawakoBotRunner {
 
       const channels = await guild.channels.fetch().catch(() => null);
       const existingVoice = channels
-        ? channels.find((c: any) => c && c.type === ChannelType.GuildVoice && c.name.toLowerCase().includes('formation-outils'))
+        ? channels.find((c: any) => c && c.type === ChannelType.GuildVoice && (
+            c.name.toLowerCase().includes('formation-outils') ||
+            c.name.toLowerCase().includes('formation outils') ||
+            (c.name.toLowerCase().includes('formation') && c.name.toLowerCase().includes('outils'))
+          ))
         : null;
 
       if (existingVoice) {

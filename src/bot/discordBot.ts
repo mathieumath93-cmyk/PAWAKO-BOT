@@ -2435,6 +2435,113 @@ export class PawakoBotRunner {
   }
 
   /**
+   * Helper to fetch or auto-create the candidate's private personal text channel
+   */
+  public async getCandidateChannel(
+    member: Member,
+    createIfMissing: boolean = true
+  ): Promise<TextChannel | null> {
+    if (!this.client) return null;
+
+    // 1. Try fetching by saved personalChannelId
+    if (member.personalChannelId) {
+      const chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+      if (chan && chan.isTextBased() && !chan.isThread()) {
+        return chan as TextChannel;
+      }
+    }
+
+    const config = onboardingService.getConfig();
+    const guildId = config.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
+    if (!guildId) return null;
+
+    const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) return null;
+
+    const candDiscordId = (member.discordId || member.id.replace('mem-', '')).replace(/[<@!>]/g, '').trim();
+    const cleanName = member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 20) || 'membre';
+    const expectedChanName = `🔒-formation-${cleanName}`;
+
+    // 2. Search existing channels in guild
+    const channels = await guild.channels.fetch().catch(() => null);
+    if (channels) {
+      for (const [, chan] of channels) {
+        if (!chan || !chan.isTextBased() || chan.isThread()) continue;
+        const tc = chan as TextChannel;
+        const nameMatch = tc.name === expectedChanName || (cleanName.length > 3 && tc.name.includes(cleanName));
+        const topicMatch = Boolean(candDiscordId && tc.topic && tc.topic.includes(candDiscordId));
+        const overwriteMatch = Boolean(candDiscordId && tc.permissionOverwrites?.cache?.has(candDiscordId));
+
+        if (topicMatch || overwriteMatch || nameMatch) {
+          member.personalChannelId = tc.id;
+          member.personalChannelName = tc.name;
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+          return tc;
+        }
+      }
+    }
+
+    // 3. Create channel if missing and allowed
+    if (createIfMissing && guild) {
+      try {
+        const overwrites: any[] = [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel],
+          },
+        ];
+
+        if (candDiscordId && /^\d{17,20}$/.test(candDiscordId)) {
+          overwrites.push({
+            id: candDiscordId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+            ],
+          });
+        }
+
+        if (this.client?.user?.id) {
+          overwrites.push({
+            id: this.client.user.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.ManageMessages,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.EmbedLinks,
+            ],
+          });
+        }
+
+        const categoryId = config.personalCategoryId;
+        const createdChannel = await guild.channels.create({
+          name: expectedChanName,
+          type: ChannelType.GuildText,
+          parent: categoryId || undefined,
+          topic: `Salon privé de formation pour @${member.username} (${candDiscordId})`,
+          permissionOverwrites: overwrites,
+        });
+
+        if (createdChannel) {
+          member.personalChannelId = createdChannel.id;
+          member.personalChannelName = createdChannel.name;
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+          return createdChannel;
+        }
+      } catch (err: any) {
+        console.warn('[getCandidateChannel create error]', err?.message || err);
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Helper to fetch or auto-create a staff-only channel on Discord with permission overwrites
    */
   public async getOrCreateStaffOnlyChannel(
@@ -2929,24 +3036,7 @@ export class PawakoBotRunner {
     const voiceLinkStr = voiceChan ? `<#${voiceChan.id}>` : `[Google Meet](${meetUrl})`;
 
     // 1. Message to Candidate in their private channel
-    let candChan: any = null;
-    if (member.personalChannelId && this.client) {
-      candChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
-    }
-    if (!candChan && this.client) {
-      const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
-      if (guildId) {
-        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
-        if (guild) {
-          candChan = guild.channels.cache.find(
-            (c: any) =>
-              c.isTextBased() &&
-              (c.name === member.personalChannelName ||
-                (member.username && c.name.includes(member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 15))))
-          );
-        }
-      }
-    }
+    const candChan = await this.getCandidateChannel(member, true);
 
     if (candChan && 'send' in candChan) {
       const candEmbed = new EmbedBuilder()
@@ -3249,35 +3339,22 @@ export class PawakoBotRunner {
 
       await statsChannel.send({ embeds: [statsEmbed] });
 
-      // Send DM "se faire de l'argent" to unstarted members
+      // Send reminder "se faire de l'argent" to unstarted members in their private channel ONLY
       let dmSentCount = 0;
       for (const m of unstartedMembers) {
-        if (!m.discordId) continue;
         try {
-          const user = await this.client.users.fetch(m.discordId).catch(() => null);
-          if (user) {
+          const pChan = await this.getCandidateChannel(m, true);
+          if (pChan) {
             const dmEmbed = new EmbedBuilder()
               .setTitle('💼 C\'est le moment de se faire de l\'argent !')
               .setDescription(
                 `Salut **${m.username}** ! 👋\n\n` +
                 `Tu as rejoint PAWAKO FORMATION mais tu n'as pas encore lancé ton Module 1.\n` +
                 `C'est le moment idéal pour concrétiser tes ambitions et générer tes premiers revenus ! 💰\n\n` +
-                `👉 **Rends-toi dans ton salon privé** ${m.personalChannelId ? `<#${m.personalChannelId}>` : ''} et clique sur le bouton **"🚀 Lancer la formation"** pour débloquer ton premier cours et ton quiz !`
+                `👉 Clique sur le bouton ci-dessous **"🚀 Lancer la formation"** pour débloquer ton premier cours et ton quiz !`
               )
               .setColor(0x10b981)
               .setFooter({ text: 'PAWAKO FORMATION • Boost Revenus & Motivation' });
-
-            const guildId = process.env.DISCORD_GUILD_ID || this.client?.guilds.cache.first()?.id || '';
-            const channelUrl = m.personalChannelId
-              ? `https://discord.com/channels/${guildId}/${m.personalChannelId}`
-              : (guildId ? `https://discord.com/channels/${guildId}` : 'https://discord.com');
-
-            const dmLinkRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setLabel('👉 Accéder à mon salon sur le serveur')
-                .setStyle(ButtonStyle.Link)
-                .setURL(channelUrl)
-            );
 
             const channelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
               new ButtonBuilder()
@@ -3286,25 +3363,15 @@ export class PawakoBotRunner {
                 .setStyle(ButtonStyle.Success)
             );
 
-            let sent = false;
-            try {
-              // In DM: Send Link button redirecting to the server only
-              await user.send({ embeds: [dmEmbed], components: [dmLinkRow] });
-              sent = true;
-            } catch {
-              if (m.personalChannelId) {
-                const pChan = await this.client.channels.fetch(m.personalChannelId).catch(() => null);
-                if (pChan && 'send' in pChan) {
-                  // In personal channel on server: Send action button
-                  await (pChan as any).send({ content: `<@${m.discordId}>`, embeds: [dmEmbed], components: [channelRow] }).catch(() => {});
-                  sent = true;
-                }
-              }
-            }
-            if (sent) dmSentCount++;
+            await pChan.send({
+              content: `<@${m.discordId || m.id.replace('mem-', '')}>`,
+              embeds: [dmEmbed],
+              components: [channelRow],
+            }).catch(() => {});
+            dmSentCount++;
           }
         } catch (dmErr) {
-          console.warn(`[Stats DM Warning] DM non envoyé à ${m.username}:`, dmErr);
+          console.warn(`[Stats Reminder Warning] Relance non envoyée à ${m.username}:`, dmErr);
         }
       }
 
@@ -4166,29 +4233,16 @@ export class PawakoBotRunner {
           .setStyle(ButtonStyle.Success)
       );
 
-      // Send in candidate personal channel
-      if (member.personalChannelId && this.client) {
-        this.client.channels.fetch(member.personalChannelId).then((chan) => {
-          if (chan && 'send' in chan) {
-            (chan as any).send({
-              content: `📌 ${candMention}`,
-              embeds: [formEmbed],
-              components: [formRow],
-            }).catch((e: any) => console.warn('[Send Integration Form Error]', e));
-          }
-        }).catch(() => {});
-      }
-
-      // Also send direct message MP
-      if (this.client && candDiscordId) {
-        this.client.users.fetch(candDiscordId).then((u) => {
-          if (u) {
-            u.send({
-              embeds: [formEmbed],
-              components: [formRow],
-            }).catch(() => {});
-          }
-        }).catch(() => {});
+      // Send in candidate personal channel ONLY (via getCandidateChannel)
+      const candChan = await this.getCandidateChannel(member, true);
+      if (candChan) {
+        await candChan.send({
+          content: `📌 ${candMention}`,
+          embeds: [formEmbed],
+          components: [formRow],
+        }).catch((e: any) => console.warn('[Send Integration Form Error]', e));
+      } else {
+        console.warn(`[Integration Form Warning] Salon privé introuvable ou non créable pour ${member.username} (${candDiscordId})`);
       }
 
       store.addLog(

@@ -13,6 +13,7 @@ import { SettingsView } from './components/SettingsView';
 import { AIKnowledgeConfigurator } from './components/AIKnowledgeConfigurator';
 import { AnnouncementsView } from './components/AnnouncementsView';
 import { BotTokenModal } from './components/BotTokenModal';
+import { CandidatePortal } from './components/CandidatePortal';
 
 import { serverService } from './services/serverService';
 import { moduleService } from './services/moduleService';
@@ -148,6 +149,10 @@ export function App() {
               onNavigate={setActiveTab}
               onCreateModuleClick={() => setActiveTab('onboarding')}
             />
+          )}
+
+          {activeTab === 'member-portal' && (
+            <CandidatePortal allowCandidateSwitch={true} />
           )}
 
           {activeTab === 'announcements' && (

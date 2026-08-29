@@ -55,6 +55,29 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const totalMembersCount = activeServer?.memberCount || members.length || 0;
   const realLogs = logs && logs.length > 0 ? logs.slice(0, 5) : store.getLogs().slice(0, 5);
 
+  const candidates = members.filter((m) => !m.roles?.includes('Admin') && !m.roles?.includes('Lead Admin') && !m.roles?.includes('Staff'));
+  const totalJoined = candidates.length > 0 ? candidates.length : totalMembersCount;
+
+  const unstarted = candidates.filter((c) => (!c.progress || Object.keys(c.progress).length === 0 || c.modulesCompletedCount === 0) && (!c.candidateState || c.candidateState === 'nouveau')).length;
+  const inSimulation = candidates.filter((c) => c.candidateState === 'simulation').length;
+  const inTools = candidates.filter((c) => c.candidateState === 'formation_outils').length;
+  const completed = candidates.filter((c) => c.candidateState === 'formation_terminee' || (c.modulesCompletedCount || 0) >= 5).length;
+
+  const totalModulesCount = 5;
+  const moduleCounts: Record<number, number> = {};
+  for (let i = 1; i <= totalModulesCount; i++) moduleCounts[i] = 0;
+
+  candidates.forEach((c) => {
+    const valCount = c.modulesCompletedCount || 0;
+    if (c.candidateState !== 'formation_terminee' && c.candidateState !== 'formation_outils' && c.candidateState !== 'simulation' && valCount < totalModulesCount) {
+      const currentMod = Math.min(valCount + 1, totalModulesCount);
+      moduleCounts[currentMod] = (moduleCounts[currentMod] || 0) + 1;
+    }
+  });
+
+  const engagementRate = totalJoined > 0 ? Math.round(((totalJoined - unstarted) / totalJoined) * 100) : 0;
+  const integrationRate = totalJoined > 0 ? Math.round((completed / totalJoined) * 100) : 0;
+
   // Dynamic Chart based on real module & quiz counts
   const dynamicChartData = [
     { name: 'Rôles', count: roles.length },
@@ -112,6 +135,50 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <Plus className="w-4 h-4" />
           <span>Configurer Onboarding & Modules</span>
         </button>
+      </div>
+
+      {/* 📈 Bilan Global Card */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-base font-bold text-white tracking-wide">
+              📈 Bilan Global du Parcours de Formation PAWAKO
+            </h2>
+          </div>
+          <span className="text-xs bg-indigo-500/10 text-indigo-400 font-semibold px-3 py-1 rounded-full border border-indigo-500/20">
+            Stats Temps Réel
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans">
+          <div className="space-y-2 bg-slate-950/70 p-4 rounded-xl border border-slate-800 font-mono">
+            <p className="text-slate-200 font-bold">👥 Total des Inscrits : <span className="text-white">{totalJoined} membres</span></p>
+            <p className="text-slate-400">😴 N'ayant encore rien lancé : <span className="text-amber-400 font-bold">{unstarted} membre(s)</span></p>
+            
+            <div className="pt-3 border-t border-slate-800 space-y-1">
+              <p className="text-indigo-300 font-bold mb-1">📚 Répartition par Étape :</p>
+              {Object.keys(moduleCounts).map((modNum) => (
+                <p key={modNum} className="text-xs text-slate-400 pl-3">
+                  • Module {modNum} : <span className="text-white font-semibold">{moduleCounts[Number(modNum)]} candidat(s)</span>
+                </p>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800 font-mono flex flex-col justify-between">
+            <div className="space-y-2">
+              <p className="text-blue-400 font-bold">🎯 En Simulation : <span className="text-white">{inSimulation} candidat(s)</span></p>
+              <p className="text-amber-400 font-bold">🛠️ En Formation Outils : <span className="text-white">{inTools} candidat(s)</span></p>
+              <p className="text-emerald-400 font-bold">🚀 En Intégration / Intégré : <span className="text-white">{completed} candidat(s)</span></p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 space-y-1 text-xs">
+              <p className="text-slate-300">📊 Taux d'engagement global : <span className="text-white font-bold">{engagementRate}%</span></p>
+              <p className="text-slate-300">🎓 Taux d'intégration : <span className="text-emerald-400 font-bold">{integrationRate}%</span></p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Real Statistics Cards */}

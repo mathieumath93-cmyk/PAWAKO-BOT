@@ -2451,6 +2451,8 @@ export class PawakoBotRunner {
       }
     }
 
+    if (member.isActive === false) return null;
+
     const config = onboardingService.getConfig();
     const guildId = config.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
     if (!guildId) return null;
@@ -2459,6 +2461,18 @@ export class PawakoBotRunner {
     if (!guild) return null;
 
     const candDiscordId = (member.discordId || member.id.replace('mem-', '')).replace(/[<@!>]/g, '').trim();
+
+    // Verify if candidate is still present in the Discord guild (not kicked/left)
+    if (candDiscordId && /^\d{17,20}$/.test(candDiscordId)) {
+      const gMember = await guild.members.fetch(candDiscordId).catch(() => null);
+      if (!gMember) {
+        console.log(`[getCandidateChannel] Candidate ${member.username} (${candDiscordId}) is no longer in guild.`);
+        member.isActive = false;
+        store.saveMembers();
+        firebaseSyncService.saveMember(member).catch(() => {});
+        return null;
+      }
+    }
     const cleanName = member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 20) || 'membre';
     const expectedChanName = `🔒-formation-${cleanName}`;
 
@@ -3278,14 +3292,26 @@ export class PawakoBotRunner {
       const unstartedMembers: Member[] = [];
 
       members.forEach((m) => {
+        if (m.isActive === false) return;
+
+        // Skip Staff members from candidate stats and 18h relances
+        const isStaff = (m.roles || []).some((r) =>
+          ['staff', 'admin', 'formateur', 'modérateur', 'moderateur', 'fondateur', 'direction', 'support'].some((kw) =>
+            String(r).toLowerCase().includes(kw)
+          )
+        );
+        if (isStaff) return;
+
         const validatedModulesCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+        const hasStarted =
+          Boolean(m.candidateState && m.candidateState !== 'nouveau') ||
+          Object.values(m.progress || {}).some(
+            (p) => (p.attemptsCount && p.attemptsCount > 0) || p.status === 'en_cours' || p.status === 'valide' || p.score !== undefined
+          );
 
         if (m.candidateState === 'formation_terminee' || validatedModulesCount >= totalModules) {
           completedAllCount++;
-        } else if (
-          validatedModulesCount === 0 &&
-          (m.candidateState === 'nouveau' || !m.candidateState || !m.progress || Object.keys(m.progress).length === 0)
-        ) {
+        } else if (validatedModulesCount === 0 && !hasStarted) {
           unstartedCount++;
           unstartedMembers.push(m);
         } else {
@@ -3295,9 +3321,6 @@ export class PawakoBotRunner {
             moduleInProgressCounts[curModId]++;
           } else if (modules[0]) {
             moduleInProgressCounts[modules[0].id] = (moduleInProgressCounts[modules[0].id] || 0) + 1;
-          } else {
-            unstartedCount++;
-            unstartedMembers.push(m);
           }
         }
       });
@@ -3752,7 +3775,7 @@ export class PawakoBotRunner {
         }
         discordService.assignDiscordRolesToMember(discordUserId, member.roles).catch(() => {});
       } else {
-        member.candidateState = 'formation_terminee';
+        member.candidateState = 'simulation';
         const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
         const passRoleName = stepCfg?.roleOnPassName || stepCfg?.roleOnPassId;
         const currentStartRole = stepCfg?.roleOnStartName || stepCfg?.roleOnStartId;
@@ -3772,6 +3795,7 @@ export class PawakoBotRunner {
       }
 
       if (isModule5OrFinal) {
+        member.candidateState = 'simulation';
         store.addLog(
           member.username,
           `🏆 [PARCOURS_VALIDÉ_MODULE_5] Le candidat ${member.username} a réussi le Quiz du Module 5 ! Staff notifié sur Discord.`,
@@ -3789,55 +3813,53 @@ export class PawakoBotRunner {
         store.saveMembers();
         firebaseSyncService.saveMember(member).catch(() => {});
 
-        if (member.personalChannelId && this.client) {
-          const simTsSec = Math.floor(simTimestamp / 1000);
+        const simTsSec = Math.floor(simTimestamp / 1000);
 
-          const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`staff_validate_simu_${member.id}`)
-              .setLabel(`🏆 Valider la Simulation de ${member.username}`)
-              .setStyle(ButtonStyle.Success)
-          );
+        const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`staff_validate_simu_${member.id}`)
+            .setLabel(`🏆 Valider la Simulation de ${member.username}`)
+            .setStyle(ButtonStyle.Success)
+        );
 
-          this.client.channels.fetch(member.personalChannelId).then((candChan) => {
-            if (candChan && 'send' in candChan) {
-              const simEmbed = new EmbedBuilder()
-                .setTitle('📅 CONVOCATION OFFICIELLE — TEST DE SIMULATION (14h00 HF)')
-                .setDescription(
-                  `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
-                  `🎯 **Étape Finale : Le Test de Simulation**\n` +
-                  `Ton évaluation pratique avec un membre de l'équipe Staff est programmée pour :\n\n` +
-                  `🗓️ **<t:${simTsSec}:F>** (<t:${simTsSec}:R>)\n\n` +
-                  `⏰ **Rendez-vous à 14h00 (Heure Française - HF)** dans ce salon privé !\n` +
-                  `🔔 *Un rappel automatique te sera envoyé à l'heure pile du rendez-vous. Sois prêt !* 🚀`
-                )
-                .setColor(0x3b82f6)
-                .setFooter({ text: 'PAWAKO FORMATION • Convocation Test de Simulation' })
-                .setTimestamp();
-
-              (candChan as any).send({
-                content: `<@${discordUserId}>`,
-                embeds: [simEmbed],
-              }).catch((e: any) => console.warn('[Sim Convocation Error]', e));
-            }
-          }).catch(() => {});
-
-          // Direct MP to Mahsa & Mathieu
-          const mpSimuEmbed = new EmbedBuilder()
-            .setTitle('📅 NOUVELLE SIMULATION EN ATTENTE (14h00 HF)')
+        // Guarantee candidate private channel creation / retrieval
+        const candChan = await this.getCandidateChannel(member, true);
+        if (candChan) {
+          const simEmbed = new EmbedBuilder()
+            .setTitle('📅 CONVOCATION OFFICIELLE — TEST DE SIMULATION (14h00 HF)')
             .setDescription(
-              `📢 **Notification Privée Staff**\n\n` +
-              `Le candidat <@${discordUserId}> (**${member.username}**) a validé l'intégralité du parcours théorique ! 🏆\n\n` +
-              `🗓️ **Convocation Simulation :** <t:${simTsSec}:F> (<t:${simTsSec}:R>)\n` +
-              `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
-              `👉 **Pour valider sa simulation en 1-clic**, appuyez simplement sur le bouton vert ci-dessous :`
+              `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
+              `🎯 **Étape Finale : Le Test de Simulation**\n` +
+              `Ton évaluation pratique avec un membre de l'équipe Staff est programmée pour :\n\n` +
+              `🗓️ **<t:${simTsSec}:F>** (<t:${simTsSec}:R>)\n\n` +
+              `⏰ **Rendez-vous à 14h00 (Heure Française - HF)** dans ce salon privé !\n` +
+              `🔔 *Un rappel automatique te sera envoyé à l'heure pile du rendez-vous. Sois prêt !* 🚀`
             )
             .setColor(0x3b82f6)
-            .setFooter({ text: 'PAWAKO FORMATION • Validation Simulation 1-Clic' })
+            .setFooter({ text: 'PAWAKO FORMATION • Convocation Test de Simulation' })
             .setTimestamp();
 
-          this.sendDirectMessageToStaff(mpSimuEmbed, [simValidateRow]).catch(() => {});
+          await candChan.send({
+            content: `<@${discordUserId}>`,
+            embeds: [simEmbed],
+          }).catch((e: any) => console.warn('[Sim Convocation Error]', e));
         }
+
+        // Direct MP / Staff Alert Notification
+        const mpSimuEmbed = new EmbedBuilder()
+          .setTitle('📅 NOUVELLE SIMULATION EN ATTENTE (14h00 HF)')
+          .setDescription(
+            `📢 **Notification Privée Staff**\n\n` +
+            `Le candidat <@${discordUserId}> (**${member.username}**) a validé l'intégralité du parcours théorique ! 🏆\n\n` +
+            `🗓️ **Convocation Simulation :** <t:${simTsSec}:F> (<t:${simTsSec}:R>)\n` +
+            `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
+            `👉 **Pour valider sa simulation en 1-clic**, appuyez simplement sur le bouton vert ci-dessous :`
+          )
+          .setColor(0x3b82f6)
+          .setFooter({ text: 'PAWAKO FORMATION • Validation Simulation 1-Clic' })
+          .setTimestamp();
+
+        this.sendDirectMessageToStaff(mpSimuEmbed, [simValidateRow]).catch(() => {});
       }
 
       this.updateLeaderboardChannel().catch(() => {});

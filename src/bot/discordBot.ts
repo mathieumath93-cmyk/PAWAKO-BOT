@@ -79,8 +79,9 @@ function formatMemberRolesDisplay(roles: string[] = []): string {
 
 /**
  * Calculates epoch timestamp for next 14h00 HF (Europe/Paris timezone).
- * If current time in Paris is < 14h00, returns 14h00 today.
- * If current time in Paris is >= 14h00, returns 14h00 tomorrow.
+ * Allowed days: Monday to Saturday (Du lundi au samedi). Sunday (0) is excluded!
+ * If current time in Paris is < 14h00 on Mon-Sat, returns 14h00 today.
+ * Otherwise advances to the next valid day (Mon-Sat) at 14h00.
  */
 function getNext14hParisTimestamp(): number {
   const now = new Date();
@@ -90,7 +91,14 @@ function getNext14hParisTimestamp(): number {
   const targetParis = new Date(parisDate);
   targetParis.setHours(14, 0, 0, 0);
 
-  if (parisDate.getTime() >= targetParis.getTime()) {
+  const currentDay = parisDate.getDay();
+  // If today is Sunday or past 14:00, move to tomorrow
+  if (currentDay === 0 || parisDate.getTime() >= targetParis.getTime()) {
+    targetParis.setDate(targetParis.getDate() + 1);
+  }
+
+  // Keep advancing until day is Monday (1) through Saturday (6)
+  while (targetParis.getDay() === 0) { // Sunday
     targetParis.setDate(targetParis.getDate() + 1);
   }
 
@@ -100,8 +108,9 @@ function getNext14hParisTimestamp(): number {
 
 /**
  * Calculates epoch timestamp for next 10h00 HF (Europe/Paris timezone).
- * If current time in Paris is < 10h00, returns 10h00 today.
- * If current time in Paris is >= 10h00, returns 10h00 tomorrow.
+ * Allowed days: Monday to Friday (Du lundi au vendredi). Saturday (6) & Sunday (0) are excluded!
+ * If current time in Paris is < 10h00 on Mon-Fri, returns 10h00 today.
+ * Otherwise advances to the next valid weekday (Mon-Fri) at 10h00.
  */
 function getNext10hParisTimestamp(): number {
   const now = new Date();
@@ -111,7 +120,14 @@ function getNext10hParisTimestamp(): number {
   const targetParis = new Date(parisDate);
   targetParis.setHours(10, 0, 0, 0);
 
-  if (parisDate.getTime() >= targetParis.getTime()) {
+  const currentDay = parisDate.getDay();
+  // If today is Saturday/Sunday or past 10:00, move to tomorrow
+  if (currentDay === 0 || currentDay === 6 || parisDate.getTime() >= targetParis.getTime()) {
+    targetParis.setDate(targetParis.getDate() + 1);
+  }
+
+  // Keep advancing until day is Monday (1) through Friday (5)
+  while (targetParis.getDay() === 0 || targetParis.getDay() === 6) {
     targetParis.setDate(targetParis.getDate() + 1);
   }
 
@@ -3325,8 +3341,7 @@ export class PawakoBotRunner {
             .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
             .setDescription(
               `📢 ${candMention}, **il est 14h00 HF !**\n\n` +
-              `C'est le moment de passer ton **Test de Simulation** en direct avec le Staff PAWAKO.\n` +
-              `L'équipe de formation t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
+              `C'est le moment de passer ton **Test de Simulation** en direct avec l'équipe Staff PAWAKO. L'équipe t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
             )
             .setColor(0x10b981)
             .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })

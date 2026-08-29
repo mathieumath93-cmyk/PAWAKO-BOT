@@ -1498,6 +1498,56 @@ ${statusText}
   }
 
   /**
+   * Reschedule simulation session for a candidate
+   */
+  public rescheduleCandidateSimulation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+
+    member.simulationScheduledTimestamp = timestamp;
+    member.simulationReminderSent = false;
+    if (member.candidateState !== 'formation_outils' && member.candidateState !== 'formation_terminee') {
+      member.candidateState = 'simulation';
+    }
+
+    const dateStr = new Date(timestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+    this.saveMembers();
+    this.addLog(
+      adminName,
+      `📅 [REPROGRAMMATION_SIMULATION] Test de simulation reprogrammé pour ${member.username} le ${dateStr} HF.`,
+      'member',
+      member.username
+    );
+
+    return member;
+  }
+
+  /**
+   * Reschedule tools formation session for a candidate
+   */
+  public rescheduleCandidateToolsFormation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+
+    member.toolsFormationScheduledTimestamp = timestamp;
+    member.toolsFormationReminderSent = false;
+    if (member.candidateState !== 'formation_terminee') {
+      member.candidateState = 'formation_outils';
+    }
+
+    const dateStr = new Date(timestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+    this.saveMembers();
+    this.addLog(
+      adminName,
+      `📅 [REPROGRAMMATION_OUTILS] Formation Outils reprogrammée pour ${member.username} le ${dateStr} HF.`,
+      'member',
+      member.username
+    );
+
+    return member;
+  }
+
+  /**
    * Force candidate to a specific module
    */
   public forceCandidateModule(memberId: string, moduleId: string): Member {

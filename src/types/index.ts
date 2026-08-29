@@ -147,6 +147,17 @@ export interface TrainingModule {
   publishStatus?: 'draft' | 'publishing' | 'published' | 'publish_failed';
 }
 
+export interface MemberBadge {
+  id: string;
+  title: string;
+  description: string;
+  emoji: string;
+  iconName: string;
+  color: string;
+  unlockedAt: string;
+  category: 'completion' | 'performance' | 'validation' | 'special';
+}
+
 export interface MemberProgress {
   moduleId: string;
   status: 'verrouille' | 'en_cours' | 'valide';
@@ -193,6 +204,7 @@ export interface Member {
   email?: string;
   whatsapp?: string;
   shift?: string;
+  badges?: MemberBadge[];
 }
 
 export interface TicketMessage {

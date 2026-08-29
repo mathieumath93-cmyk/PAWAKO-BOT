@@ -19,7 +19,8 @@ import { discordService } from '../services/discordService';
 import { discordSyncService } from '../services/discordSyncService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
-import { QuizQuestion, Member, Quiz } from '../types';
+import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
+import { QuizQuestion, Member, Quiz, MemberBadge } from '../types';
 
 export interface ActiveQuizSession {
   attemptId: string;
@@ -115,6 +116,92 @@ function getNext10hParisTimestamp(): number {
   }
 
   const diffMs = targetParis.getTime() - parisDate.getTime();
+  return now.getTime() + diffMs;
+}
+
+/**
+ * Parses a French date/time string into an epoch timestamp in Europe/Paris timezone.
+ * Supports: "Demain 14:00", "Aujourd'hui 14:00", "30/08/2026 14:00", "30/08 14h", "14h00", etc.
+ */
+function parseFrenchDateTimeInput(inputStr: string, defaultHour: number = 14): number | null {
+  if (!inputStr || !inputStr.trim()) return null;
+  const raw = inputStr.trim().toLowerCase();
+
+  const now = new Date();
+  const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
+  const pDate = new Date(parisString);
+
+  let targetYear = pDate.getFullYear();
+  let targetMonth = pDate.getMonth();
+  let targetDay = pDate.getDate();
+  let targetHour = defaultHour;
+  let targetMinute = 0;
+
+  let matchedDate = false;
+
+  if (raw.includes('demain')) {
+    const nextDay = new Date(pDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    targetYear = nextDay.getFullYear();
+    targetMonth = nextDay.getMonth();
+    targetDay = nextDay.getDate();
+    matchedDate = true;
+  } else if (raw.includes("aujourd'hui") || raw.includes("aujourdhui") || raw.includes("ce jour")) {
+    targetYear = pDate.getFullYear();
+    targetMonth = pDate.getMonth();
+    targetDay = pDate.getDate();
+    matchedDate = true;
+  }
+
+  const dateMatch = raw.match(/(\d{1,2})[\/\-\.](?:(\d{1,2})[\/\-\.])?(\d{2,4})?/);
+  if (dateMatch) {
+    const isoMatch = raw.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (isoMatch) {
+      targetYear = parseInt(isoMatch[1], 10);
+      targetMonth = parseInt(isoMatch[2], 10) - 1;
+      targetDay = parseInt(isoMatch[3], 10);
+      matchedDate = true;
+    } else {
+      const day = parseInt(dateMatch[1], 10);
+      const monthStr = dateMatch[2];
+      const yearStr = dateMatch[3];
+
+      if (day >= 1 && day <= 31) {
+        targetDay = day;
+        if (monthStr) {
+          targetMonth = parseInt(monthStr, 10) - 1;
+        }
+        if (yearStr) {
+          targetYear = yearStr.length === 2 ? 2000 + parseInt(yearStr, 10) : parseInt(yearStr, 10);
+        }
+        matchedDate = true;
+      }
+    }
+  }
+
+  const timeMatch = raw.match(/(\d{1,2})(?:[h:](\d{1,2}))?/);
+  if (timeMatch) {
+    const h = parseInt(timeMatch[1], 10);
+    const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      targetHour = h;
+      targetMinute = m;
+    }
+  }
+
+  if (!matchedDate) {
+    const checkToday = new Date(pDate);
+    checkToday.setHours(targetHour, targetMinute, 0, 0);
+    if (pDate.getTime() >= checkToday.getTime()) {
+      checkToday.setDate(checkToday.getDate() + 1);
+    }
+    targetYear = checkToday.getFullYear();
+    targetMonth = checkToday.getMonth();
+    targetDay = checkToday.getDate();
+  }
+
+  const targetDateParis = new Date(targetYear, targetMonth, targetDay, targetHour, targetMinute, 0, 0);
+  const diffMs = targetDateParis.getTime() - pDate.getTime();
   return now.getTime() + diffMs;
 }
 
@@ -386,21 +473,22 @@ export class PawakoBotRunner {
           await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
         }
 
-        if (content === '!profile' || content === '!profil') {
+        if (content === '!profile' || content === '!profil' || content === '!badges' || content === '!succes') {
           const m = store.getOrCreateCandidate(message.author.id, message.author.username, message.author.displayAvatarURL());
           const modules = store.getModules();
-          const validatedCount = Object.values(m.progress || {}).filter((p: any) => p.status === 'valide').length;
+          const { member: evaluated } = badgeService.evaluateBadges(m, modules, store.getFormattedNow());
+          const validatedCount = Object.values(evaluated.progress || {}).filter((p: any) => p.status === 'valide').length;
 
-          const cooldownNoticeFriendly = getMemberAccessStatusFormatted(m);
+          const cooldownNoticeFriendly = getMemberAccessStatusFormatted(evaluated);
 
-          const memberAttempts = store.getQuizAttemptsForMember(m.id);
+          const memberAttempts = store.getQuizAttemptsForMember(evaluated.id);
           let quizResultsFormatted = 'Aucun quiz effectué pour le moment.';
           if (memberAttempts.length > 0) {
             quizResultsFormatted = memberAttempts
               .map((att) => `• **${att.quizTitle}** : **${att.score}/20** ${att.passed ? '✅ (Validé !)' : '❌ (Échec)'}`)
               .join('\n');
-          } else if (m.progress && Object.keys(m.progress).length > 0) {
-            const entries = Object.entries(m.progress);
+          } else if (evaluated.progress && Object.keys(evaluated.progress).length > 0) {
+            const entries = Object.entries(evaluated.progress);
             quizResultsFormatted = entries
               .map(([modId, prog]: [string, any]) => {
                 const mod = store.getModule(modId);
@@ -411,14 +499,22 @@ export class PawakoBotRunner {
               .join('\n');
           }
 
+          let badgesFormatted = 'Aucun badge débloqué pour l\'instant.\n*Progresse dans tes modules pour décrocher tes premiers succès !* 🚀';
+          if (evaluated.badges && evaluated.badges.length > 0) {
+            badgesFormatted = evaluated.badges
+              .map((b) => `${b.emoji} **${b.title}** — _${b.description}_ (Débloqué le ${b.unlockedAt})`)
+              .join('\n');
+          }
+
           const embed = new EmbedBuilder()
-            .setTitle(`🌟 Carnet de Formation — ${message.author.username}`)
-            .setDescription('🎈 Bienvenue sur ton tableau de bord ! Chaque étape te rapproche de la validation finale.')
+            .setTitle(`🌟 Carnet de Formation & Badges — ${message.author.username}`)
+            .setDescription('🎈 Bienvenue sur ton tableau de bord ! Décroche tous les badges en complétant ton parcours.')
             .setColor(0xF59E0B)
-            .setThumbnail(m.avatarUrl || message.author.displayAvatarURL())
+            .setThumbnail(evaluated.avatarUrl || message.author.displayAvatarURL())
             .addFields(
-              { name: '👤 Candidat(e)', value: `<@${m.discordId}> (**${m.username}**)`, inline: true },
+              { name: '👤 Candidat(e)', value: `<@${evaluated.discordId}> (**${evaluated.username}**)`, inline: true },
               { name: '🏆 Avancement du Parcours', value: `🎯 **${validatedCount} sur ${modules.length}** modules réussis avec succès !`, inline: true },
+              { name: '🏅 Badges & Succès Débloqués', value: badgesFormatted, inline: false },
               { name: '📚 Relevé des Quiz', value: quizResultsFormatted, inline: false },
               { name: '⚡ Statut d\'accès', value: cooldownNoticeFriendly, inline: false }
             )
@@ -429,10 +525,10 @@ export class PawakoBotRunner {
             new ButtonBuilder().setCustomId('show_my_profile').setLabel('🔄 Actualiser').setStyle(ButtonStyle.Secondary)
           );
 
-          if (m.candidateState === 'formation_outils' || m.candidateState === 'formation_terminee') {
+          if (evaluated.candidateState === 'formation_outils' || evaluated.candidateState === 'formation_terminee') {
             row.addComponents(
               new ButtonBuilder()
-                .setCustomId(`fill_integration_form_${m.id}`)
+                .setCustomId(`fill_integration_form_${evaluated.id}`)
                 .setLabel("📝 Formulaire d'Intégration (Infos)")
                 .setStyle(ButtonStyle.Success)
             );
@@ -1216,6 +1312,100 @@ export class PawakoBotRunner {
           return;
         }
 
+        // --- HANDLER FOR STAFF CLICKING "📅 Reprogrammer Simu / Outils" ---
+        if (interaction.isButton() && customId.startsWith('staff_reprogram_simu_')) {
+          const targetId = customId.replace('staff_reprogram_simu_', '');
+          const member = store.getMember(targetId) || store.getMembers().find((m) => m.discordId === targetId || m.id === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+
+          const modal = new ModalBuilder()
+            .setCustomId(`modal_reprogram_simu_${member ? member.id : targetId}`)
+            .setTitle("📅 Reprogrammer la Simulation (14h00)");
+
+          const dateInput = new TextInputBuilder()
+            .setCustomId('new_date_str')
+            .setLabel('Date & Heure (ex: Demain 14:00 ou 30/08 14:00)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: Demain 14:00 ou 30/08/2026 14:00')
+            .setRequired(true);
+
+          modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(dateInput));
+          await interaction.showModal(modal).catch((e) => console.warn('[ShowModal Resim Error]', e));
+          return;
+        }
+
+        if (interaction.isButton() && customId.startsWith('staff_reprogram_tools_')) {
+          const targetId = customId.replace('staff_reprogram_tools_', '');
+          const member = store.getMember(targetId) || store.getMembers().find((m) => m.discordId === targetId || m.id === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+
+          const modal = new ModalBuilder()
+            .setCustomId(`modal_reprogram_tools_${member ? member.id : targetId}`)
+            .setTitle("📅 Reprogrammer la Formation Outils");
+
+          const dateInput = new TextInputBuilder()
+            .setCustomId('new_date_str')
+            .setLabel('Date & Heure (ex: Demain 10:00 ou 30/08 10:00)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: Demain 10:00 ou 30/08/2026 10:00')
+            .setRequired(true);
+
+          modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(dateInput));
+          await interaction.showModal(modal).catch((e) => console.warn('[ShowModal Reoutils Error]', e));
+          return;
+        }
+
+        if (interaction.isModalSubmit() && customId.startsWith('modal_reprogram_simu_')) {
+          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          const targetId = customId.replace('modal_reprogram_simu_', '');
+          const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+          if (!member) {
+            await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base de données.' }).catch(() => {});
+            return;
+          }
+
+          const rawDate = interaction.fields.getTextInputValue('new_date_str');
+          const ts = parseFrenchDateTimeInput(rawDate, 14);
+          if (!ts) {
+            await interaction.editReply({ content: '⚠️ Format de date/heure non reconnu. Exemples valides : `Demain 14:00`, `30/08/2026 14:00`, `14h00`.' }).catch(() => {});
+            return;
+          }
+
+          store.rescheduleCandidateSimulation(member.id, ts, `@${user.username}`);
+          firebaseSyncService.saveMember(member).catch(() => {});
+          this.notifySimulationRescheduled(member, ts, `@${user.username}`).catch(() => {});
+
+          const tsSec = Math.floor(ts / 1000);
+          await interaction.editReply({
+            content: `📅 **Session de Simulation reprogrammée avec succès !**\n\n• **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n• **Nouveau rendez-vous :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n\nLe candidat a été notifié dans son salon privé Discord.`
+          }).catch(() => {});
+          return;
+        }
+
+        if (interaction.isModalSubmit() && customId.startsWith('modal_reprogram_tools_')) {
+          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          const targetId = customId.replace('modal_reprogram_tools_', '');
+          const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+          if (!member) {
+            await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base de données.' }).catch(() => {});
+            return;
+          }
+
+          const rawDate = interaction.fields.getTextInputValue('new_date_str');
+          const ts = parseFrenchDateTimeInput(rawDate, 10);
+          if (!ts) {
+            await interaction.editReply({ content: '⚠️ Format de date/heure non reconnu. Exemples valides : `Demain 10:00`, `30/08/2026 10:00`, `10h00`.' }).catch(() => {});
+            return;
+          }
+
+          store.rescheduleCandidateToolsFormation(member.id, ts, `@${user.username}`);
+          firebaseSyncService.saveMember(member).catch(() => {});
+          this.notifyToolsFormationRescheduled(member, ts, `@${user.username}`).catch(() => {});
+          const tsSec = Math.floor(ts / 1000);
+          await interaction.editReply({
+            content: `📅 **Session Formation Outils reprogrammée avec succès !**\n\n• **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n• **Nouveau rendez-vous :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n\nLe candidat a été notifié dans son salon privé Discord.`
+          }).catch(() => {});
+          return;
+        }
+
         try {
           // Defer reply or update IMMEDIATELY (<10ms) to prevent Discord timeout errors
           const isStartOnboarding =
@@ -1508,14 +1698,24 @@ export class PawakoBotRunner {
                 .join('\n');
             }
 
+            const { member: evaluated } = badgeService.evaluateBadges(member, modules, store.getFormattedNow());
+
+            let badgesFormatted = 'Aucun badge débloqué pour l\'instant.\n*Progresse dans tes modules pour décrocher tes premiers succès !* 🚀';
+            if (evaluated.badges && evaluated.badges.length > 0) {
+              badgesFormatted = evaluated.badges
+                .map((b) => `${b.emoji} **${b.title}** — _${b.description}_ (Débloqué le ${b.unlockedAt})`)
+                .join('\n');
+            }
+
             const embed = new EmbedBuilder()
-              .setTitle(`🌟 Carnet de Formation — ${member.username}`)
-              .setDescription('🎈 Bienvenue sur ton tableau de bord ! Chaque étape te rapproche de la validation finale.')
+              .setTitle(`🌟 Carnet de Formation & Badges — ${evaluated.username}`)
+              .setDescription('🎈 Bienvenue sur ton tableau de bord ! Décroche tous les badges en complétant ton parcours.')
               .setColor(0xF59E0B)
-              .setThumbnail(member.avatarUrl || user.displayAvatarURL())
+              .setThumbnail(evaluated.avatarUrl || user.displayAvatarURL())
               .addFields(
-                { name: '👤 Candidat(e)', value: `<@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)`, inline: true },
+                { name: '👤 Candidat(e)', value: `<@${evaluated.discordId || evaluated.id.replace('mem-', '')}> (**${evaluated.username}**)`, inline: true },
                 { name: '🏆 Avancement du Parcours', value: `🎯 **${validatedCount} sur ${modules.length}** modules réussis avec succès !`, inline: true },
+                { name: '🏅 Badges & Succès Débloqués', value: badgesFormatted, inline: false },
                 { name: '📚 Relevé des Quiz', value: quizResultsFormatted, inline: false },
                 { name: '⚡ Statut d\'accès', value: cooldownNoticeFriendly, inline: false }
               )
@@ -2673,6 +2873,167 @@ export class PawakoBotRunner {
       return true;
     } catch (err: any) {
       console.warn('[Notify Staff Module OK Error]', err?.message || err);
+      return false;
+    }
+  }
+
+  /**
+   * Send notification to candidate when their simulation is rescheduled by staff
+   */
+  public async notifySimulationRescheduled(
+    member: Member,
+    newTimestamp: number,
+    adminName: string = 'Staff'
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const candChan = await this.getCandidateChannel(member, true);
+      if (!candChan) return false;
+
+      const discordUserId = member.discordId || member.id.replace('mem-', '');
+      const simTsSec = Math.floor(newTimestamp / 1000);
+
+      const embed = new EmbedBuilder()
+        .setTitle('📅 CONVOCATION REPROGRAMMÉE — TEST DE SIMULATION (14h00 HF)')
+        .setDescription(
+          `📢 <@${discordUserId}>, **ta session de Test de Simulation a été reprogrammée !** 🏆\n\n` +
+          `L'équipe Staff (${adminName}) a fixé ton nouveau rendez-vous pour :\n\n` +
+          `🗓️ **<t:${simTsSec}:F>** (<t:${simTsSec}:R>)\n\n` +
+          `📍 **Lieu :** Ce salon privé avec l'équipe Staff.\n` +
+          `🔔 *Un rappel automatique te sera envoyé à l'heure pile du rendez-vous. Sois prêt !* 🚀`
+        )
+        .setColor(0x3b82f6)
+        .setFooter({ text: 'PAWAKO FORMATION • Reprogrammation Convocation Simulation' })
+        .setTimestamp();
+
+      const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_validate_simu_${member.id}`)
+          .setLabel(`🏆 Valider la Simulation de ${member.username}`)
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`staff_reprogram_simu_${member.id}`)
+          .setLabel(`📅 Reprogrammer Simu`)
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await candChan.send({
+        content: `<@${discordUserId}>`,
+        embeds: [embed],
+        components: [simValidateRow],
+      }).catch((e: any) => console.warn('[Reschedule Sim Send Error]', e));
+
+      return true;
+    } catch (err) {
+      console.warn('[notifySimulationRescheduled Error]', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send notification to candidate when their tools formation is rescheduled by staff
+   */
+  public async notifyToolsFormationRescheduled(
+    member: Member,
+    newTimestamp: number,
+    adminName: string = 'Staff'
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const candChan = await this.getCandidateChannel(member, true);
+      if (!candChan) return false;
+
+      const discordUserId = member.discordId || member.id.replace('mem-', '');
+      const toolsTsSec = Math.floor(newTimestamp / 1000);
+
+      const embed = new EmbedBuilder()
+        .setTitle('📅 CONVOCATION REPROGRAMMÉE — FORMATION OUTILS (10h00 HF)')
+        .setDescription(
+          `📢 <@${discordUserId}>, **ta session de Formation Outils a été reprogrammée !** 🛠️\n\n` +
+          `L'équipe Staff (${adminName}) a fixé ton nouveau rendez-vous pour :\n\n` +
+          `🗓️ **<t:${toolsTsSec}:F>** (<t:${toolsTsSec}:R>)\n\n` +
+          `📍 **Lieu :** Ce salon privé / Salon Vocal Formation.\n` +
+          `🔔 *Un rappel avec les liens vocaux et Google Meet te sera transmis à l'heure pile du rendez-vous.* 🚀`
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Reprogrammation Formation Outils' })
+        .setTimestamp();
+
+      const toolsValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_validate_tools_${member.id}`)
+          .setLabel(`✅ Valider Formation Outils de ${member.username}`)
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`staff_reprogram_tools_${member.id}`)
+          .setLabel(`📅 Reprogrammer Outils`)
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await candChan.send({
+        content: `<@${discordUserId}>`,
+        embeds: [embed],
+        components: [toolsValidateRow],
+      }).catch((e: any) => console.warn('[Reschedule Tools Send Error]', e));
+
+      return true;
+    } catch (err) {
+      console.warn('[notifyToolsFormationRescheduled Error]', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send celebratory notification to candidate when a new badge is unlocked
+   */
+  public async notifyBadgeUnlocked(
+    member: Member,
+    badge: MemberBadge
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const candChan = await this.getCandidateChannel(member, true);
+      if (!candChan) return false;
+
+      const discordUserId = member.discordId || member.id.replace('mem-', '');
+
+      const colorHex =
+        badge.color === 'amber' ? 0xf59e0b :
+        badge.color === 'emerald' ? 0x10b981 :
+        badge.color === 'indigo' ? 0x6366f1 :
+        badge.color === 'blue' ? 0x3b82f6 :
+        badge.color === 'purple' ? 0x8b5cf6 :
+        0xf43f5e;
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🎉 NOUVEAU BADGE DÉBLOQUÉ : ${badge.emoji} ${badge.title}`)
+        .setDescription(
+          `📢 <@${discordUserId}>, **Félicitations ! Tu as débloqué un nouveau succès de formation !** 🏅\n\n` +
+          `**${badge.emoji} ${badge.title}**\n` +
+          `_${badge.description}_\n\n` +
+          `🗓️ **Obtenu le :** ${badge.unlockedAt}\n\n` +
+          `*Tape \`!profil\` ou \`!badges\` pour consulter tous tes succès !* 🚀`
+        )
+        .setColor(colorHex)
+        .setFooter({ text: 'PAWAKO FORMATION • Système de Badges & Succès' })
+        .setTimestamp();
+
+      const profileRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('btn_profile')
+          .setLabel('🏅 Voir mon Profil & Badges')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await candChan.send({
+        content: `🎉 <@${discordUserId}>`,
+        embeds: [embed],
+        components: [profileRow],
+      }).catch((e: any) => console.warn('[Badge Notify Send Error]', e));
+
+      return true;
+    } catch (err) {
+      console.warn('[notifyBadgeUnlocked Error]', err);
       return false;
     }
   }

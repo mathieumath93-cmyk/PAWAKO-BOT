@@ -1,17 +1,42 @@
-import { Member } from '../types';
+import { Member, MemberBadge } from '../types';
 import { store } from './store';
 import { firebaseSyncService } from './firebaseSyncService';
+import { badgeService, SYSTEM_BADGES } from './badgeService';
 
 class MemberService {
   public getMembers(): Member[] {
+    const modules = store.getModules();
+    const formattedNow = store.getFormattedNow();
+
     return store.getMembers().map((m) => {
-      const progressVals = Object.values(m.progress || {});
+      const { member: evaluated, newlyUnlocked } = badgeService.evaluateBadges(m, modules, formattedNow);
+
+      if (newlyUnlocked.length > 0) {
+        store.saveMembers();
+        firebaseSyncService.saveMember(evaluated).catch(() => {});
+        for (const badge of newlyUnlocked) {
+          store.addLog(
+            'Système Pawako',
+            `🏅 [BADGE_DÉBLOQUÉ] ${evaluated.username} a débloqué le badge : ${badge.title} (${badge.emoji})`,
+            'member',
+            evaluated.username
+          );
+          try {
+            const { discordBot } = require('../bot/discordBot');
+            if (discordBot && typeof discordBot.notifyBadgeUnlocked === 'function') {
+              discordBot.notifyBadgeUnlocked(evaluated, badge);
+            }
+          } catch (e) {}
+        }
+      }
+
+      const progressVals = Object.values(evaluated.progress || {});
       const completed = progressVals.filter((p) => p.status === 'valide').length;
       const scores = progressVals.map((p) => p.score).filter((s): s is number => typeof s === 'number');
       const avgScore = scores.length > 0 ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)) : 17.4;
 
       return {
-        ...m,
+        ...evaluated,
         modulesCompletedCount: completed,
         averageScore: avgScore,
       };
@@ -119,6 +144,110 @@ class MemberService {
         discordBot.validateSimulationAndTriggerToolsFormation(updated, adminName);
       }
     } catch (e) {}
+    return updated;
+  }
+
+  public rescheduleSimulation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
+    const updated = store.rescheduleCandidateSimulation(memberId, timestamp, adminName);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    try {
+      const { discordBot } = require('../bot/discordBot');
+      if (discordBot && typeof discordBot.notifySimulationRescheduled === 'function') {
+        discordBot.notifySimulationRescheduled(updated, timestamp, adminName);
+      }
+    } catch (e) {}
+    return updated;
+  }
+
+  public rescheduleToolsFormation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
+    const updated = store.rescheduleCandidateToolsFormation(memberId, timestamp, adminName);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    try {
+      const { discordBot } = require('../bot/discordBot');
+      if (discordBot && typeof discordBot.notifyToolsFormationRescheduled === 'function') {
+        discordBot.notifyToolsFormationRescheduled(updated, timestamp, adminName);
+      }
+    } catch (e) {}
+    return updated;
+  }
+
+  public evaluateMemberBadges(memberId: string): Member {
+    const member = store.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+    const modules = store.getModules();
+    const formattedNow = store.getFormattedNow();
+    const { member: updated, newlyUnlocked } = badgeService.evaluateBadges(member, modules, formattedNow);
+
+    store.saveMembers();
+    firebaseSyncService.saveMember(updated).catch(() => {});
+
+    for (const badge of newlyUnlocked) {
+      store.addLog(
+        'Système Pawako',
+        `🏅 [BADGE_DÉBLOQUÉ] ${updated.username} a débloqué le badge : ${badge.title} (${badge.emoji})`,
+        'member',
+        updated.username
+      );
+      try {
+        const { discordBot } = require('../bot/discordBot');
+        if (discordBot && typeof discordBot.notifyBadgeUnlocked === 'function') {
+          discordBot.notifyBadgeUnlocked(updated, badge);
+        }
+      } catch (e) {}
+    }
+
+    return updated;
+  }
+
+  public grantManualBadge(memberId: string, badgeId: string, adminName: string = 'Staff'): Member {
+    const member = store.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+    const badgeDef = SYSTEM_BADGES.find((b) => b.id === badgeId);
+    if (!badgeDef) throw new Error('Badge introuvable dans le catalogue');
+
+    const updated = badgeService.grantBadge(member, badgeDef, store.getFormattedNow());
+    store.saveMembers();
+    firebaseSyncService.saveMember(updated).catch(() => {});
+
+    store.addLog(
+      adminName,
+      `🏅 [BADGE_ATTRIBUÉ] ${adminName} a attribué manuellement le badge "${badgeDef.title}" (${badgeDef.emoji}) à ${member.username}`,
+      'member',
+      member.username
+    );
+
+    const addedBadge = updated.badges?.find((b) => b.id === badgeId);
+    if (addedBadge) {
+      try {
+        const { discordBot } = require('../bot/discordBot');
+        if (discordBot && typeof discordBot.notifyBadgeUnlocked === 'function') {
+          discordBot.notifyBadgeUnlocked(updated, addedBadge);
+        }
+      } catch (e) {}
+    }
+
+    return updated;
+  }
+
+  public revokeManualBadge(memberId: string, badgeId: string, adminName: string = 'Staff'): Member {
+    const member = store.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+
+    const updated = badgeService.revokeBadge(member, badgeId);
+    store.saveMembers();
+    firebaseSyncService.saveMember(updated).catch(() => {});
+
+    store.addLog(
+      adminName,
+      `🗑️ [BADGE_RETIRÉ] ${adminName} a retiré le badge (ID: ${badgeId}) de ${member.username}`,
+      'member',
+      member.username
+    );
+
     return updated;
   }
 }

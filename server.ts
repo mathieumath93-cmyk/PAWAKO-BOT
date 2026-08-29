@@ -7,6 +7,7 @@ import { store } from './src/services/store';
 import { firebaseSyncService } from './src/services/firebaseSyncService';
 import { pawakoBot } from './src/bot/discordBot';
 import { discordService } from './src/services/discordService';
+import { memberService } from './src/services/memberService';
 
 const BOT_CONFIG_FILE = path.join(process.cwd(), 'data', 'bot_config.json');
 
@@ -585,6 +586,62 @@ async function startServer() {
         discordStatus: 500,
         error: `Erreur serveur: ${err.message}`
       });
+    }
+  });
+
+  // --- ANNOUNCEMENT DISPATCH ROUTE ---
+  app.post('/api/discord/send-announcement', async (req: Request, res: Response) => {
+    const { channelId, title, content, mentionType, colorHex, imageUrl, authorName } = req.body;
+
+    if (!channelId || !/^\d{17,20}$/.test(channelId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID de salon Discord invalide.'
+      });
+    }
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Le contenu de l\'annonce est requis.'
+      });
+    }
+
+    if (pawakoBot && pawakoBot.getIsConnected()) {
+      const result = await pawakoBot.publishAnnouncement(
+        channelId,
+        title || '📢 ANNONCE FORMATION',
+        content,
+        mentionType || 'none',
+        colorHex || '#6366f1',
+        imageUrl,
+        authorName || 'PAWAKO Staff'
+      );
+      if (result.success) {
+        return res.status(201).json(result);
+      } else {
+        return res.status(400).json(result);
+      }
+    }
+
+    return res.status(503).json({
+      success: false,
+      error: 'Le bot Discord n\'est pas actuellement connecté à la Gateway.'
+    });
+  });
+
+  // --- MANUAL KICK-OFF ROUTE FOR STAFF ---
+  app.post('/api/members/:id/kick-inactivity', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    try {
+      const updated = memberService.kickMemberForInactivity(id, reason || 'Inactivité de 3 jours sans action (Kick manuel)');
+      if (!updated) {
+        return res.status(444).json({ success: false, error: 'Membre introuvable ou protégé (rôle Staff).' });
+      }
+      return res.json({ success: true, member: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur lors du kick' });
     }
   });
 

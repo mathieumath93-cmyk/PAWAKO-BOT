@@ -17,6 +17,7 @@ import {
   RefreshCw,
   X,
   Brain,
+  Megaphone,
 } from 'lucide-react';
 import { DiscordServer } from '../types';
 import { serverService } from '../services/serverService';
@@ -33,6 +34,7 @@ interface SidebarProps {
 
 export const navItems = [
   { id: 'overview', label: 'Candidats & Progression', icon: Users },
+  { id: 'announcements', label: 'Annonces Discord', icon: Megaphone },
   { id: 'onboarding', label: 'Parcours Onboarding & Rôles', icon: Shield },
   { id: 'ai-config', label: 'Configuration & Prompts IA', icon: Brain },
   { id: 'discord-sync', label: 'Synchronisation Discord', icon: RefreshCw },

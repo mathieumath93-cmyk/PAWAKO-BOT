@@ -1247,8 +1247,60 @@ class StoreService {
         m.avatarUrl = avatarUrl;
       }
       m.lastActiveAt = this.getFormattedNow();
+      m.lastActiveAtTimestamp = Date.now();
+      m.inactivityWarningLevel = 0;
       this.saveMembers();
     }
+    return m;
+  }
+
+  public touchMemberActivity(memberId: string): void {
+    const m = this.getMember(memberId);
+    if (m) {
+      m.lastActiveAt = this.getFormattedNow();
+      m.lastActiveAtTimestamp = Date.now();
+      m.inactivityWarningLevel = 0;
+      this.saveMembers();
+      try {
+        const { firebaseSyncService } = require('./firebaseSyncService');
+        if (firebaseSyncService) firebaseSyncService.saveMember(m).catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  public kickMemberForInactivity(memberId: string, reason: string = '3 jours d\'inactivité sans action'): Member | null {
+    const m = this.getMember(memberId);
+    if (!m) return null;
+
+    // Absolute protection for Staff / Admin / Formateur
+    const isStaff = (m.roles || []).some((r) => {
+      const lower = (r || '').toLowerCase();
+      return lower.includes('admin') || lower.includes('staff') || lower.includes('formateur') || lower.includes('bureau');
+    });
+    if (isStaff) {
+      console.warn(`[Kick Protection] Refus d'expulser le membre ${m.username} (compte Staff/Admin).`);
+      return m;
+    }
+
+    m.isActive = false;
+    m.candidateState = 'expulse_inactivite';
+    m.inactivityWarningLevel = 3;
+    m.kickedAt = this.getFormattedNow();
+    m.kickedReason = reason;
+
+    this.saveMembers();
+    try {
+      const { firebaseSyncService } = require('./firebaseSyncService');
+      if (firebaseSyncService) firebaseSyncService.saveMember(m).catch(() => {});
+    } catch (e) {}
+
+    this.addLog(
+      'Système Modération (Auto Bot)',
+      `🚨 [EXPULSION_3J] ${m.username} a été expulsé(e) du parcours pour inactivité de 3 jours.`,
+      'system',
+      m.username
+    );
+
     return m;
   }
 

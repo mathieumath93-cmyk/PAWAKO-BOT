@@ -23,6 +23,7 @@ import {
   Target,
   GraduationCap,
   Wrench,
+  UserX,
 } from 'lucide-react';
 import { Member } from '../types';
 import { memberService } from '../services/memberService';
@@ -144,6 +145,8 @@ export const MembersView: React.FC<MembersViewProps> = ({
             { id: 'active', label: 'Actifs' },
             { id: 'in_progress', label: 'En cours' },
             { id: 'completed', label: 'Terminés' },
+            { id: 'inactive_3d', label: '🔴 Inactifs 3j' },
+            { id: 'kicked_inactivity', label: '🚨 Expulsés 3j' },
           ].map((f) => (
             <button
               key={f.id}
@@ -273,8 +276,14 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     {/* Candidate State & Status */}
                     <td className="p-4">
                       <div className="flex flex-col gap-1 items-start">
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[10px] font-semibold">
-                          {member.candidateState === 'formation_terminee'
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          member.candidateState === 'expulse_inactivite'
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/40 font-bold'
+                            : 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20'
+                        }`}>
+                          {member.candidateState === 'expulse_inactivite'
+                            ? '🚨 Expulsé 3j Inactivité'
+                            : member.candidateState === 'formation_terminee'
                             ? '🎉 Terminé'
                             : member.candidateState === 'cooldown_actif'
                             ? '⏳ Cooldown'
@@ -330,6 +339,27 @@ export const MembersView: React.FC<MembersViewProps> = ({
                           <Medal className="w-3 h-3 text-amber-400" />
                           <span>Badges</span>
                         </button>
+
+                        {member.isActive &&
+                          !member.roles?.some((r) => {
+                            const l = (r || '').toLowerCase();
+                            return l.includes('admin') || l.includes('staff') || l.includes('formateur');
+                          }) && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Expulser le candidat ${member.username} du serveur Discord pour inactivité de 3 jours ?`)) {
+                                  memberService.kickMemberForInactivity(member.id, 'Expulsion manuelle Staff (inactivité 3j)');
+                                  onRefresh();
+                                  onShowToast('🚨 Kick-off Exécuté', `${member.username} a été expulsé(e) et notifié(e).`, 'warning');
+                                }
+                              }}
+                              className="px-2 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-300 font-medium text-[10px] border border-red-500/30 transition-colors flex items-center gap-1"
+                              title="Expulser manuellement le candidat du serveur Discord pour 3 jours d'inactivité"
+                            >
+                              <UserX className="w-3 h-3 text-red-400" />
+                              <span>Kick-off 3j</span>
+                            </button>
+                          )}
 
                         <button
                           onClick={() => {

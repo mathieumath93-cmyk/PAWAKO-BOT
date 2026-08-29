@@ -11,6 +11,7 @@ import { DiscordSyncView } from './components/DiscordSyncView';
 import { LogsView } from './components/LogsView';
 import { SettingsView } from './components/SettingsView';
 import { AIKnowledgeConfigurator } from './components/AIKnowledgeConfigurator';
+import { AnnouncementsView } from './components/AnnouncementsView';
 import { BotTokenModal } from './components/BotTokenModal';
 
 import { serverService } from './services/serverService';
@@ -147,6 +148,10 @@ export function App() {
               onNavigate={setActiveTab}
               onCreateModuleClick={() => setActiveTab('onboarding')}
             />
+          )}
+
+          {activeTab === 'announcements' && (
+            <AnnouncementsView onShowToast={showToast} />
           )}
 
           {activeTab === 'discord-sync' && <DiscordSyncView />}

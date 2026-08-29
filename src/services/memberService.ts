@@ -79,6 +79,16 @@ class MemberService {
         members = members.filter((m) => m.autoReminderFlag === true && m.autoReminderLevel === '12h');
       } else if (filterStatus === 'auto_reminder_24h') {
         members = members.filter((m) => m.autoReminderFlag === true && m.autoReminderLevel === '24h');
+      } else if (filterStatus === 'kicked_inactivity') {
+        members = members.filter((m) => m.candidateState === 'expulse_inactivite');
+      } else if (filterStatus === 'inactive_3d') {
+        const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        members = members.filter((m) => {
+          if (!m.isActive || m.candidateState === 'expulse_inactivite') return false;
+          const ts = m.lastActiveAtTimestamp || 0;
+          return (now - ts) >= THREE_DAYS_MS;
+        });
       }
     }
 
@@ -248,6 +258,20 @@ class MemberService {
       member.username
     );
 
+    return updated;
+  }
+
+  public kickMemberForInactivity(memberId: string, reason: string = 'Inactivité 3 jours sans action'): Member | null {
+    const updated = store.kickMemberForInactivity(memberId, reason);
+    if (updated) {
+      firebaseSyncService.saveMember(updated).catch(() => {});
+      try {
+        const { pawakoBot } = require('../bot/discordBot');
+        if (pawakoBot && typeof pawakoBot.kickMemberAndNotify === 'function') {
+          pawakoBot.kickMemberAndNotify(updated, reason);
+        }
+      } catch (e) {}
+    }
     return updated;
   }
 }

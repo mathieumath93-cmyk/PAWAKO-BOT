@@ -50,7 +50,8 @@ export type CandidateState =
   | 'simulation'
   | 'simulation_validee'
   | 'formation_outils'
-  | 'formation_terminee';
+  | 'formation_terminee'
+  | 'expulse_inactivite';
 
 export interface QuizQuestion {
   id: string;
@@ -205,6 +206,10 @@ export interface Member {
   whatsapp?: string;
   shift?: string;
   badges?: MemberBadge[];
+  lastActiveAtTimestamp?: number | null;
+  inactivityWarningLevel?: 0 | 1 | 2 | 3;
+  kickedAt?: string;
+  kickedReason?: string;
 }
 
 export interface TicketMessage {

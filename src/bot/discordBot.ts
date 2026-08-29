@@ -3773,6 +3773,7 @@ export class PawakoBotRunner {
   }
 
   private lastCronRunDate: string = '';
+  private lastInactivityCheckTimestamp: number = 0;
 
   /**
    * Periodic runner checking 18h00 HF schedule for stats dispatch
@@ -4711,18 +4712,30 @@ export class PawakoBotRunner {
   /**
    * Auto Kick-off & Inactivity Reminders Runner
    * Checks candidates ONLY (EXCLUDING staff/admins) for 24h, 48h reminders and 72h (3 days) auto-kick.
+   * Runs strictly ONCE every 24 hours and updates status immediately to avoid duplicate notifications.
    */
   public async checkInactiveCandidatesAndAutoKick(): Promise<void> {
     if (!this.client || !this.isConnected) return;
+
+    const now = Date.now();
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+    // Run strictly ONCE per 24 hours
+    if (this.lastInactivityCheckTimestamp && (now - this.lastInactivityCheckTimestamp) < TWENTY_FOUR_HOURS_MS) {
+      return;
+    }
+
+    this.lastInactivityCheckTimestamp = now;
+    console.log('[PAWAKO BOT] 🔍 Exécution de la vérification quotidienne d\'inactivité (24h)...');
+
     try {
       const allMembers = store.getMembers();
-      const now = Date.now();
       const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000; // 72h
       const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;   // 48h
       const ONE_DAY_MS = 1 * 24 * 60 * 60 * 1000;    // 24h
 
       for (const member of allMembers) {
-        // 1. Skip if already kicked or completed
+        // 1. Skip if already kicked, inactive, or completed
         if (member.isActive === false || member.candidateState === 'expulse_inactivite' || member.candidateState === 'formation_terminee') {
           continue;
         }
@@ -4755,13 +4768,25 @@ export class PawakoBotRunner {
 
         // LEVEL 3: 72 Hours (3 Days) Inactivity -> AUTO KICK-OFF!
         if (inactiveDuration >= THREE_DAYS_MS) {
-          console.log(`[PAWAKO BOT] 🚨 Exécution Kick-off 3j pour le candidat : ${member.username} (${member.id})`);
-          await this.kickMemberAndNotify(member, 'Inactivité supérieure à 3 jours (72h) sans action malgré les relances.');
+          if (currentWarningLevel < 3) {
+            console.log(`[PAWAKO BOT] 🚨 Exécution Kick-off 3j pour le candidat : ${member.username} (${member.id})`);
+            // Mark state immediately to prevent re-entry
+            member.inactivityWarningLevel = 3;
+            member.isActive = false;
+            member.candidateState = 'expulse_inactivite';
+            store.saveMembers();
+
+            await this.kickMemberAndNotify(member, 'Inactivité supérieure à 3 jours (72h) sans action malgré les relances.');
+          }
           continue;
         }
 
-        // LEVEL 2: 48 Hours Inactivity -> Urgent Warning
+        // LEVEL 2: 48 Hours Inactivity -> Urgent Warning (Sent ONLY ONCE)
         if (inactiveDuration >= TWO_DAYS_MS && currentWarningLevel < 2) {
+          // Immediately update warning level to 2 so it is NEVER sent again
+          member.inactivityWarningLevel = 2;
+          store.saveMembers();
+
           const candChan = await this.getCandidateChannel(member, false);
           if (candChan) {
             const discordUserId = member.discordId || member.id.replace('mem-', '');
@@ -4779,13 +4804,15 @@ export class PawakoBotRunner {
 
             await candChan.send({ content: `⚠️ <@${discordUserId}>`, embeds: [embed] }).catch(() => {});
           }
-          member.inactivityWarningLevel = 2;
-          store.saveMembers();
           continue;
         }
 
-        // LEVEL 1: 24 Hours Inactivity -> Friendly Reminder
+        // LEVEL 1: 24 Hours Inactivity -> Friendly Reminder (Sent ONLY ONCE)
         if (inactiveDuration >= ONE_DAY_MS && currentWarningLevel < 1) {
+          // Immediately update warning level to 1 so it is NEVER sent again
+          member.inactivityWarningLevel = 1;
+          store.saveMembers();
+
           const candChan = await this.getCandidateChannel(member, false);
           if (candChan) {
             const discordUserId = member.discordId || member.id.replace('mem-', '');
@@ -4803,8 +4830,6 @@ export class PawakoBotRunner {
 
             await candChan.send({ content: `🔔 <@${discordUserId}>`, embeds: [embed] }).catch(() => {});
           }
-          member.inactivityWarningLevel = 1;
-          store.saveMembers();
         }
       }
     } catch (err) {

@@ -56,6 +56,7 @@ export interface ActiveAnthonySession {
     fantasy: boolean;
   };
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+  coachInterventionsCount?: number;
   inactivityTimer?: NodeJS.Timeout;
 }
 
@@ -1088,6 +1089,88 @@ export class PawakoBotRunner {
                 await (message.channel as any).send(anthonyReply).catch(() => {});
               }
 
+              // --- COACH INTERVENTION DETECTION & 5+ ALERTS LIMIT ENFORCEMENT ---
+              const isCoachIntervention =
+                anthonyReply.includes('INTERVENTION DU COACH') ||
+                anthonyReply.includes('INTERVENTION COACH') ||
+                anthonyReply.includes('⚠️ [INTERVENTION') ||
+                anthonyReply.includes('COACH PAWAKO');
+
+              if (isCoachIntervention) {
+                session!.coachInterventionsCount = (session!.coachInterventionsCount || 0) + 1;
+                const currentCoachCount = session!.coachInterventionsCount;
+
+                console.log(`[PawakoBot] Alerte Coach #${currentCoachCount} pour ${session!.candidateUsername} dans ${session!.channelId}`);
+
+                // Check if candidate reached 5 or more coach interventions -> Direct Failure & Stop
+                if (currentCoachCount >= 5) {
+                  if (session!.inactivityTimer) {
+                    clearTimeout(session!.inactivityTimer);
+                    session!.inactivityTimer = undefined;
+                  }
+                  this.activeAnthonySessions.delete(session!.channelId);
+
+                  const candMember =
+                    store.getMember(session!.candidateId) ||
+                    store.getMembers().find(
+                      (m) => m.id === session!.candidateId || m.discordId === session!.candidateDiscordId
+                    );
+
+                  if (candMember) {
+                    candMember.simulationAttemptsCount = (candMember.simulationAttemptsCount || 0) + 1;
+                    store.saveMembers();
+                    firebaseSyncService.saveMember(candMember).catch(() => {});
+
+                    const remainingAttempts = Math.max(0, 5 - candMember.simulationAttemptsCount);
+
+                    const failEmbed = new EmbedBuilder()
+                      .setTitle('🛑 TENTATIVE DE SIMULATION ÉCHOUÉE (PLUS DE 5 ALERTES COACH)')
+                      .setDescription(
+                        `Désolé <@${session!.candidateDiscordId}>, ta tentative de simulation est **interrompue et non validée**.\n\n` +
+                          `❌ **Raison :** Tu as accumulé **${currentCoachCount} interventions d'alerte du Coach** durant cette session (limite autorisée : 5).\n` +
+                          `📊 **Tentatives de simulation :** **${candMember.simulationAttemptsCount} / 5** (${remainingAttempts} tentative(s) restante(s)).\n\n` +
+                          `🔄 **QUE FAIRE MAINTENANT ?**\n` +
+                          `• Tu dois **reprendre la simulation depuis le début**.\n` +
+                          `• Revois bien tes leçons et la grille de validation (Qualification du fan, GFE, Teasing PPV, Bouclier+Épée).\n` +
+                          `• Quand tu es prêt(e), tape **\`!start-anthony\`** ou clique sur le bouton ci-dessous pour relancer ta simulation de zéro !`
+                      )
+                      .setColor(0xef4444)
+                      .setFooter({ text: 'PAWAKO FORMATION • Échec Simulation (Limite d\'alertes coach atteinte)' })
+                      .setTimestamp();
+
+                    const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                      new ButtonBuilder()
+                        .setCustomId(`restart_simu_${candMember.id}`)
+                        .setLabel('🔄 Recommencer la Simulation de zéro')
+                        .setStyle(ButtonStyle.Danger)
+                    );
+
+                    if ('send' in message.channel) {
+                      await (message.channel as any)
+                        .send({
+                          content: `🚨 <@${session!.candidateDiscordId}>`,
+                          embeds: [failEmbed],
+                          components: [retryRow],
+                        })
+                        .catch(() => {});
+                    }
+
+                    // Notify Staff (Mahsa & Mathieu) directly in #staff-alerts
+                    await this.sendSimulationStaffAlert(candMember, session!, currentCoachCount).catch(() => {});
+                  }
+                  return;
+                } else {
+                  // Subtle warning notice in channel for intermediate alerts
+                  if ('send' in message.channel) {
+                    await (message.channel as any)
+                      .send(
+                        `⚠️ *[Alerte Coach n°${currentCoachCount}/5 - Attention : Au-delà de 5 interventions du Coach, la tentative de simulation sera directement annulée et considérée comme un échec.]*`
+                      )
+                      .catch(() => {});
+                  }
+                }
+              }
+
               // Set 5-minute inactivity relance timer
               session!.inactivityTimer = setTimeout(async () => {
                 const curSession = this.activeAnthonySessions.get(session!.channelId);
@@ -1132,6 +1215,28 @@ export class PawakoBotRunner {
 
         // Register candidate activity timestamp on button/modal interaction
         store.touchMemberActivity(user.id);
+
+        // --- HANDLER FOR CANDIDATE CLICKING "🔄 Recommencer la Simulation de zéro" ---
+        if (interaction.isButton() && customId.startsWith('restart_simu_')) {
+          const targetId = customId.replace('restart_simu_', '');
+          const member =
+            store.getMember(targetId) ||
+            store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
+
+          if (!member) {
+            await interaction.reply({ content: '⚠️ Candidat introuvable dans la base de données.', ephemeral: true }).catch(() => {});
+            return;
+          }
+
+          await interaction.deferReply().catch(() => {});
+          const success = await this.startAnthonySimulationSession(member, interaction.channel, user.id);
+          if (success) {
+            await interaction.editReply({ content: '🚀 **Simulation réinitialisée avec succès ! C\'est parti pour cette nouvelle tentative de zéro !**' }).catch(() => {});
+          } else {
+            await interaction.editReply({ content: '⚠️ Impossible de réinitialiser la simulation.' }).catch(() => {});
+          }
+          return;
+        }
 
         // --- HANDLER FOR CANDIDATE CLICKING "📝 Remplir mes Infos d'Intégration" ---
         if (interaction.isButton() && customId.startsWith('fill_integration_form')) {
@@ -3952,6 +4057,86 @@ export class PawakoBotRunner {
       return true;
     } catch (err) {
       console.error('[PawakoBot] sendStaffAlert Exception:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send Staff Alert for candidate who failed simulation due to 5+ coach interventions
+   */
+  public async sendSimulationStaffAlert(
+    member: Member,
+    session: ActiveAnthonySession,
+    interventionsCount: number
+  ): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const config = onboardingService.getConfig();
+      let staffChannel: TextChannel | null = null;
+
+      if (config.logChannelId && /^\d{17,20}$/.test(config.logChannelId)) {
+        staffChannel = (await this.client.channels.fetch(config.logChannelId).catch(() => null)) as TextChannel | null;
+      }
+
+      const guildId = config.guildId || this.client.guilds.cache.first()?.id;
+      let guild: any = null;
+      if (guildId) {
+        guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      }
+      if (!guild && this.client.guilds.cache.size > 0) {
+        guild = this.client.guilds.cache.first();
+      }
+
+      if (guild && !staffChannel) {
+        const channels = await guild.channels.fetch().catch(() => null);
+        if (channels) {
+          staffChannel = channels.find(
+            (c: any) =>
+              c &&
+              c.isTextBased() &&
+              (c.name.includes('staff-alert') ||
+                c.name.includes('alertes-staff') ||
+                c.name.includes('alerts-staff') ||
+                c.name.includes('staff-alerts') ||
+                c.name.includes('alert') ||
+                c.name.includes('staff'))
+          ) as TextChannel | null;
+        }
+      }
+
+      if (!staffChannel && guild) {
+        staffChannel = (await guild.channels.create({
+          name: 'staff-alerts',
+          type: ChannelType.GuildText,
+          topic: '🚨 Alertes Automatiques — Simulation & Candidats PAWAKO',
+        })) as TextChannel;
+      }
+
+      if (!staffChannel) return false;
+
+      const remainingAttempts = Math.max(0, 5 - (member.simulationAttemptsCount || 1));
+
+      const staffEmbed = new EmbedBuilder()
+        .setTitle('🚨 ALERTE SIMULATION : ÉCHEC PAR ALERTES COACH')
+        .setDescription(
+          `👤 **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n` +
+          `❌ **Motif :** **Plus de 5 interventions/alertes du Coach** déclenchées en simulation (${interventionsCount} alertes coach).\n` +
+          `📊 **Tentatives de simulation :** **${member.simulationAttemptsCount || 1} / 5** (${remainingAttempts} restante(s))\n` +
+          `📍 **Salon privé :** <#${session.channelId}>\n\n` +
+          ` Le candidat a été notifié de l'échec et a été invité à recommencer la simulation depuis le début.`
+        )
+        .setColor(0xef4444)
+        .setFooter({ text: 'PAWAKO FORMATION • Alerte Simulation Staff' })
+        .setTimestamp();
+
+      await staffChannel.send({
+        content: `🚨 **[ALERTE SIMULATION STAFF]** <@1179090626027151390> <@1178783478982348821> <@${member.discordId || member.id.replace('mem-', '')}> a échoué sa tentative de simulation (${interventionsCount} alertes coach) !`,
+        embeds: [staffEmbed],
+      }).catch((e) => console.warn('[Send Simu Staff Alert Error]', e));
+
+      return true;
+    } catch (err) {
+      console.error('[Send Simu Staff Alert Exception]', err);
       return false;
     }
   }

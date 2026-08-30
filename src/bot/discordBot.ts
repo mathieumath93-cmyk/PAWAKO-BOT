@@ -1123,8 +1123,10 @@ export class PawakoBotRunner {
               const isCoachIntervention =
                 anthonyReply.includes('INTERVENTION DU COACH') ||
                 anthonyReply.includes('INTERVENTION COACH') ||
-                anthonyReply.includes('⚠️ [INTERVENTION') ||
-                anthonyReply.includes('COACH PAWAKO');
+                anthonyReply.includes('ALERTE COACH') ||
+                anthonyReply.includes('COACH PAWAKO') ||
+                /\[?INTERVENTION\s*(DU)?\s*COACH/i.test(anthonyReply) ||
+                /⚠️\s*\[?INTERVENTION/i.test(anthonyReply);
 
               if (isCoachIntervention) {
                 session!.coachInterventionsCount = (session!.coachInterventionsCount || 0) + 1;

@@ -386,9 +386,10 @@ export const MemberJourneySimulator: React.FC<MemberJourneySimulatorProps> = ({
                   </button>
                 </div>
                 <div className="space-y-2 text-slate-200 leading-relaxed whitespace-pre-line bg-slate-950/80 p-4 rounded-xl border border-amber-500/30">
-                  <p className="text-amber-400 font-bold text-sm border-b border-amber-500/20 pb-1">🌟 Carnet de Formation — {memberName}</p>
-                  <p className="text-slate-300 italic text-[11px]">🎈 Bienvenue sur ton tableau de bord ! Chaque étape te rapproche de la validation finale.</p>
+                  <p className="text-amber-400 font-bold text-sm border-b border-amber-500/20 pb-1">🌟 Carnet de Formation & Validation Simulation — {memberName}</p>
+                  <p className="text-slate-300 italic text-[11px]">🎈 Suivi en direct du barème de validation (Seuil requis : 80/100, 0 erreur fatale).</p>
                   <p>👤 <strong>Candidat(e) :</strong> <strong className="text-amber-200">@{memberName}</strong> ({memberName})</p>
+                  <p>🎯 <strong>Seuil de Validation Simulation :</strong> <strong className="text-emerald-400">80 / 100 Points</strong> (Qualification, Progression GFE, Teasing PPV, Bouclier+Épée, Follow-Up)</p>
                   <p>🏆 <strong>Avancement :</strong> 🎯 <strong>{step === 'module2_active' ? '4 sur 5' : '1 sur 5'}</strong> modules réussis avec succès !</p>
                   <p>📚 <strong>Relevé des Quiz :</strong> {step === 'module2_active' ? `• ${modules[0]?.title || 'Module 1'} : 18/20 ✅ (Validé !)` : `• ${modules[0]?.title || 'Module 1'} : 18/20 ✅ (Validé !)`}</p>
                   <p>⚡ <strong>Statut d'accès :</strong> {cooldownSeconds > 0 ? `⏳ En attente (${Math.floor(cooldownSeconds/60)}m ${cooldownSeconds%60}s restantes)` : '🟢 Libre ! Tu peux lancer ton prochain quiz dès maintenant.'}</p>

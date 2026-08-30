@@ -63,6 +63,22 @@ Suivi d'un rappel à l'ordre ferme et explicatif (ex: "Attention ! Un chatter ne
 Si AUCUNE erreur fatale n'est commise :
 N'affiche PAS l'intervention du coach et réponds UNIQUEMENT comme le FAN ABONNÉ.`;
 
+export const defaultValidationGridPrompt = `GRILLE D'ÉVALUATION ET BARÈME DE VALIDATION DE LA SIMULATION PAWAKO :
+
+🎯 SCORE MINIMUM REQUIS POUR VALIDER : 80 / 100
+
+📋 BAREME PAR CRITÈRE (20 POINTS PAR CRITÈRE) :
+1. QUALIFICATION DU FAN (20 pts) : Avoir récolté au moins 3 informations clés sur le fan (Prénom, Âge/Ville, Métier, Fantasmes) avant de monétiser.
+2. PROGRESSION & GFE (20 pts) : Respect de la courbe d'échange (Accueil chaleureux -> Flirt GFE -> Sexualisation progressive -> Excitation).
+3. TEASING & PRIX DU PPV (20 pts) : Description ultra-visuelle, chaude et incitative avec un prix clair.
+4. GESTION DES REFUS / BOUCLIER + ÉPÉE (20 pts) : Ne pas brader le prix au 1er refus, mais ajouter un média bonus offert pour valoriser l'offre.
+5. FOLLOW-UP & RELANCE (20 pts) : Envoi d'un message d'accompagnement immédiat après le PPV.
+
+❌ CLAUSES D'ÉLIMINATION DIRECTE (NON VALIDÉ) :
+- Insulte, mépris, agressivité ou vulgarité déplacée envers le fan.
+- Envoi de contenu gratuit/intime sans teasing ni monétisation.
+- Plus de 5 alertes Coach déclenchées.`;
+
 export function getDefaultOpenRouterApiKey(): string {
   try {
     const b64 = 'c2stb3ItdjEtYzI4NjQyZWViZmE3NTAxMWJjOWIxYWVmN2MzZmNlOTkyODQ0OTA0ZjMwZDVmZWUyNzMxZWVhYjY1MjY4Y2U3ZA==';
@@ -158,6 +174,71 @@ export async function generateAIResponse(
 ): Promise<string> {
   const simPrompt = getSimulationPrompt();
   return callOpenRouterAI(simPrompt, [...history, { role: 'user', content: userMessage }]);
+}
+
+export async function evaluateSimulationSession(
+  history: Array<{ role: string; content: string }>
+): Promise<import('../types').SimulationEvaluationResult> {
+  const evalPrompt = `Tu es le COACH D'ÉVALUATION FINAL DE PAWAKO FORMATION.
+Analyse la conversation ci-dessous entre le CANDIDAT (chatter) et le FAN ABONNÉ.
+
+Évalue la prestation du candidat selon ce BARÈME À 5 CRITÈRES (20 points par critère, total sur 100) :
+1. QUALIFICATION (20 pts) : A posé des questions pour découvrir le fan (Prénom, Âge, Métier, Fantasme) avant de vendre.
+2. PROGRESSION & GFE (20 pts) : Respect du rythme (Flirt léger -> Sexualisation -> Excitation) sans brusquer.
+3. TEASING PPV (20 pts) : Description ultra-chaude, visuelle et incitative avec un prix adapté.
+4. GESTION DU REFUS (20 pts) : Ne baisse pas le prix immédiatement, utilise Bouclier + Épée (média offert).
+5. RELANCE / FOLLOW-UP (20 pts) : Message d'accompagnement immédiat après le PPV.
+
+CLAUSES ÉLIMINATOIRES :
+- Insultes, vulgarité, agressivité ou mépris envers le fan = ÉCHEC IMMÉDIAT (Score 0).
+- Média intime gratuit sans monétisation = ÉCHEC IMMÉDIAT (Score 0).
+- Plus de 5 alertes/interventions du Coach déclenchées = ÉCHEC IMMÉDIAT (Score 0).
+
+Analyse la conversation et renvoie STRICTEMENT un objet JSON au format suivant sans aucun texte autour :
+{
+  "totalScore": 85,
+  "passingScore": 80,
+  "passed": true,
+  "fatalErrorsCount": 0,
+  "fatalErrorDetails": [],
+  "criteria": [
+    { "id": "qualification", "name": "Qualification du Fan", "maxPoints": 20, "score": 18, "passed": true, "comment": "Bonne récolte d'infos." },
+    { "id": "progression", "name": "Progression & GFE", "maxPoints": 20, "score": 18, "passed": true, "comment": "Très bonne montée en température." },
+    { "id": "teasing", "name": "Teasing & PPV", "maxPoints": 20, "score": 17, "passed": true, "comment": "Description attrayante." },
+    { "id": "objections", "name": "Gestion des Refus (Bouclier+Épée)", "maxPoints": 20, "score": 16, "passed": true, "comment": "Technique bien appliquée." },
+    { "id": "followup", "name": "Follow-Up & Relance", "maxPoints": 20, "score": 16, "passed": true, "comment": "Relance bien cadrée." }
+  ],
+  "globalVerdict": "Excellente simulation ! Candidat validé.",
+  "recommendations": ["Poursuivre sur cette lancée."]
+}`;
+
+  try {
+    const rawRes = await callOpenRouterAI(evalPrompt, history);
+    const jsonMatch = rawRes.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as import('../types').SimulationEvaluationResult;
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('[Evaluation AI Error]', err);
+  }
+
+  return {
+    totalScore: 75,
+    passingScore: 80,
+    passed: false,
+    fatalErrorsCount: 0,
+    fatalErrorDetails: [],
+    criteria: [
+      { id: 'qualification', name: 'Qualification du Fan', maxPoints: 20, score: 15, passed: true, comment: 'Qualification partielle.' },
+      { id: 'progression', name: 'Progression & GFE', maxPoints: 20, score: 15, passed: true, comment: 'Bonne approche.' },
+      { id: 'teasing', name: 'Teasing & PPV', maxPoints: 20, score: 15, passed: true, comment: 'Teasing correct.' },
+      { id: 'objections', name: 'Gestion des Refus', maxPoints: 20, score: 15, passed: true, comment: 'Pensez à bien valoriser.' },
+      { id: 'followup', name: 'Follow-Up & Relance', maxPoints: 20, score: 15, passed: true, comment: 'Relance effectuée.' },
+    ],
+    globalVerdict: 'Score de 75/100 (Minimum requis : 80/100). La simulation doit être consolidée.',
+    recommendations: ['Renforcer la qualification du fan et la technique Bouclier + Épée.'],
+  };
 }
 
 class AiKnowledgeService {

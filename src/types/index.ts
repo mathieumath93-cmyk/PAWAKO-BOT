@@ -197,6 +197,7 @@ export interface Member {
   lastReminderAt?: string;
   simulationScheduledTimestamp?: number | null;
   simulationReminderSent?: boolean;
+  simulationAttemptsCount?: number; // Up to 5 attempts for simulation
   simuMpSentToStaff?: boolean;
   toolsFormationScheduledTimestamp?: number | null;
   toolsFormationReminderSent?: boolean;
@@ -551,5 +552,26 @@ export interface AiPromptConfig {
   temperature: number;
   openRouterApiKey: string;
   enableLiveDiscordBot: boolean;
+  minPassingScore?: number;
+}
+
+export interface SimulationCriterionScore {
+  id: string;
+  name: string;
+  maxPoints: number;
+  score: number;
+  passed: boolean;
+  comment: string;
+}
+
+export interface SimulationEvaluationResult {
+  totalScore: number;
+  passingScore: number;
+  passed: boolean;
+  fatalErrorsCount: number;
+  fatalErrorDetails: string[];
+  criteria: SimulationCriterionScore[];
+  globalVerdict: string;
+  recommendations: string[];
 }
 

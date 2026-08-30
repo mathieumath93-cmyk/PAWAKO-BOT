@@ -21,6 +21,7 @@ import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
 import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
 import { QuizQuestion, Member, Quiz, MemberBadge } from '../types';
+import { callOpenRouterAI, getSimulationPrompt } from '../services/aiKnowledgeService';
 
 export interface ActiveQuizSession {
   attemptId: string;
@@ -4479,101 +4480,26 @@ export class PawakoBotRunner {
   }
 
   /**
-   * Generate Anthony (AI Fan) response according to strict persona rules
+   * Generate simulation response using OpenRouter AI (Grok)
    */
   private async generateAnthonyResponse(
     candidateMsg: string,
     session: ActiveAnthonySession
   ): Promise<string> {
-    const rawLower = candidateMsg.toLowerCase().trim();
+    try {
+      const prompt = getSimulationPrompt();
+      const history = session.conversationHistory.slice(0, -1).map((h) => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: h.content,
+      }));
 
-    // 1. Check for Photo/Video proposals
-    const isAskingPhotoOrVideo =
-      rawLower.includes('photo') ||
-      rawLower.includes('vidéo') ||
-      rawLower.includes('video') ||
-      rawLower.includes('visuel') ||
-      rawLower.includes('montrer') ||
-      rawLower.includes('voir');
-
-    const isExplicitlyPaid =
-      rawLower.includes('payant') ||
-      rawLower.includes('paye') ||
-      rawLower.includes('$') ||
-      rawLower.includes('€') ||
-      rawLower.includes('prix') ||
-      rawLower.includes('tarif');
-
-    const isExplicitlyFree =
-      rawLower.includes('gratuit') ||
-      rawLower.includes('offert') ||
-      rawLower.includes('cadeau');
-
-    if (isAskingPhotoOrVideo) {
-      if (isExplicitlyPaid) {
-        return `Ah c'est payant ? 😕 Oula 25$ c'est un peu cher pour mon budget de la semaine... Tu peux pas me la donner ou me faire un petit geste ?`;
-      }
-      if (isExplicitlyFree) {
-        return `Oh super, merci mon ange ! Montre-moi ça avec plaisir 😏`;
-      }
-      // Neither free nor paid specified -> ALWAYS ask!
-      return `Mmmh pourquoi pas... Mais c'est gratuit ou c'est payant ? 😏`;
+      const reply = await callOpenRouterAI(prompt, [...history, { role: 'user', content: candidateMsg }]);
+      session.conversationHistory.push({ role: 'assistant', content: reply });
+      return reply;
+    } catch (err: any) {
+      console.error('[OPENROUTER GROK SIMULATION ERROR]', err);
+      return `*(Erreur OpenRouter/Grok : ${err?.message || 'Connexion impossible'})*`;
     }
-
-    // If candidate replies to "c'est gratuit ou payant ?"
-    if (isExplicitlyPaid) {
-      return `Ah c'est payant ? 😕 Oula 25$ c'est un peu cher pour mon budget de la semaine... Tu peux pas me la donner ou me faire un petit geste ?`;
-    }
-    if (isExplicitlyFree) {
-      return `Oh super, merci mon ange ! Montre-moi ça avec plaisir 😏`;
-    }
-
-    // 2. Strict Retention of Information (only answer if explicitly asked)
-    const askedName = rawLower.includes('prénom') || rawLower.includes('prenom') || rawLower.includes('t\'appelles') || rawLower.includes('ton nom');
-    const askedAge = rawLower.includes('âge') || rawLower.includes('age') || rawLower.includes('quel âge') || rawLower.includes('ans');
-    const askedJob = rawLower.includes('fais quoi') || rawLower.includes('métier') || rawLower.includes('metier') || rawLower.includes('travail') || rawLower.includes('vie');
-    const askedLocation = rawLower.includes('où') || rawLower.includes('ou') || rawLower.includes('ville') || rawLower.includes('habites') || rawLower.includes('viens d\'où');
-    const askedFantasy = rawLower.includes('fantasme') || rawLower.includes('envie') || rawLower.includes('désir') || rawLower.includes('desir');
-
-    if (askedName) {
-      session.extractedInfos.name = true;
-      return `Je m'appelle Anthony ! Et toi ? 😊`;
-    }
-    if (askedAge) {
-      session.extractedInfos.age = true;
-      return `J'ai 29 ans mon ange. Et toi tu as quel âge ? 😉`;
-    }
-    if (askedJob) {
-      session.extractedInfos.job = true;
-      return `Je suis ingénieur commercial à Lyon ! Ça prend pas mal de temps. Tu aimes ce que tu fais toi ? ✨`;
-    }
-    if (askedLocation) {
-      session.extractedInfos.location = true;
-      return `J'habite à Lyon ! Et toi tu viens d'où ? 📍`;
-    }
-    if (askedFantasy) {
-      session.extractedInfos.fantasy = true;
-      return `Je suis un peu réservé au début... Mais j'avoue qu'une petite vidéo coquine sous la douche avec déshabillage ça me ferait très chaud... 😈`;
-    }
-
-    // 3. Initial relance response when candidate initiates conversation
-    if (session.conversationHistory.length <= 1) {
-      return `Coucou ! Oh pardon je n'avais pas vu le premier message automatique... Tu vas bien ? 😉`;
-    }
-
-    // 4. Progressive negotiation shields & general responses
-    if (rawLower.includes('comprends') || rawLower.includes('qualité') || rawLower.includes('exclusif')) {
-      return `Mmmh j'hésite encore un peu... Tu n'as pas un petit bonus à m'offrir dans le pack ? 😏`;
-    }
-    if (rawLower.includes('bonus') || rawLower.includes('photo') || rawLower.includes('offert') || rawLower.includes('ajout')) {
-      return `Mmmh d'accord tu me rajoutes 2 photos gratuites ? Mais 25$ ça reste un peu au-dessus de mon budget...`;
-    }
-    if (rawLower.includes('réduction') || rawLower.includes('reduction') || rawLower.includes('rabais') || rawLower.includes('18')) {
-      return `À 18$ avec tout le pack c'est parfait ! Mais ma paie n'arrive que vendredi... C'est bon si je te la débloque vendredi matin ? 😉`;
-    }
-
-    // Fallback friendly progressive response
-    return `Tu me plais bien, tu as l'air vraiment sympa ! Qu'est-ce que tu me proposes de beau par ici ? 😉`;
   }
 
   /**

@@ -105,17 +105,17 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
         </div>
       </div>
 
-      {/* Appointments Alert */}
-      {(activeCand.simulationScheduledTimestamp || activeCand.toolsFormationScheduledTimestamp) && (
+      {/* Appointments & Simulation Alert */}
+      {(activeCand.candidateState === 'simulation' || activeCand.toolsFormationScheduledTimestamp) && (
         <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-5 shadow-lg flex items-start space-x-4">
           <div className="p-3 bg-indigo-600/20 rounded-xl text-indigo-400 border border-indigo-500/30 shrink-0">
             <Calendar className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h3 className="font-bold text-indigo-200 text-base">Rendez-vous Programmé en Direct</h3>
-            {activeCand.simulationScheduledTimestamp && (
+            <h3 className="font-bold text-indigo-200 text-base">Étape Pratique</h3>
+            {activeCand.candidateState === 'simulation' && (
               <p className="text-sm text-indigo-300">
-                🎯 <strong>Test de Simulation :</strong> <span className="text-white font-semibold">{new Date(activeCand.simulationScheduledTimestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })} (14h00 - 18h00 HF)</span>
+                🎭 <strong>Test de Simulation IA :</strong> <span className="text-emerald-400 font-semibold">En direct dans ton salon Discord privé !</span> (Prêt 24h/24 sans attente)
               </p>
             )}
             {activeCand.toolsFormationScheduledTimestamp && (
@@ -124,7 +124,9 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
               </p>
             )}
             <p className="text-xs text-indigo-400/80 pt-1">
-              Des rappels automatiques sont envoyés dans le salon Discord privé du membre le jour du rendez-vous.
+              {activeCand.candidateState === 'simulation'
+                ? "Connecte-toi à Discord dans ton salon privé pour tchatter directement avec l'IA."
+                : "Des rappels automatiques sont envoyés dans le salon Discord privé du membre."}
             </p>
           </div>
         </div>

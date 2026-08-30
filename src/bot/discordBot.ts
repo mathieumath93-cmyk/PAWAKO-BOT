@@ -352,6 +352,7 @@ export class PawakoBotRunner {
   private isConnecting: boolean = false;
   private activeQuizSessions = new Map<string, ActiveQuizSession>();
   private activeAnthonySessions = new Map<string, ActiveAnthonySession>();
+  private stoppedSimulationChannels = new Set<string>();
   private userClickTracker = new Map<string, { count: number; lastClickTime: number }>();
   private cooldownClickTracker = new Map<string, { count: number; cooldownUntil: number }>();
 
@@ -1030,23 +1031,39 @@ export class PawakoBotRunner {
           return;
         }
 
-        if (content.startsWith('!stop-anthony') || content.startsWith('!stop-simu') || content.startsWith('!fin-anthony') || content.startsWith('!fin-simu')) {
+        const isStopSimuCmd =
+          content.startsWith('!stop') ||
+          content.startsWith('!fin-anthony') ||
+          content.startsWith('!fin-simu') ||
+          content.startsWith('!fin-simulation') ||
+          content.startsWith('!arreter-simu') ||
+          content.startsWith('!cancel-simu') ||
+          content.startsWith('!pause-simu');
+
+        if (isStopSimuCmd) {
+          this.stoppedSimulationChannels.add(message.channel.id);
           const session = this.activeAnthonySessions.get(message.channel.id);
           if (session) {
             if (session.inactivityTimer) clearTimeout(session.inactivityTimer);
             this.activeAnthonySessions.delete(message.channel.id);
-            await message.reply('🛑 **Session de simulation Anthony arrêtée dans ce salon.**').catch(() => {});
-          } else {
-            await message.reply('ℹ️ Aucune simulation Anthony active dans ce salon.').catch(() => {});
           }
+          await message.reply(
+            '🛑 **Session de simulation Anthony arrêtée avec succès dans ce salon.**\n' +
+              '💡 *Le bot ne répondra plus dans ce salon tant qu\'une nouvelle simulation n\'est pas lancée avec `!start-anthony` ou `!start-simu`.*'
+          ).catch(() => {});
           return;
         }
 
         // --- CANDIDATE MESSAGES IN ACTIVE ANTHONY SIMULATION CHANNEL ---
         if (!content.startsWith('!')) {
+          // If simulation was explicitly stopped for this channel, ignore completely
+          if (this.stoppedSimulationChannels.has(message.channel.id)) {
+            return;
+          }
+
           let session = this.activeAnthonySessions.get(message.channel.id);
 
-          // Auto-resume session if channel belongs to candidate in 'simulation' state
+          // Auto-resume session if channel belongs to candidate in 'simulation' state AND channel was not explicitly stopped
           if (!session) {
             const cand = store.getMembers().find((m) => m.personalChannelId === message.channel.id && m.candidateState === 'simulation');
             if (cand) {
@@ -1081,15 +1098,28 @@ export class PawakoBotRunner {
 
             const anthonyReply = await this.generateAnthonyResponse(message.content, session);
 
+            // Verify session wasn't stopped during AI generation
+            if (
+              this.stoppedSimulationChannels.has(session.channelId) ||
+              !this.activeAnthonySessions.has(session.channelId)
+            ) {
+              console.log(`[PawakoBot] Simulation for ${session.channelId} was stopped during AI generation. Skipping reply.`);
+              return;
+            }
+
             setTimeout(async () => {
+              // Re-check in timeout
+              if (
+                this.stoppedSimulationChannels.has(session!.channelId) ||
+                !this.activeAnthonySessions.has(session!.channelId)
+              ) {
+                return;
+              }
+
               session!.lastFanMsgTimestamp = Date.now();
               session!.conversationHistory.push({ role: 'assistant', content: anthonyReply });
 
-              if ('send' in message.channel) {
-                await (message.channel as any).send(anthonyReply).catch(() => {});
-              }
-
-              // --- COACH INTERVENTION DETECTION & 5+ ALERTS LIMIT ENFORCEMENT ---
+              // --- COACH INTERVENTION DETECTION & EMBED FORMATTING ---
               const isCoachIntervention =
                 anthonyReply.includes('INTERVENTION DU COACH') ||
                 anthonyReply.includes('INTERVENTION COACH') ||
@@ -1101,6 +1131,28 @@ export class PawakoBotRunner {
                 const currentCoachCount = session!.coachInterventionsCount;
 
                 console.log(`[PawakoBot] Alerte Coach #${currentCoachCount} pour ${session!.candidateUsername} dans ${session!.channelId}`);
+
+                // Clean up raw text for embed description
+                const cleanCoachText = anthonyReply
+                  .replace(/^⚠️?\s*\[?INTERVENTION\s*(DU)?\s*COACH\s*(PAWAKO)?\]?\s*:?\s*/i, '')
+                  .trim();
+
+                const coachEmbed = new EmbedBuilder()
+                  .setTitle(`⚠️ ALERTE COACH PAWAKO (Intervention n°${currentCoachCount}/5)`)
+                  .setDescription(
+                    `💡 **Conseil & Rappel à l'Ordre du Coach :**\n\n` +
+                    `${cleanCoachText}\n\n` +
+                    `⚠️ *[Attention : Au-delà de 5 interventions du Coach, la tentative de simulation sera automatiquement annulée et considérée comme un échec.]*`
+                  )
+                  .setColor(0xf59e0b) // Amber / Warning color
+                  .setFooter({ text: `PAWAKO FORMATION • Coaching Simulation (Alerte ${currentCoachCount}/5)` })
+                  .setTimestamp();
+
+                if ('send' in message.channel) {
+                  await (message.channel as any).send({
+                    embeds: [coachEmbed]
+                  }).catch(() => {});
+                }
 
                 // Check if candidate reached 5 or more coach interventions -> Direct Failure & Stop
                 if (currentCoachCount >= 5) {
@@ -1159,15 +1211,11 @@ export class PawakoBotRunner {
                     await this.sendSimulationStaffAlert(candMember, session!, currentCoachCount).catch(() => {});
                   }
                   return;
-                } else {
-                  // Subtle warning notice in channel for intermediate alerts
-                  if ('send' in message.channel) {
-                    await (message.channel as any)
-                      .send(
-                        `⚠️ *[Alerte Coach n°${currentCoachCount}/5 - Attention : Au-delà de 5 interventions du Coach, la tentative de simulation sera directement annulée et considérée comme un échec.]*`
-                      )
-                      .catch(() => {});
-                  }
+                }
+              } else {
+                // Regular Fan message (plain text)
+                if ('send' in message.channel) {
+                  await (message.channel as any).send(anthonyReply).catch(() => {});
                 }
               }
 
@@ -1235,6 +1283,25 @@ export class PawakoBotRunner {
           } else {
             await interaction.editReply({ content: '⚠️ Impossible de réinitialiser la simulation.' }).catch(() => {});
           }
+          return;
+        }
+
+        // --- HANDLER FOR CANDIDATE OR STAFF CLICKING "🛑 Arrêter la Simulation" ---
+        if (interaction.isButton() && customId.startsWith('stop_simu_')) {
+          const chanId = interaction.channel?.id;
+          if (chanId) {
+            this.stoppedSimulationChannels.add(chanId);
+            const session = this.activeAnthonySessions.get(chanId);
+            if (session?.inactivityTimer) {
+              clearTimeout(session.inactivityTimer);
+              session.inactivityTimer = undefined;
+            }
+            this.activeAnthonySessions.delete(chanId);
+          }
+          await interaction.reply({
+            content: '🛑 **Session de simulation arrêtée avec succès dans ce salon.**\n💡 *Le bot ne répondra plus tant qu\'une nouvelle simulation n\'est pas relancée.*',
+            ephemeral: false,
+          }).catch(() => {});
           return;
         }
 
@@ -2670,14 +2737,13 @@ export class PawakoBotRunner {
             member.candidateState = 'simulation';
           }
 
-          if (!member.simulationScheduledTimestamp || member.simulationScheduledTimestamp < Date.now()) {
-            member.simulationScheduledTimestamp = getNext14hParisTimestamp();
-            member.simulationReminderSent = false;
+          const candChan = await this.getCandidateChannel(member, true);
+          if (candChan) {
+            await this.startAnthonySimulationSession(member, candChan).catch(() => {});
           }
 
           if (member.candidateState === 'simulation' && !member.simuMpSentToStaff) {
             member.simuMpSentToStaff = true;
-            const simTsSec = Math.floor((member.simulationScheduledTimestamp || Date.now()) / 1000);
 
             const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
               new ButtonBuilder()
@@ -2687,11 +2753,11 @@ export class PawakoBotRunner {
             );
 
             const mpSimuEmbed = new EmbedBuilder()
-              .setTitle('📅 CANDIDAT EXISTANT EN ATTENTE DE SIMULATION (14h00 HF)')
+              .setTitle('🎭 CANDIDAT EXISTANT EN SIMULATION IA DIRECTE')
               .setDescription(
                 `📢 **Notification Privée Staff (Import / Reprise)**\n\n` +
                 `Le candidat <@${discordUserId}> (**${member.username}**) a terminé l'intégralité des modules théoriques ! 🏆\n\n` +
-                `🗓️ **Simulation Programmée :** <t:${simTsSec}:F> (<t:${simTsSec}:R>)\n` +
+                `🚀 **Simulation IA :** Démarrée immédiatement en direct dans son salon.\n` +
                 `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
                 `👉 **Pour valider sa simulation en 1-clic**, appuyez simplement sur le bouton vert ci-dessous :`
               )
@@ -3410,7 +3476,7 @@ export class PawakoBotRunner {
           `• Te délivrer les supports de cours et questionnaires de validation\n` +
           `• Chronométrer les quiz (15 secondes par question)\n` +
           `• Gérer les cooldowns de révision (30 min si score < 16/20)\n` +
-          `• Programmer ta convocation pour le **Test de Simulation final (14h00 HF)**\n\n` +
+          `• Te lancer immédiatement en **Test de Simulation avec l'IA (Anthony)** dès la fin de tes cours\n\n` +
           `💡 *Commande utile : tape \`!profil\` pour voir tes notes à tout moment.*`
         )
         .setColor(0x6366f1)
@@ -4378,15 +4444,6 @@ export class PawakoBotRunner {
         );
         this.notifyStaffModule5Completion(member, quiz.title, finalScore, totalQuestions, minScore).catch(() => {});
 
-        // Compute 14h00 HF Simulation Convocation
-        const simTimestamp = getNext14hParisTimestamp();
-        member.simulationScheduledTimestamp = simTimestamp;
-        member.simulationReminderSent = false;
-        store.saveMembers();
-        firebaseSyncService.saveMember(member).catch(() => {});
-
-        const simTsSec = Math.floor(simTimestamp / 1000);
-
         const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
             .setCustomId(`staff_validate_simu_${member.id}`)
@@ -4398,23 +4455,21 @@ export class PawakoBotRunner {
         const candChan = await this.getCandidateChannel(member, true);
         if (candChan) {
           const simEmbed = new EmbedBuilder()
-            .setTitle('📅 CONVOCATION OFFICIELLE — TEST DE SIMULATION (14h00 HF)')
+            .setTitle('🚀 TEST DE SIMULATION EN DIRECT (IA)')
             .setDescription(
               `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
-              `🎯 **Étape Finale : Le Test de Simulation**\n` +
-              `Ton évaluation pratique avec un membre de l'équipe Staff est programmée pour :\n\n` +
-              `🗓️ **<t:${simTsSec}:F>** (<t:${simTsSec}:R>)\n\n` +
-              `⏰ **Rendez-vous à 14h00 (Heure Française - HF)** dans ce salon privé !\n` +
-              `🔔 *Un rappel automatique te sera envoyé à l'heure pile du rendez-vous. Sois prêt !* 🚀`
+              `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
+              `Pas d'attente ni de convocation ! Notre IA (Anthony le Fan) est déjà prête dans ce salon pour mener le test avec toi.\n\n` +
+              `Découvre la mise en situation ci-dessous et réponds directement pour lancer le chat ! 🚀`
             )
             .setColor(0x3b82f6)
-            .setFooter({ text: 'PAWAKO FORMATION • Convocation Test de Simulation' })
+            .setFooter({ text: 'PAWAKO FORMATION • Test de Simulation IA en Direct' })
             .setTimestamp();
 
           await candChan.send({
             content: `<@${discordUserId}>`,
             embeds: [simEmbed],
-          }).catch((e: any) => console.warn('[Sim Convocation Error]', e));
+          }).catch((e: any) => console.warn('[Sim Launch Send Error]', e));
 
           // Directly start Anthony Simulation session in the candidate channel
           await this.startAnthonySimulationSession(member, candChan).catch((e: any) =>
@@ -4424,11 +4479,11 @@ export class PawakoBotRunner {
 
         // Direct MP / Staff Alert Notification
         const mpSimuEmbed = new EmbedBuilder()
-          .setTitle('📅 NOUVELLE SIMULATION EN ATTENTE (14h00 HF)')
+          .setTitle('🎭 CANDIDAT EN SIMULATION IA EN DIRECT')
           .setDescription(
             `📢 **Notification Privée Staff**\n\n` +
             `Le candidat <@${discordUserId}> (**${member.username}**) a validé l'intégralité du parcours théorique ! 🏆\n\n` +
-            `🗓️ **Convocation Simulation :** <t:${simTsSec}:F> (<t:${simTsSec}:R>)\n` +
+            `🚀 **Simulation IA :** Démarrée immédiatement dans son salon privé.\n` +
             `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
             `👉 **Pour valider sa simulation en 1-clic**, appuyez simplement sur le bouton vert ci-dessous :`
           )
@@ -4604,6 +4659,9 @@ export class PawakoBotRunner {
   ): Promise<boolean> {
     const member = store.getMember(targetMemberInput.id) || targetMemberInput;
     if (!member || !channel) return false;
+
+    // Unmark stopped flag if previously stopped
+    this.stoppedSimulationChannels.delete(channel.id);
 
     // Clear existing session for this channel if any
     const existingSession = this.activeAnthonySessions.get(channel.id);

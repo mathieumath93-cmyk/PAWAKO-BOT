@@ -70,33 +70,60 @@ export async function callOpenRouterAI(
     throw new Error("Clé API OpenRouter manquante. Veuillez renseigner votre clé OpenRouter dans la configuration IA.");
   }
 
-  const model = cfg.modelName || 'x-ai/grok-2';
-
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://pawako-formation.app',
-      'X-Title': 'PAWAKO Formation Simulation'
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...history
-      ],
-      temperature: 0.8
-    })
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData?.error?.message || `Erreur OpenRouter ${response.status}`);
+  let primaryModel = cfg.modelName || 'x-ai/grok-2';
+  // Fix deprecated or removed endpoints
+  if (primaryModel === 'x-ai/grok-vision-beta' || primaryModel === 'x-ai/grok-beta') {
+    primaryModel = 'x-ai/grok-2';
   }
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'Pas de réponse d\'OpenRouter.';
+  // Build a ordered fallback model list compatible with explicit roleplay / uncensored content
+  const fallbackList = Array.from(
+    new Set([
+      primaryModel,
+      'x-ai/grok-2',
+      'meta-llama/llama-3.3-70b-instruct',
+      'mistralai/mistral-large-2411',
+      'deepseek/deepseek-chat',
+      'openrouter/auto',
+    ])
+  );
+
+  const makeRequest = async (modelsArray: string[]) => {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://pawako-formation.app',
+        'X-Title': 'PAWAKO Formation Simulation'
+      },
+      body: JSON.stringify({
+        models: modelsArray,
+        route: 'fallback',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history
+        ],
+        temperature: 0.8
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || `Erreur OpenRouter ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || 'Pas de réponse d\'OpenRouter.';
+  };
+
+  try {
+    return await makeRequest(fallbackList);
+  } catch (err: any) {
+    console.warn('[OpenRouter Primary Call Failed, trying openrouter/auto fallback]', err);
+    // If specific primary model array failed (e.g., endpoint error), try direct auto-router fallback
+    return await makeRequest(['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct', 'x-ai/grok-2']);
+  }
 }
 
 export async function generateAIResponse(

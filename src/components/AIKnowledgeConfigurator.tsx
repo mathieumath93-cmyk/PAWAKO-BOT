@@ -35,7 +35,7 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
   const [chatHistory, setChatHistory] = useState<Array<{ sender: 'user' | 'grok'; text: string }>>([
     {
       sender: 'grok',
-      text: "👋 *(Simulation initialisée avec le modèle Grok sur OpenRouter. Envoyez le premier message de la créatrice pour commencer !)*",
+      text: "📌 **CONTEXTE DE DÉPART DE LA SIMULATION** :\nTu passes maintenant à la partie simulation !\n\nOn passe à la simu, tu es le chatteur je suis le fan. Je suis un new fan qui viens de s'abonner et je n'ai pas répondu au message de relance automatique. À toi de le relancer pour qu'il réponde !",
     },
   ]);
   const [testInput, setTestInput] = useState('');
@@ -101,7 +101,7 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
     setChatHistory([
       {
         sender: 'grok',
-        text: "👋 *(Simulation réinitialisée avec le modèle Grok sur OpenRouter. Envoyez le premier message pour commencer !)*",
+        text: "📌 **CONTEXTE DE DÉPART DE LA SIMULATION** :\nTu passes maintenant à la partie simulation !\n\nOn passe à la simu, tu es le chatteur je suis le fan. Je suis un new fan qui viens de s'abonner et je n'ai pas répondu au message de relance automatique. À toi de le relancer pour qu'il réponde !",
       },
     ]);
   };
@@ -200,18 +200,20 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">Modèle Forcé OpenRouter</label>
+                <label className="text-xs font-bold text-slate-300 block">Modèle / Routing OpenRouter</label>
                 <select
-                  value={promptCfg.modelName || 'x-ai/grok-2'}
+                  value={promptCfg.modelName || 'openrouter/auto'}
                   onChange={(e) => setPromptCfg({ ...promptCfg, modelName: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-mono font-bold focus:outline-none focus:border-indigo-500"
                 >
+                  <option value="openrouter/auto">openrouter/auto (Auto-Routing Intelligent & Repli)</option>
                   <option value="x-ai/grok-2">x-ai/grok-2 (Grok 2 - Recommandé)</option>
-                  <option value="x-ai/grok-beta">x-ai/grok-beta (Grok Beta)</option>
-                  <option value="x-ai/grok-vision-beta">x-ai/grok-vision-beta (Grok Vision)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct (Non-Censuré / Uncensored)</option>
+                  <option value="mistralai/mistral-large-2411">mistralai/mistral-large-2411 (Mistral Large)</option>
+                  <option value="gryphe/mythomax-l2-13b">gryphe/mythomax-l2-13b (Roleplay Uncensored)</option>
                 </select>
                 <p className="text-[10px] text-slate-400">
-                  Force OpenRouter à utiliser la famille de modèles <strong>Grok (x-AI)</strong>.
+                  OpenRouter choisit ou bascule automatiquement vers les modèles tolérant le contenu adulte & explicite sans erreur.
                 </p>
               </div>
             </div>

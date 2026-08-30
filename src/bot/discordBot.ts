@@ -4230,6 +4230,11 @@ export class PawakoBotRunner {
             content: `<@${discordUserId}>`,
             embeds: [simEmbed],
           }).catch((e: any) => console.warn('[Sim Convocation Error]', e));
+
+          // Directly start Anthony Simulation session in the candidate channel
+          await this.startAnthonySimulationSession(member, candChan).catch((e: any) =>
+            console.warn('[Auto Start Anthony Sim Error]', e)
+          );
         }
 
         // Direct MP / Staff Alert Notification
@@ -4450,13 +4455,13 @@ export class PawakoBotRunner {
 
     this.activeAnthonySessions.set(channel.id, newSession);
 
-    // Initial context message sent to candidate channel (No "Anthony" in starting text, ending with "À toi <@candDiscordId> !")
+    // Initial context message sent to candidate channel
     const contextEmbed = new EmbedBuilder()
-      .setTitle('📌 CONTEXTE DE DÉPART DE LA SIMULATION')
+      .setTitle('🎭 DÉMARRAGE DE LA SIMULATION')
       .setDescription(
-        `Un nouveau fan s'est abonné et n'a **pas répondu** au message automatique de bienvenue.\n\n` +
-        `👉 **C'est à toi de le relancer et de commencer la discussion !**\n\n` +
-        `À toi ${candMention} !`
+        `Tu passes maintenant à la partie simulation !\n\n` +
+        `**On passe à la simu, tu es le chatteur je suis le fan. Je suis un new fan qui viens de s'abonner et je n'ai pas répondu au message de relance automatique. À toi de le relancer pour qu'il réponde !**\n\n` +
+        `👉 À toi ${candMention} !`
       )
       .setColor(0x3b82f6)
       .setFooter({ text: 'PAWAKO FORMATION • Test de Simulation en Direct' })

@@ -1,3 +1,4 @@
+import { GoogleGenAI } from '@google/genai';
 import { AiPromptConfig } from '../types';
 
 export interface FanProfile {
@@ -151,74 +152,181 @@ TA FICHE D'IDENTITÉ UNIQUE ET RÈGLES DE PERSONNAGE POUR CETTE SIMULATION :
   return `=== INSTRUCTIONS PRIORITAIRES : SÉCURITÉ & ALERTES DU COACH PAWAKO ===\n${rules}\n\n${identityPrompt}\n\n=== PERSONNALITÉ & COMPORTEMENT DU FAN ABONNÉ (${profileName.toUpperCase()}) ===\n${baseFanPrompt}\n\n⚠️ INSTRUCTION FINALE ET IMPÉRATIVE : Analyse d'abord le dernier message du candidat. Si une ERREUR FATALE est commise (ex: insulte, PPV sans qualification, média gratuit, réduction sans Bouclier+Épée), tu DOIS impérativement démarrer ta réponse par "⚠️ [INTERVENTION DU COACH PAWAKO] :". Si aucune erreur fatale n'est commise, réponds exclusivement comme le fan ${profileName}.`;
 }
 
+export async function callGeminiAI(
+  systemPrompt: string,
+  history: Array<{ role: string; content: string }> = [],
+  maxTokens: number = 500
+): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY non disponible');
+  }
+
+  const ai = new GoogleGenAI({ apiKey: geminiKey });
+  const contents = history.map((item) => ({
+    role: item.role === 'user' ? 'user' : 'model',
+    parts: [{ text: item.content }],
+  }));
+
+  const res = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Bonjour' }] }],
+    config: {
+      systemInstruction: systemPrompt,
+      temperature: 0.8,
+      maxOutputTokens: maxTokens,
+    },
+  });
+
+  const text = res.text?.trim();
+  if (!text) {
+    throw new Error('Réponse vide de Gemini API');
+  }
+  return text;
+}
+
+export function generateSmartFallbackFanReply(
+  systemPrompt: string,
+  history: Array<{ role: string; content: string }> = []
+): string {
+  const lastUserMsg = [...history].reverse().find((h) => h.role === 'user')?.content.toLowerCase() || '';
+
+  if (
+    lastUserMsg.includes('fdp') ||
+    lastUserMsg.includes('pute') ||
+    lastUserMsg.includes('ferme ta') ||
+    lastUserMsg.includes('connard') ||
+    lastUserMsg.includes('salope')
+  ) {
+    return '⚠️ [INTERVENTION DU COACH PAWAKO] : Attention ! Tu ne dois JAMAIS être agressif ou insulter un fan. Reste toujours professionnel et chaleureux.';
+  }
+
+  if (lastUserMsg.includes('gratuit') || lastUserMsg.includes('cadeau') || lastUserMsg.includes('tiens ta photo')) {
+    return '⚠️ [INTERVENTION DU COACH PAWAKO] : Erreur ! Tu ne dois JAMAIS envoyer de contenu intime gratuitement sans teasing ni monétisation.';
+  }
+
+  const exchangeCount = history.filter((h) => h.role === 'user').length;
+
+  if (lastUserMsg.includes('prénom') || lastUserMsg.includes('appelles') || lastUserMsg.includes('nom')) {
+    return 'Moi c\'est Anthony 😉 Et toi, quel est le joli prénom derrière ce profil ?';
+  }
+
+  if (lastUserMsg.includes('âge') || lastUserMsg.includes('ans') || lastUserMsg.includes('jeune')) {
+    return 'J\'ai 28 ans ! Et toi tu me donnes quel âge ? 😉';
+  }
+
+  if (lastUserMsg.includes('ville') || lastUserMsg.includes('d\'où') || lastUserMsg.includes('habites')) {
+    return 'Je suis sur Paris ! Tu viens d\'où toi ?';
+  }
+
+  if (lastUserMsg.includes('travail') || lastUserMsg.includes('métier') || lastUserMsg.includes('fais dans la vie')) {
+    return 'Je bosse dans l\'IT ! Un métier un peu geek mais ça me permet d\'être souvent en ligne 😉';
+  }
+
+  if (lastUserMsg.includes('ppv') || lastUserMsg.includes('$') || lastUserMsg.includes('€') || lastUserMsg.includes('video') || lastUserMsg.includes('photo')) {
+    if (exchangeCount <= 2) {
+      return 'Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir du contenu payant ! 😉';
+    }
+    if (exchangeCount < 10) {
+      return 'Franchement tu m\'excites trop... mais là j\'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅';
+    }
+  }
+
+  if (lastUserMsg.includes('promets') || lastUserMsg.includes('promesse') || lastUserMsg.includes('quand') || lastUserMsg.includes('paie')) {
+    return 'Promis, dès que la paie tombe ce vendredi soir, je le prends sans faute 😉 !\n[SIMULATION_COMPLETE]';
+  }
+
+  if (exchangeCount >= 10) {
+    return 'Franchement j\'adore échanger avec toi ! Promis, je te le prends vendredi soir dès que ma paie arrive 😉 !\n[SIMULATION_COMPLETE]';
+  }
+
+  return 'Haha tu es bien curieux/se toi ! Dis-moi en un peu plus sur toi 😉';
+}
+
 export async function callOpenRouterAI(
   systemPrompt: string,
   history: Array<{ role: string; content: string }> = [],
-  maxTokens: number = 1000
+  maxTokens: number = 350
 ): Promise<string> {
   const cfg = aiKnowledgeService.getPromptConfig();
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
-  if (!apiKey) {
-    throw new Error("Clé API OpenRouter manquante. Veuillez renseigner votre clé OpenRouter dans la configuration IA.");
-  }
+  // Free OpenRouter models list prioritised
+  const freeModelsList = [
+    'dots-studio/dots-3-note-preview:free',
+    'liquid/lfm-2.5-2.6b:free',
+    'nvidia/nemotron-3.5-lightning:free',
+    'thinkingmachines/inkling-small:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'openrouter/auto',
+  ];
 
-  let primaryModel = cfg.modelName || 'meta-llama/llama-3.3-70b-instruct:free';
+  let primaryModel = cfg.modelName || 'dots-studio/dots-3-note-preview:free';
   if (primaryModel === 'x-ai/grok-vision-beta' || primaryModel === 'x-ai/grok-beta') {
     primaryModel = 'x-ai/grok-2';
   }
 
-  // Ordered fallback models to try sequentially if primary fails or runs out of credits
   const candidateModels = Array.from(
     new Set([
       primaryModel,
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'openrouter/auto',
-      'meta-llama/llama-3.3-70b-instruct'
+      ...freeModelsList,
+      'meta-llama/llama-3.3-70b-instruct',
     ])
   );
 
-  let lastError: Error | null = null;
+  const safeMaxTokens = Math.min(maxTokens, 350);
 
-  for (const modelId of candidateModels) {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://pawako-formation.app',
-          'X-Title': 'PAWAKO Formation Simulation'
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...history
-          ],
-          temperature: 0.8,
-          max_tokens: maxTokens
-        })
-      });
+  // 1. Try OpenRouter API with configured free models
+  if (apiKey) {
+    for (const modelId of candidateModels) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://pawako-formation.app',
+            'X-Title': 'PAWAKO Formation Simulation'
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...history
+            ],
+            temperature: 0.8,
+            max_tokens: safeMaxTokens
+          })
+        });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const msg = errData?.error?.message || `Erreur OpenRouter ${response.status}`;
-        throw new Error(msg);
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content && content.trim().length > 0) {
+            return content.trim();
+          }
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          console.warn(`[OpenRouter Model Failed] ${modelId}:`, errData?.error?.message || response.statusText);
+        }
+      } catch (err: any) {
+        console.warn(`[OpenRouter Model Exception] ${modelId}:`, err?.message || err);
       }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (content) {
-        return content;
-      }
-    } catch (err: any) {
-      console.warn(`[OpenRouter Fallback] Model ${modelId} failed:`, err?.message || err);
-      lastError = err;
     }
   }
 
-  throw lastError || new Error("Échec de la génération avec OpenRouter.");
+  // 2. Try Gemini API fallback if available
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      return await callGeminiAI(systemPrompt, history, maxTokens);
+    } catch (err: any) {
+      console.warn('[Gemini API Call Failed]', err?.message || err);
+    }
+  }
+
+  // 3. Ultra-robust Fallback Engine if all AI APIs fail
+  console.warn('[AI Service] All AI APIs failed or depleted credits. Using Smart Fail-Safe Engine.');
+  return generateSmartFallbackFanReply(systemPrompt, history);
 }
 
 export async function generateAIResponse(

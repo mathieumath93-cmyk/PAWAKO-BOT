@@ -255,12 +255,16 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300 block">Modèle / Routing OpenRouter</label>
                 <select
-                  value={promptCfg.modelName || 'openrouter/auto'}
+                  value={promptCfg.modelName || 'dots-studio/dots-3-note-preview:free'}
                   onChange={(e) => setPromptCfg({ ...promptCfg, modelName: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-mono font-bold focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="openrouter/auto">openrouter/auto (Auto-Routing Intelligent & Repli)</option>
+                  <option value="dots-studio/dots-3-note-preview:free">dots-studio/dots-3-note-preview:free (Gratuit)</option>
+                  <option value="liquid/lfm-2.5-2.6b:free">liquid/lfm-2.5-2.6b:free (Gratuit)</option>
+                  <option value="nvidia/nemotron-3.5-lightning:free">nvidia/nemotron-3.5-lightning:free (Gratuit)</option>
+                  <option value="thinkingmachines/inkling-small:free">thinkingmachines/inkling-small:free (Gratuit)</option>
                   <option value="meta-llama/llama-3.3-70b-instruct:free">meta-llama/llama-3.3-70b-instruct:free (Gratuit)</option>
+                  <option value="openrouter/auto">openrouter/auto (Auto-Routing Intelligent & Repli)</option>
                   <option value="x-ai/grok-2">x-ai/grok-2 (Grok 2 - Payant)</option>
                   <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct (Uncensored)</option>
                   <option value="mistralai/mistral-large-2411">mistralai/mistral-large-2411 (Mistral Large)</option>

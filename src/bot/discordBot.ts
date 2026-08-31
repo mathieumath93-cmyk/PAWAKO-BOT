@@ -27,6 +27,7 @@ import {
   createRandomFanProfile,
   FanProfile,
   evaluateSimulationSession,
+  generateSmartFallbackFanReply,
 } from '../services/aiKnowledgeService';
 
 export interface ActiveQuizSession {
@@ -4893,8 +4894,13 @@ export class PawakoBotRunner {
       session.conversationHistory.push({ role: 'assistant', content: reply });
       return reply;
     } catch (err: any) {
-      console.error('[OPENROUTER GROK SIMULATION ERROR]', err);
-      return `*(Erreur OpenRouter/Grok : ${err?.message || 'Connexion impossible'})*`;
+      console.error('[SIMULATION AI FALLBACK ACTIVE]', err?.message || err);
+      const fallbackReply = generateSmartFallbackFanReply(
+        getSimulationPrompt(session.fanProfile),
+        [...session.conversationHistory.slice(0, -1), { role: 'user', content: candidateMsg }]
+      );
+      session.conversationHistory.push({ role: 'assistant', content: fallbackReply });
+      return fallbackReply;
     }
   }
 

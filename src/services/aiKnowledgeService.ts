@@ -169,21 +169,19 @@ export async function callOpenRouterAI(
     primaryModel = 'x-ai/grok-2';
   }
 
-  // Build a ordered fallback model list including free models and auto router
+  // Build an ordered fallback model list with MAX 3 models for OpenRouter API
   const fallbackList = Array.from(
     new Set([
       primaryModel,
       'meta-llama/llama-3.3-70b-instruct:free',
       'google/gemini-2.0-flash-lite-preview-02-05:free',
-      'deepseek/deepseek-r1:free',
-      'mistralai/mistral-7b-instruct:free',
-      'openrouter/auto',
-      'meta-llama/llama-3.3-70b-instruct',
-      'x-ai/grok-2',
     ])
-  );
+  ).slice(0, 3);
 
   const makeRequest = async (modelsArray: string[], tokensLimit: number = maxTokens) => {
+    // OpenRouter API requires models array to have 3 items or fewer
+    const safeModelsArray = modelsArray.slice(0, 3);
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -193,7 +191,7 @@ export async function callOpenRouterAI(
         'X-Title': 'PAWAKO Formation Simulation'
       },
       body: JSON.stringify({
-        models: modelsArray,
+        models: safeModelsArray,
         route: 'fallback',
         messages: [
           { role: 'system', content: systemPrompt },
@@ -217,11 +215,10 @@ export async function callOpenRouterAI(
     return await makeRequest(fallbackList, maxTokens);
   } catch (err: any) {
     console.warn('[OpenRouter Primary Call Failed, trying free models fallback]', err?.message || err);
-    // If primary models fail or credit limit hit, try free models fallback
+    // If primary models fail or credit limit hit, try free models fallback (max 3 items)
     const freeModelsList = [
       'meta-llama/llama-3.3-70b-instruct:free',
       'google/gemini-2.0-flash-lite-preview-02-05:free',
-      'deepseek/deepseek-r1:free',
       'openrouter/auto'
     ];
     return await makeRequest(freeModelsList, Math.min(maxTokens, 800));

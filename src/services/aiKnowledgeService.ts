@@ -164,65 +164,61 @@ export async function callOpenRouterAI(
   }
 
   let primaryModel = cfg.modelName || 'meta-llama/llama-3.3-70b-instruct:free';
-  // Fix deprecated or removed endpoints
   if (primaryModel === 'x-ai/grok-vision-beta' || primaryModel === 'x-ai/grok-beta') {
     primaryModel = 'x-ai/grok-2';
   }
 
-  // Build an ordered fallback model list with MAX 3 models for OpenRouter API
-  const fallbackList = Array.from(
+  // Ordered fallback models to try sequentially if primary fails or runs out of credits
+  const candidateModels = Array.from(
     new Set([
       primaryModel,
       'meta-llama/llama-3.3-70b-instruct:free',
-      'google/gemini-2.0-flash-lite-preview-02-05:free',
+      'openrouter/auto',
+      'meta-llama/llama-3.3-70b-instruct'
     ])
-  ).slice(0, 3);
+  );
 
-  const makeRequest = async (modelsArray: string[], tokensLimit: number = maxTokens) => {
-    // OpenRouter API requires models array to have 3 items or fewer
-    const safeModelsArray = modelsArray.slice(0, 3);
+  let lastError: Error | null = null;
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://pawako-formation.app',
-        'X-Title': 'PAWAKO Formation Simulation'
-      },
-      body: JSON.stringify({
-        models: safeModelsArray,
-        route: 'fallback',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...history
-        ],
-        temperature: 0.8,
-        max_tokens: tokensLimit
-      })
-    });
+  for (const modelId of candidateModels) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://pawako-formation.app',
+          'X-Title': 'PAWAKO Formation Simulation'
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history
+          ],
+          temperature: 0.8,
+          max_tokens: maxTokens
+        })
+      });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `Erreur OpenRouter ${response.status}`);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const msg = errData?.error?.message || `Erreur OpenRouter ${response.status}`;
+        throw new Error(msg);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (content) {
+        return content;
+      }
+    } catch (err: any) {
+      console.warn(`[OpenRouter Fallback] Model ${modelId} failed:`, err?.message || err);
+      lastError = err;
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'Pas de réponse d\'OpenRouter.';
-  };
-
-  try {
-    return await makeRequest(fallbackList, maxTokens);
-  } catch (err: any) {
-    console.warn('[OpenRouter Primary Call Failed, trying free models fallback]', err?.message || err);
-    // If primary models fail or credit limit hit, try free models fallback (max 3 items)
-    const freeModelsList = [
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'google/gemini-2.0-flash-lite-preview-02-05:free',
-      'openrouter/auto'
-    ];
-    return await makeRequest(freeModelsList, Math.min(maxTokens, 800));
   }
+
+  throw lastError || new Error("Échec de la génération avec OpenRouter.");
 }
 
 export async function generateAIResponse(

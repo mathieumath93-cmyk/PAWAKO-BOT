@@ -4001,8 +4001,10 @@ export class PawakoBotRunner {
         // Check 10h00 HF tools formation reminders
         this.checkToolsFormationReminders();
 
-        // Check 3 days inactivity auto kick-off for candidates ONLY
-        this.checkInactiveCandidatesAndAutoKick().catch(() => {});
+        // Check 3 days inactivity auto kick-off for candidates ONLY strictly at 19h00 HF once per day
+        if (hours === 19) {
+          this.checkInactiveCandidatesAndAutoKick(false).catch(() => {});
+        }
 
         // Update leaderboard in #classement-formation
         this.updateLeaderboardChannel().catch(() => {});
@@ -4782,6 +4784,18 @@ export class PawakoBotRunner {
     const evalRes = await evaluateSimulationSession(session.conversationHistory);
     const passed = evalRes.passed && evalRes.totalScore >= evalRes.passingScore;
 
+    store.addSimulationAttempt({
+      id: `sim-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      memberId: candMember.id,
+      memberName: candMember.username || 'Candidat',
+      timestamp: store.getFormattedNow(),
+      totalScore: evalRes.totalScore,
+      passed,
+      criteria: evalRes.criteria || [],
+      globalVerdict: evalRes.globalVerdict,
+      messagesCount: session.conversationHistory.filter((m) => m.role === 'user').length,
+    });
+
     const criteriaText = (evalRes.criteria || [])
       .map(
         (c) =>
@@ -5055,21 +5069,26 @@ export class PawakoBotRunner {
   /**
    * Auto Kick-off & Inactivity Reminders Runner
    * Checks candidates ONLY (EXCLUDING staff/admins) for 24h, 48h reminders and 72h (3 days) auto-kick.
-   * Runs strictly ONCE every 24 hours and updates status immediately to avoid duplicate notifications.
+   * Runs strictly ONCE per day at fixed time (19h00 HF) and persists date to avoid re-triggering on server reload.
    */
-  public async checkInactiveCandidatesAndAutoKick(): Promise<void> {
+  public async checkInactiveCandidatesAndAutoKick(force: boolean = false): Promise<void> {
     if (!this.client || !this.isConnected) return;
 
     const now = Date.now();
-    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+    const pDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+    const year = pDate.getFullYear();
+    const month = String(pDate.getMonth() + 1).padStart(2, '0');
+    const day = String(pDate.getDate()).padStart(2, '0');
+    const todayKey = `${year}-${month}-${day}`;
 
-    // Run strictly ONCE per 24 hours
-    if (this.lastInactivityCheckTimestamp && (now - this.lastInactivityCheckTimestamp) < TWENTY_FOUR_HOURS_MS) {
+    // Skip if not forced and already ran today (prevents spam on server reload!)
+    if (!force && store.getLastInactivityCheckDate() === todayKey) {
       return;
     }
 
     this.lastInactivityCheckTimestamp = now;
-    console.log('[PAWAKO BOT] 🔍 Exécution de la vérification quotidienne d\'inactivité (24h)...');
+    store.setLastInactivityCheckDate(todayKey);
+    console.log(`[PAWAKO BOT] 🔍 Exécution de la vérification quotidienne d'inactivité (19h00 HF - ${todayKey})...`);
 
     try {
       const allMembers = store.getMembers();

@@ -235,6 +235,115 @@ export const StatsView: React.FC<StatsViewProps> = ({ members, modules }) => {
           })}
         </div>
       </div>
+
+      {/* Simulation Analytics Section */}
+      {(() => {
+        const simAnalytics = store.getSimulationAnalytics();
+        return (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-400" />
+                <span>Statistiques des Simulations (Fan Anthony & Barème sur 100)</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Suivi détaillé des performances en simulation interactive et analyse par critère de qualification & vente.
+              </p>
+            </div>
+
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <div className="text-[11px] font-medium text-slate-400">Total Simulations</div>
+                <div className="text-xl font-black text-white">{simAnalytics.totalAttempts}</div>
+                <div className="text-[10px] text-slate-500">Sessions enregistrées</div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <div className="text-[11px] font-medium text-slate-400">Taux de Réussite</div>
+                <div className="text-xl font-black text-emerald-400">{simAnalytics.successRate}%</div>
+                <div className="text-[10px] text-slate-500">{simAnalytics.passedAttempts} validées / {simAnalytics.failedAttempts} échecs</div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <div className="text-[11px] font-medium text-slate-400">Note Moyenne</div>
+                <div className="text-xl font-black text-indigo-400">{simAnalytics.averageScore} / 100</div>
+                <div className="text-[10px] text-slate-500">Moyenne générale candidats</div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <div className="text-[11px] font-medium text-slate-400">Seuil de Validation</div>
+                <div className="text-xl font-black text-purple-400">80 / 100</div>
+                <div className="text-[10px] text-slate-500">5 critères × 20 points</div>
+              </div>
+            </div>
+
+            {/* Average by Criteria */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-slate-300">Moyenne par Critère d'Évaluation</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {simAnalytics.averageByCriteria.map((crit) => (
+                  <div key={crit.criteriaId} className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-1.5">
+                    <div className="text-[11px] font-semibold text-slate-300 line-clamp-1">{crit.criteriaName}</div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-base font-black text-white">{crit.averageScore}</span>
+                      <span className="text-[10px] text-slate-500">/ 20 pts</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-indigo-500 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, (crit.averageScore / 20) * 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent Attempts List */}
+            {simAnalytics.recentAttempts.length > 0 && (
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="text-xs font-bold text-slate-300">Dernières Simulations Évaluées</div>
+                <div className="space-y-2">
+                  {simAnalytics.recentAttempts.map((att) => (
+                    <div
+                      key={att.id}
+                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-white flex items-center gap-2">
+                          <span>{att.memberName}</span>
+                          <span
+                            className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
+                              att.passed
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            }`}
+                          >
+                            {att.passed ? 'VALIDÉ' : 'À REFAIRE'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {att.timestamp} • {att.messagesCount} échanges
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-sm font-black text-indigo-400">{att.totalScore} / 100</div>
+                          <div className="text-[10px] text-slate-500 line-clamp-1 max-w-[250px]">
+                            {att.globalVerdict}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 };

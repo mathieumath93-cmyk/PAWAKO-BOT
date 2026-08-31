@@ -11,6 +11,8 @@ import {
   Quiz,
   QuizAttempt,
   QuizQuestion,
+  SimulationAnalytics,
+  SimulationAttempt,
   SystemHealth,
   Ticket,
   TicketMessage,
@@ -627,6 +629,8 @@ class StoreService {
   private health: SystemHealth = { ...defaultHealth };
   private backups: BackupRecord[] = [...defaultBackups];
   private quizAttempts: QuizAttempt[] = [];
+  private simulationAttempts: SimulationAttempt[] = [];
+  private lastInactivityCheckDate: string = '';
   private listeners: Array<() => void> = [];
 
   constructor() {
@@ -683,6 +687,19 @@ class StoreService {
       if (storedBranding) {
         const parsed = JSON.parse(storedBranding);
         this.branding = { ...defaultBranding, ...parsed };
+      }
+
+      const storedSims = localStorage.getItem('pawako_simulation_attempts');
+      if (storedSims) {
+        const parsed = JSON.parse(storedSims);
+        if (Array.isArray(parsed)) {
+          this.simulationAttempts = parsed;
+        }
+      }
+
+      const storedLastCheck = localStorage.getItem('pawako_last_inactivity_check_date');
+      if (storedLastCheck) {
+        this.lastInactivityCheckDate = storedLastCheck;
       }
     } catch (e) {
       console.warn('Error loading store from localStorage:', e);
@@ -1188,6 +1205,97 @@ class StoreService {
         difficulty,
       };
     });
+  }
+
+  // --- Simulation Attempts & Analytics ---
+  public saveSimulationAttempts(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_simulation_attempts', JSON.stringify(this.simulationAttempts));
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
+  }
+
+  public addSimulationAttempt(attempt: SimulationAttempt): void {
+    this.simulationAttempts.push(attempt);
+    this.saveSimulationAttempts();
+  }
+
+  public getSimulationAttempts(): SimulationAttempt[] {
+    return this.simulationAttempts;
+  }
+
+  public getSimulationAttemptsForMember(memberId: string): SimulationAttempt[] {
+    if (!memberId) return [];
+    const cleanId = memberId.replace('mem-', '');
+    return this.simulationAttempts.filter(
+      (att) => att.memberId === memberId || att.memberId === cleanId || att.memberId.replace('mem-', '') === cleanId
+    );
+  }
+
+  public getSimulationAnalytics(): SimulationAnalytics {
+    const totalAttempts = this.simulationAttempts.length;
+    const passedAttempts = this.simulationAttempts.filter((att) => att.passed).length;
+    const failedAttempts = totalAttempts - passedAttempts;
+    const successRate = totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 0;
+    const averageScore =
+      totalAttempts > 0
+        ? Math.round(this.simulationAttempts.reduce((sum, att) => sum + att.totalScore, 0) / totalAttempts)
+        : 0;
+
+    const criteriaTotals: Record<string, { sum: number; count: number; name: string }> = {
+      qualification: { sum: 0, count: 0, name: 'Qualification du Fan' },
+      gfe: { sum: 0, count: 0, name: 'Progression & Connexion GFE' },
+      teasing: { sum: 0, count: 0, name: 'Teasing & Présentation PPV' },
+      objections: { sum: 0, count: 0, name: 'Gestion des Refus (Bouclier+Épée)' },
+      followup: { sum: 0, count: 0, name: 'Follow-Up & Promesse de Vente' },
+    };
+
+    this.simulationAttempts.forEach((att) => {
+      att.criteria.forEach((crit) => {
+        if (!criteriaTotals[crit.id]) {
+          criteriaTotals[crit.id] = { sum: 0, count: 0, name: crit.name };
+        }
+        criteriaTotals[crit.id].sum += crit.score;
+        criteriaTotals[crit.id].count += 1;
+      });
+    });
+
+    const averageByCriteria = Object.entries(criteriaTotals).map(([id, item]) => ({
+      criteriaId: id,
+      criteriaName: item.name,
+      averageScore: item.count > 0 ? Math.round((item.sum / item.count) * 10) / 10 : 0,
+      maxPoints: 20,
+    }));
+
+    return {
+      totalAttempts,
+      passedAttempts,
+      failedAttempts,
+      successRate,
+      averageScore,
+      averageByCriteria,
+      recentAttempts: [...this.simulationAttempts].reverse().slice(0, 10),
+    };
+  }
+
+  public getLastInactivityCheckDate(): string {
+    return this.lastInactivityCheckDate;
+  }
+
+  public setLastInactivityCheckDate(dateStr: string): void {
+    this.lastInactivityCheckDate = dateStr;
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_last_inactivity_check_date', dateStr);
+      } catch {
+        // Ignore
+      }
+    }
+    this.notify();
   }
 
   // --- Members ---

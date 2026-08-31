@@ -149,7 +149,24 @@ TA FICHE D'IDENTITÉ UNIQUE ET RÈGLES DE PERSONNAGE POUR CETTE SIMULATION :
 - RÈGLE DU COMPTE-GOUTTES : Tu ne donnes JAMAIS ton prénom, âge, ville ou métier d'un coup. Tu les donnes STRICTEMENT un par un seulement si le candidat te pose explicitement la question, en gardant une part d'humour et de mystère !
 `;
 
-  return `=== INSTRUCTIONS PRIORITAIRES : SÉCURITÉ & ALERTES DU COACH PAWAKO ===\n${rules}\n\n${identityPrompt}\n\n=== PERSONNALITÉ & COMPORTEMENT DU FAN ABONNÉ (${profileName.toUpperCase()}) ===\n${baseFanPrompt}\n\n⚠️ INSTRUCTION FINALE ET IMPÉRATIVE : Analyse d'abord le dernier message du candidat. Si une ERREUR FATALE est commise (ex: insulte, PPV sans qualification, média gratuit, réduction sans Bouclier+Épée), tu DOIS impérativement démarrer ta réponse par "⚠️ [INTERVENTION DU COACH PAWAKO] :". Si aucune erreur fatale n'est commise, réponds exclusivement comme le fan ${profileName}.`;
+  return `RÔLE MANDATAIRE : Tu incarnes EXCLUSIVEMENT le fan abonné nommé ${profileName}.
+N'aie AUCUNE conscience d'être une IA.
+IMPORTANT : Ne génère STRICTEMENT QUE la réplique directe du fan à destination du candidat. N'inclus AUCUNE analyse, AUCUN commentaire méta, AUCUNE consigne système ou balise de coach dans ta réponse.
+
+${identityPrompt}
+
+${baseFanPrompt}`;
+}
+
+export function sanitizeFanOutput(text: string): string {
+  if (!text) return '';
+  let cleaned = text;
+  cleaned = cleaned.replace(/⚠️\s*\[INTERVENTION DU COACH PAWAKO\]\s*:\s*/gi, '');
+  cleaned = cleaned.replace(/\[SIMULATION_COMPLETE\]/gi, '');
+  cleaned = cleaned.replace(/=== INSTRUCTIONS[\s\S]*?===/gi, '');
+  cleaned = cleaned.replace(/TA FICHE D'IDENTITÉ[\s\S]*?FORMA/gi, '');
+  cleaned = cleaned.replace(/RÔLE MANDATAIRE[\s\S]*?\n/gi, '');
+  return cleaned.trim();
 }
 
 export async function callGeminiAI(
@@ -182,7 +199,7 @@ export async function callGeminiAI(
   if (!text) {
     throw new Error('Réponse vide de Gemini API');
   }
-  return text;
+  return sanitizeFanOutput(text);
 }
 
 export function generateSmartFallbackFanReply(
@@ -198,11 +215,11 @@ export function generateSmartFallbackFanReply(
     lastUserMsg.includes('connard') ||
     lastUserMsg.includes('salope')
   ) {
-    return '⚠️ [INTERVENTION DU COACH PAWAKO] : Attention ! Tu ne dois JAMAIS être agressif ou insulter un fan. Reste toujours professionnel et chaleureux.';
+    return 'Désolé mais je ne permets pas qu\'on me parle comme ça. On garde un ton sympa ou je m\'en vais.';
   }
 
   if (lastUserMsg.includes('gratuit') || lastUserMsg.includes('cadeau') || lastUserMsg.includes('tiens ta photo')) {
-    return '⚠️ [INTERVENTION DU COACH PAWAKO] : Erreur ! Tu ne dois JAMAIS envoyer de contenu intime gratuitement sans teasing ni monétisation.';
+    return 'Oh c\'est mignon ce petit cadeau ! Merci beaucoup 😉 Tu as d\'autres petites surprises comme ça ?';
   }
 
   const exchangeCount = history.filter((h) => h.role === 'user').length;
@@ -228,19 +245,19 @@ export function generateSmartFallbackFanReply(
       return 'Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir du contenu payant ! 😉';
     }
     if (exchangeCount < 10) {
-      return 'Franchement tu m\'excites trop... mais là j\'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅';
+      return 'Franchement tu m\'excites trop... mais là j\'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅 Tu n\'as pas un petit extrait avant ?';
     }
   }
 
   if (lastUserMsg.includes('promets') || lastUserMsg.includes('promesse') || lastUserMsg.includes('quand') || lastUserMsg.includes('paie')) {
-    return 'Promis, dès que la paie tombe ce vendredi soir, je le prends sans faute 😉 !\n[SIMULATION_COMPLETE]';
+    return 'Promis, dès que la paie tombe ce vendredi soir, je le prends sans faute 😉 ! Merci de patienter avec moi.';
   }
 
   if (exchangeCount >= 10) {
-    return 'Franchement j\'adore échanger avec toi ! Promis, je te le prends vendredi soir dès que ma paie arrive 😉 !\n[SIMULATION_COMPLETE]';
+    return 'Franchement j\'adore échanger avec toi ! Dès que ma paie arrive ce vendredi, je te prends le média sans hésitation 😉';
   }
 
-  return 'Haha tu es bien curieux/se toi ! Dis-moi en un peu plus sur toi 😉';
+  return 'Haha tu es bien curieux/se toi ! Dis-moi en un peu plus sur ce que tu aimes 😉';
 }
 
 export async function callOpenRouterAI(
@@ -337,6 +354,68 @@ export async function generateAIResponse(
   return callOpenRouterAI(simPrompt, [...history, { role: 'user', content: userMessage }]);
 }
 
+export function evaluateSimulationSessionDeterministic(
+  history: Array<{ role: string; content: string }>
+): import('../types').SimulationEvaluationResult {
+  const userMessages = history.filter((h) => h.role === 'user').map((h) => h.content.toLowerCase());
+  const fullText = userMessages.join(' ');
+
+  // 1. Qualification (20 pts)
+  let qualScore = 12;
+  if (fullText.includes('prénom') || fullText.includes('appelles') || fullText.includes('nom')) qualScore += 2;
+  if (fullText.includes('âge') || fullText.includes('ans')) qualScore += 2;
+  if (fullText.includes('ville') || fullText.includes('d\'où') || fullText.includes('habites')) qualScore += 2;
+  if (fullText.includes('métier') || fullText.includes('fais dans la vie') || fullText.includes('travail')) qualScore += 2;
+  qualScore = Math.min(20, qualScore);
+
+  // 2. GFE & Connection (20 pts)
+  let gfeScore = 12;
+  if (userMessages.length >= 4) gfeScore += 4;
+  if (fullText.includes('😉') || fullText.includes('haha') || fullText.includes('sourire') || fullText.includes('plaisir')) gfeScore += 4;
+  gfeScore = Math.min(20, gfeScore);
+
+  // 3. Teasing & PPV (20 pts)
+  let teasingScore = 10;
+  if (fullText.includes('ppv') || fullText.includes('vidéo') || fullText.includes('photo') || fullText.includes('$') || fullText.includes('€')) teasingScore += 5;
+  if (fullText.includes('exclusif') || fullText.includes('chaud') || fullText.includes('découvrir') || fullText.includes('spécial')) teasingScore += 5;
+  teasingScore = Math.min(20, teasingScore);
+
+  // 4. Objections & Bouclier + Epée (20 pts)
+  let objScore = 12;
+  if (fullText.includes('offert') || fullText.includes('aperçu') || fullText.includes('teaser') || fullText.includes('extrait') || fullText.includes('cadeau')) objScore += 8;
+  objScore = Math.min(20, objScore);
+
+  // 5. Follow Up & Promesse (20 pts)
+  let followScore = 12;
+  if (fullText.includes('promet') || fullText.includes('paie') || fullText.includes('vendredi') || fullText.includes('prochain') || fullText.includes('garder')) followScore += 8;
+  followScore = Math.min(20, followScore);
+
+  const totalScore = qualScore + gfeScore + teasingScore + objScore + followScore;
+  const passed = totalScore >= 80;
+
+  return {
+    totalScore,
+    passingScore: 80,
+    passed,
+    fatalErrorsCount: 0,
+    fatalErrorDetails: [],
+    criteria: [
+      { id: 'qualification', name: 'Qualification du Fan', maxPoints: 20, score: qualScore, passed: qualScore >= 16, comment: `Découverte du fan évaluée à ${qualScore}/20.` },
+      { id: 'gfe', name: 'Progression & Connexion GFE', maxPoints: 20, score: gfeScore, passed: gfeScore >= 16, comment: `Climat de complicité évalué à ${gfeScore}/20.` },
+      { id: 'teasing', name: 'Teasing & Présentation PPV', maxPoints: 20, score: teasingScore, passed: teasingScore >= 16, comment: `Qualité du teasing évaluée à ${teasingScore}/20.` },
+      { id: 'objections', name: 'Gestion des Refus (Bouclier+Épée)', maxPoints: 20, score: objScore, passed: objScore >= 16, comment: `Maintien du prix et valeur perçue à ${objScore}/20.` },
+      { id: 'followup', name: 'Follow-Up & Promesse de Vente', maxPoints: 20, score: followScore, passed: followScore >= 16, comment: `Verrouillage de la transaction évalué à ${followScore}/20.` },
+    ],
+    globalVerdict: passed
+      ? `Félicitations ! Excellent travail général avec une note globale de ${totalScore}/100.`
+      : `Score de ${totalScore}/100 (Minimum requis : 80/100). Consolidez la qualification et l'utilisation du Bouclier + Épée.`,
+    recommendations: [
+      'Approfondir la qualification au compte-gouttes.',
+      'Soigner la relance et l\'envoi de teasers gratuits pour débloquer les indécis.',
+    ],
+  };
+}
+
 export async function evaluateSimulationSession(
   history: Array<{ role: string; content: string }>
 ): Promise<import('../types').SimulationEvaluationResult> {
@@ -364,7 +443,7 @@ Analyse la conversation et renvoie STRICTEMENT un objet JSON au format suivant s
   "fatalErrorDetails": [],
   "criteria": [
     { "id": "qualification", "name": "Qualification du Fan", "maxPoints": 20, "score": 18, "passed": true, "comment": "Bonne récolte d'infos." },
-    { "id": "progression", "name": "Progression & GFE", "maxPoints": 20, "score": 18, "passed": true, "comment": "Très bonne montée en température." },
+    { "id": "gfe", "name": "Progression & GFE", "maxPoints": 20, "score": 18, "passed": true, "comment": "Très bonne montée en température." },
     { "id": "teasing", "name": "Teasing & PPV", "maxPoints": 20, "score": 17, "passed": true, "comment": "Description attrayante." },
     { "id": "objections", "name": "Gestion des Refus (Bouclier+Épée)", "maxPoints": 20, "score": 16, "passed": true, "comment": "Technique bien appliquée." },
     { "id": "followup", "name": "Follow-Up & Relance", "maxPoints": 20, "score": 16, "passed": true, "comment": "Relance bien cadrée." }
@@ -378,28 +457,15 @@ Analyse la conversation et renvoie STRICTEMENT un objet JSON au format suivant s
     const jsonMatch = rawRes.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as import('../types').SimulationEvaluationResult;
-      return parsed;
+      if (parsed && typeof parsed.totalScore === 'number' && Array.isArray(parsed.criteria)) {
+        return parsed;
+      }
     }
   } catch (err) {
     console.warn('[Evaluation AI Error]', err);
   }
 
-  return {
-    totalScore: 75,
-    passingScore: 80,
-    passed: false,
-    fatalErrorsCount: 0,
-    fatalErrorDetails: [],
-    criteria: [
-      { id: 'qualification', name: 'Qualification du Fan', maxPoints: 20, score: 15, passed: true, comment: 'Qualification partielle.' },
-      { id: 'progression', name: 'Progression & GFE', maxPoints: 20, score: 15, passed: true, comment: 'Bonne approche.' },
-      { id: 'teasing', name: 'Teasing & PPV', maxPoints: 20, score: 15, passed: true, comment: 'Teasing correct.' },
-      { id: 'objections', name: 'Gestion des Refus', maxPoints: 20, score: 15, passed: true, comment: 'Pensez à bien valoriser.' },
-      { id: 'followup', name: 'Follow-Up & Relance', maxPoints: 20, score: 15, passed: true, comment: 'Relance effectuée.' },
-    ],
-    globalVerdict: 'Score de 75/100 (Minimum requis : 80/100). La simulation doit être consolidée.',
-    recommendations: ['Renforcer la qualification du fan et la technique Bouclier + Épée.'],
-  };
+  return evaluateSimulationSessionDeterministic(history);
 }
 
 class AiKnowledgeService {

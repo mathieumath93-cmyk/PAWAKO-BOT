@@ -575,3 +575,36 @@ export interface SimulationEvaluationResult {
   recommendations: string[];
 }
 
+export interface SimulationAttempt {
+  id: string;
+  memberId: string;
+  memberName: string;
+  discordId?: string;
+  channelId?: string;
+  timestamp: string; // "31/08/2026 14:35"
+  totalScore: number;
+  passingScore?: number;
+  passed: boolean;
+  fanProfileName?: string;
+  fatalErrorsCount?: number;
+  criteria: SimulationCriterionScore[];
+  globalVerdict: string;
+  recommendations?: string[];
+  messagesCount?: number;
+}
+
+export interface SimulationAnalytics {
+  totalAttempts: number;
+  passedAttempts: number;
+  failedAttempts: number;
+  successRate: number; // e.g. 75
+  averageScore: number; // e.g. 82.5
+  averageByCriteria: Array<{
+    criteriaId: string;
+    criteriaName: string;
+    averageScore: number;
+    maxPoints: number;
+  }>;
+  recentAttempts: SimulationAttempt[];
+}
+

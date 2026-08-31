@@ -21,7 +21,13 @@ import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
 import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
 import { QuizQuestion, Member, Quiz, MemberBadge } from '../types';
-import { callOpenRouterAI, getSimulationPrompt } from '../services/aiKnowledgeService';
+import {
+  callOpenRouterAI,
+  getSimulationPrompt,
+  createRandomFanProfile,
+  FanProfile,
+  evaluateSimulationSession,
+} from '../services/aiKnowledgeService';
 
 export interface ActiveQuizSession {
   attemptId: string;
@@ -47,6 +53,7 @@ export interface ActiveAnthonySession {
   startedAt: number;
   lastCandidateMsgTimestamp: number;
   lastFanMsgTimestamp: number;
+  fanProfile?: FanProfile;
   extractedInfos: {
     name: boolean;
     age: boolean;
@@ -819,7 +826,7 @@ export class PawakoBotRunner {
             module_en_cours: '📚 Étape 1 : Module en cours',
             quiz_disponible: '✏️ Étape 1 : Quiz à passer',
             cooldown_actif: '⏱️ Étape 1 : Cooldown d\'attente',
-            simulation: '🎭 Étape 2 : Simulation Anthony',
+            simulation: '🎭 Étape 2 : Simulation IA',
             simulation_validee: '🎭 Étape 2 : Simulation Validée',
             formation_outils: '🛠️ Étape 3 : Formation Outils',
             formation_terminee: '🏆 Parcours Terminé / Intégré',
@@ -1010,7 +1017,7 @@ export class PawakoBotRunner {
 
           if (!targetMember) {
             await message.reply(
-              '⚠️ **Candidat non trouvé.** Mentionnez le candidat (ex: `!lancer-anthony @candidat`) ou exécutez la commande dans son salon privé.'
+              '⚠️ **Candidat non trouvé.** Mentionnez le candidat (ex: `!start-simu @candidat`) ou exécutez la commande dans son salon privé.'
             ).catch(() => {});
             return;
           }
@@ -1025,7 +1032,7 @@ export class PawakoBotRunner {
 
           if (targetChan.id !== message.channel.id) {
             await message.reply(
-              `🚀 **Simulation Anthony lancée pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> dans <#${targetChan.id}> !**`
+              `🚀 **Simulation lancée pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> dans <#${targetChan.id}> !**`
             ).catch(() => {});
           }
           return;
@@ -1048,8 +1055,8 @@ export class PawakoBotRunner {
             this.activeAnthonySessions.delete(message.channel.id);
           }
           await message.reply(
-            '🛑 **Session de simulation Anthony arrêtée avec succès dans ce salon.**\n' +
-              '💡 *Le bot ne répondra plus dans ce salon tant qu\'une nouvelle simulation n\'est pas lancée avec `!start-anthony` ou `!start-simu`.*'
+            '🛑 **Session de simulation arrêtée avec succès dans ce salon.**\n' +
+              '💡 *Le bot ne répondra plus dans ce salon tant qu\'une nouvelle simulation n\'est pas lancée avec `!start-simu`.*'
           ).catch(() => {});
           return;
         }
@@ -1075,6 +1082,7 @@ export class PawakoBotRunner {
                 startedAt: Date.now(),
                 lastCandidateMsgTimestamp: Date.now(),
                 lastFanMsgTimestamp: Date.now(),
+                fanProfile: createRandomFanProfile(),
                 extractedInfos: { name: false, age: false, job: false, location: false, hobbies: false, fantasy: false },
                 conversationHistory: [],
               };
@@ -1186,7 +1194,7 @@ export class PawakoBotRunner {
                           `🔄 **QUE FAIRE MAINTENANT ?**\n` +
                           `• Tu dois **reprendre la simulation depuis le début**.\n` +
                           `• Revois bien tes leçons et la grille de validation (Qualification du fan, GFE, Teasing PPV, Bouclier+Épée).\n` +
-                          `• Quand tu es prêt(e), tape **\`!start-anthony\`** ou clique sur le bouton ci-dessous pour relancer ta simulation de zéro !`
+                          `• Quand tu es prêt(e), tape **\`!start-simu\`** ou clique sur le bouton ci-dessous pour relancer ta simulation de zéro !`
                       )
                       .setColor(0xef4444)
                       .setFooter({ text: 'PAWAKO FORMATION • Échec Simulation (Limite d\'alertes coach atteinte)' })
@@ -1216,8 +1224,16 @@ export class PawakoBotRunner {
                 }
               } else {
                 // Regular Fan message (plain text)
-                if ('send' in message.channel) {
-                  await (message.channel as any).send(anthonyReply).catch(() => {});
+                const isSimulationComplete = anthonyReply.includes('[SIMULATION_COMPLETE]');
+                const cleanFanReply = anthonyReply.replace(/\[SIMULATION_COMPLETE\]/gi, '').trim();
+
+                if ('send' in message.channel && cleanFanReply) {
+                  await (message.channel as any).send(cleanFanReply).catch(() => {});
+                }
+
+                if (isSimulationComplete) {
+                  await this.completeAnthonySimulationSession(session!, message.channel);
+                  return;
                 }
               }
 
@@ -3478,7 +3494,7 @@ export class PawakoBotRunner {
           `• Te délivrer les supports de cours et questionnaires de validation\n` +
           `• Chronométrer les quiz (15 secondes par question)\n` +
           `• Gérer les cooldowns de révision (30 min si score < 16/20)\n` +
-          `• Te lancer immédiatement en **Test de Simulation avec l'IA (Anthony)** dès la fin de tes cours\n\n` +
+          `• Te lancer immédiatement en **Test de Simulation avec l'IA** dès la fin de tes cours\n\n` +
           `💡 *Commande utile : tape \`!profil\` pour voir tes notes à tout moment.*`
         )
         .setColor(0x6366f1)
@@ -4461,7 +4477,7 @@ export class PawakoBotRunner {
             .setDescription(
               `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
               `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
-              `Pas d'attente ni de convocation ! Notre IA (Anthony le Fan) est déjà prête dans ce salon pour mener le test avec toi.\n\n` +
+              `Pas d'attente ni de convocation ! Notre IA est déjà prête dans ce salon pour mener le test avec toi.\n\n` +
               `Découvre la mise en situation ci-dessous et réponds directement pour lancer le chat ! 🚀`
             )
             .setColor(0x3b82f6)
@@ -4687,6 +4703,7 @@ export class PawakoBotRunner {
       startedAt: Date.now(),
       lastCandidateMsgTimestamp: 0,
       lastFanMsgTimestamp: Date.now(),
+      fanProfile: createRandomFanProfile(),
       extractedInfos: {
         name: false,
         age: false,
@@ -4705,7 +4722,12 @@ export class PawakoBotRunner {
       .setTitle('🎭 DÉMARRAGE DE LA SIMULATION')
       .setDescription(
         `Tu passes maintenant à la partie simulation !\n\n` +
-        `**On passe à la simu, tu es le chatteur je suis le fan. Je suis un new fan qui viens de s'abonner et je n'ai pas répondu au message de relance automatique. À toi de le relancer pour qu'il réponde !**\n\n` +
+        `On passe à la simu, tu es le chatteur je suis le fan. Je suis un new fan qui viens de s'abonner et je n'ai pas répondu au message de relance automatique. À toi de le relancer pour qu'il réponde !\n\n` +
+        `💡 **CE QUI EST EXIGÉ DE VOUS POUR RÉUSSIR :**\n` +
+        `• **La maîtrise totale de la partie script**, surtout pour les **NEW FAN**.\n` +
+        `• **La maîtrise des règles du PPV et des FOLLOW UP**.\n` +
+        `• **La maîtrise de la partie NÉGOCIATION**.\n\n` +
+        `⚠️ *Si vous ne les maîtrisez pas encore, révisionnez les cours car vous n'allez pas réussir à cette simulation !*\n\n` +
         `👉 À toi ${candMention} !`
       )
       .setColor(0x3b82f6)
@@ -4721,12 +4743,133 @@ export class PawakoBotRunner {
 
     store.addLog(
       startedByStaffUserId ? `Staff (<@${startedByStaffUserId}>)` : 'System',
-      `Lancement de la simulation Anthony pour ${member.username} dans salon ${channel.name || channel.id}`,
+      `Lancement de la simulation avec profil fan (${newSession.fanProfile?.name}) pour ${member.username} dans salon ${channel.name || channel.id}`,
       'member',
       member.username
     );
 
     return true;
+  }
+
+  /**
+   * Complete simulation session, analyze with Coach AI, and display out-of-100 score & feedback
+   */
+  private async completeAnthonySimulationSession(
+    session: ActiveAnthonySession,
+    channel: any
+  ) {
+    if (session.inactivityTimer) {
+      clearTimeout(session.inactivityTimer);
+      session.inactivityTimer = undefined;
+    }
+    this.activeAnthonySessions.delete(session.channelId);
+
+    const candMember =
+      store.getMember(session.candidateId) ||
+      store.getMembers().find((m) => m.id === session.candidateId || m.discordId === session.candidateDiscordId);
+
+    if (!candMember) return;
+
+    candMember.simulationAttemptsCount = (candMember.simulationAttemptsCount || 0) + 1;
+    store.saveMembers();
+    firebaseSyncService.saveMember(candMember).catch(() => {});
+
+    if (channel && 'send' in channel) {
+      await channel.send('⏳ **Simulation terminée ! Analyse complète en cours par le Coach IA Pawako...**').catch(() => {});
+    }
+
+    const evalRes = await evaluateSimulationSession(session.conversationHistory);
+    const passed = evalRes.passed && evalRes.totalScore >= evalRes.passingScore;
+
+    const criteriaText = (evalRes.criteria || [])
+      .map(
+        (c) =>
+          `• **${c.name}** : **${c.score}/${c.maxPoints} pts** ${c.passed ? '✅' : '❌'}\n  └ *${c.comment}*`
+      )
+      .join('\n');
+
+    const recsText = (evalRes.recommendations || []).map((r) => `• ${r}`).join('\n');
+
+    if (passed) {
+      candMember.candidateState = 'formation_terminee';
+      candMember.toolsFormationValidatedAt = store.getFormattedNow();
+      store.saveMembers();
+      firebaseSyncService.saveMember(candMember).catch(() => {});
+
+      const successEmbed = new EmbedBuilder()
+        .setTitle('🏆 ÉVALUATION FINALE — SIMULATION VALIDÉE !')
+        .setDescription(
+          `Félicitations <@${session.candidateDiscordId}> ! Tu as **brillamment réussi ta simulation** ! 🎉\n\n` +
+            `📊 **NOTE FINALE :** **${evalRes.totalScore} / 100** (Seuil minimum requis : ${evalRes.passingScore}/100)\n` +
+            `💬 **Bilan du Coach :** ${evalRes.globalVerdict}\n\n` +
+            `📋 **DÉTAIL DU BARÈME PAR CRITÈRE :**\n${criteriaText}\n\n` +
+            `💡 **AXES DE PROGRÈS & POINTS FORTS :**\n${recsText || 'Excellent travail sur l\'ensemble du scénario !'}\n\n` +
+            `🚀 Tu es désormais prêt(e) pour l'étape suivante de ton parcours PAWAKO !`
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Validation de Simulation' })
+        .setTimestamp();
+
+      if (channel && 'send' in channel) {
+        await channel
+          .send({
+            content: `🎉 <@${session.candidateDiscordId}>`,
+            embeds: [successEmbed],
+          })
+          .catch(() => {});
+      }
+
+      store.addLog(
+        'System',
+        `Simulation validée pour ${candMember.username} avec la note de ${evalRes.totalScore}/100`,
+        'member',
+        candMember.username
+      );
+    } else {
+      const remainingAttempts = Math.max(0, 5 - candMember.simulationAttemptsCount);
+
+      const failEmbed = new EmbedBuilder()
+        .setTitle('❌ ÉVALUATION FINALE — SIMULATION NON VALIDÉE')
+        .setDescription(
+          `Désolé <@${session.candidateDiscordId}>, ta simulation est **non validée** car ta note est inférieure au seuil de réussite.\n\n` +
+            `📊 **NOTE OBTENUE :** **${evalRes.totalScore} / 100** (Seuil requis : **${evalRes.passingScore} / 100**)\n` +
+            `📊 **Tentatives effectuées :** **${candMember.simulationAttemptsCount} / 5** (${remainingAttempts} restante(s))\n\n` +
+            `💬 **Verdict du Coach :** ${evalRes.globalVerdict}\n\n` +
+            `📋 **DÉTAIL DU BARÈME PAR CRITÈRE :**\n${criteriaText}\n\n` +
+            `🚀 **AXES D'AMÉLIORATION À TRAVAILLER :**\n${recsText || 'Revisiter les leçons sur la qualification et la négociation Bouclier + Épée.'}\n\n` +
+            `🔄 **QUE FAIRE MAINTENANT ?**\n` +
+            `• Tu dois **reprendre la simulation** et travailler tes axes d'amélioration.\n` +
+            `• Revois bien tes leçons (Script NEW FAN, PPV, Follow up, Négociation Bouclier + Épée, Promesse d'achat).\n` +
+            `• Quand tu es prêt(e), tape **\`!start-simu\`** ou clique sur le bouton ci-dessous pour relancer ta simulation !`
+        )
+        .setColor(0xef4444)
+        .setFooter({ text: 'PAWAKO FORMATION • Échec Simulation (Note < 80/100)' })
+        .setTimestamp();
+
+      const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`restart_simu_${candMember.id}`)
+          .setLabel('🔄 Recommencer la Simulation')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      if (channel && 'send' in channel) {
+        await channel
+          .send({
+            content: `📢 <@${session.candidateDiscordId}>`,
+            embeds: [failEmbed],
+            components: [retryRow],
+          })
+          .catch(() => {});
+      }
+
+      store.addLog(
+        'System',
+        `Simulation non validée pour ${candMember.username} avec la note de ${evalRes.totalScore}/100`,
+        'member',
+        candMember.username
+      );
+    }
   }
 
   /**
@@ -4737,7 +4880,10 @@ export class PawakoBotRunner {
     session: ActiveAnthonySession
   ): Promise<string> {
     try {
-      const prompt = getSimulationPrompt();
+      if (!session.fanProfile) {
+        session.fanProfile = createRandomFanProfile();
+      }
+      const prompt = getSimulationPrompt(session.fanProfile);
       const history = session.conversationHistory.slice(0, -1).map((h) => ({
         role: h.role === 'user' ? 'user' : 'assistant',
         content: h.content,

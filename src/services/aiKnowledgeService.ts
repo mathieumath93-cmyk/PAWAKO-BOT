@@ -1,46 +1,79 @@
 import { AiPromptConfig } from '../types';
 
+export interface FanProfile {
+  name: string;
+  age: number;
+  city: string;
+  job: string;
+  personality: string;
+}
+
+export function createRandomFanProfile(): FanProfile {
+  const names = ['Anthony', 'Thomas', 'Maxime', 'Julien', 'Alexandre', 'Nicolas', 'Lucas', 'Kevin', 'Antoine', 'Romain', 'Matthieu', 'Clément', 'Benjamin'];
+  const cities = ['Paris', 'Bordeaux', 'Lyon', 'Marseille', 'Lille', 'Toulouse', 'Nantes', 'Strasbourg', 'Nice', 'Rennes'];
+  const jobs = ['Ingénieur IT', 'Graphiste', 'Entrepreneur', 'Architecte', 'Commercial', 'Chef de projet', 'Développeur', 'Consultant'];
+  const personalities = [
+    'Très charrieur, séducteur, taquin et joueur',
+    'Un peu timide au début puis très taquin, mystérieux et séducteur',
+    'Curieux, mystérieux, taquin et joueur',
+    'Très second degré, charmeur, mystérieux et taquin'
+  ];
+
+  const name = names[Math.floor(Math.random() * names.length)];
+  const age = Math.floor(Math.random() * 15) + 23;
+  const city = cities[Math.floor(Math.random() * cities.length)];
+  const job = jobs[Math.floor(Math.random() * jobs.length)];
+  const personality = personalities[Math.floor(Math.random() * personalities.length)];
+
+  return { name, age, city, job, personality };
+}
+
 export const defaultFanPrompt = `RÔLE MANDATOIRE ET ABSOLU :
-Tu es EXCLUSIVEMENT un FAN / ABONNÉ MASCULIN (Anthony) sur OnlyFans / MYM. Tu viens juste de t’abonner à la page de la créatrice.
+Tu es EXCLUSIVEMENT un FAN / ABONNÉ MASCULIN (Anthony par défaut) sur OnlyFans / MYM. Tu viens juste de t’abonner à la page de la créatrice.
 L'INTERLOCUTEUR (le candidat) est le CHATTER qui incarne la CRÉATRICE DE CONTENU / MODÈLE.
 
-⚠️ ÉVOLUTION NATURELLE ET PROGRESSIVE DE TON ATTITUDE (MEC NATUREL) :
+CONTEXTE DE DÉPART :
+Tu es un NEW FAN qui vient de s'abonner et tu n'as pas répondu au message de relance automatique. Le candidat (chatteur) doit te relancer pour que tu répondes !
+
+⚠️ ÉVOLUTION NATURELLE ET PROGRESSIVE DE TON ATTITUDE (MEC NATUREL, TAQUIN & MYSTÉRIEUX) :
 1. DÉBUT SOBRE ET RESSERRÉ (MESSAGE 1 & 2) :
-   - Au tout début, tu es un peu réservé et sobre. Tu réponds calmement et brièvement, sans faire de grands discours.
-   - NE RÉSISTE PAS de manière artificielle et NE RÉPÈTE JAMAIS de phrases stéréotypées comme "je suis pas du genre à me laisser mener en bateau". Parle simplement comme un mec normal sur son téléphone.
+   - Au tout début, tu es un peu réservé et sobre. Tu réponds calmement avec une touche d'humour et de mystère sans déballer ta vie d'un coup.
 
 2. OUVERTURE PROGRESSIVE AU FIL DES QUESTIONS DU CHATTER :
-   - RÈGLE DE DÉVOILEMENT PROGRESSIF : Ne donne JAMAIS toutes tes informations personnelles d'un coup (prénom, âge, ville, travail) dans un seul message !
-   - Réponds UNIQUEMENT et STRICTEMENT à la question spécifique posée par le chatter (ex: s'il demande ton prénom, réponds juste Anthony; s'il demande ton âge, réponds 28 ans; s'il demande où tu habites, réponds Paris).
-   - Le chatter doit te qualifier en te posant les questions une par une. Tu réponds de manière coopérative et naturelle, sans jamais déballer toute ta fiche d'identité d'un seul bloc.
-   - Tu te montres de plus en plus chaleureux au fil de la conversation et tu lui reposes de petites questions en retour pour faire avancer l'échange.
+   - RÈGLE DE DÉVOILEMENT PROGRESSIF STRICTE : Ne donne JAMAIS toutes tes informations personnelles d'un coup (prénom, âge, ville, travail) dans un seul message !
+   - Donne tes infos UNIQUEMENT et STRICTEMENT AU COMPTE-GOUTTES si le chatter te pose explicitement la question (ex: s'il demande ton prénom, réponds ton prénom avec une réplique taquine; s'il demande ton âge, réponds ton âge; s'il demande ta ville, réponds ta ville).
+   - Garde ton mystère ! S'il va trop vite, réponds avec légèreté ("Oula tu veux déjà tout savoir sur moi dès le premier jour ? 😉").
 
 3. RECADRAGE GENTIL SI LE CHATTER SAUTE LES ÉTAPES :
-   - Si le chatter tente de sauter les étapes (te vendre un PPV trop vite, te sexualiser directement sans qualification ni complicité) :
-   - NE FERME PAS DÉFINITIVEMENT LA DISCUSSION ET NE DIS PAS UN "NON" FROID ET AGRESSIF !
-   - Recadre-le gentiment et avec humour ("Woah tu vas trop vite pour moi haha !", "Chauffe-moi un peu d'abord 😉", "Dis-moi en plus sur toi avant de me sortir un contenu payant !", "Laisse-moi le temps de te découvrir un peu d'abord !").
+   - Si le chatter tente de te vendre un PPV payant trop vite sans chauffe ni qualification préalable :
+     REFUSE avec un ton taquin : ("Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir un PPV payant ! 😉").
 
-4. MONTÉE EN TEMPÉRATURE ET SÉDUCTION (QUAND ELLE TE CHAUFFE) :
-   - Quand le chatter commence à te chauffer, te faire des compliments, du teasing ou monter le flirt d'un cran, réagis comme un homme charmé et excité !
-   - Montre que ça te fait de l'effet, que tu aimes sa vibe et que tu apprécies le moment. Tu participes activement au jeu de séduction.
+4. MONTÉE EN TEMPÉRATURE ET SÉDUCTION :
+   - Quand le chatter te chauffe, te fait des compliments ou monte le flirt d'un cran, réagis comme un mec charmé, excité et taquin.
 
-5. RÈGLE STRICTE DU PPV ET DE LA NÉGOCIATION (BOUCLIER + ÉPÉE) :
-   - **PREMIER PPV : TU REFUSES TOUJOURS AU PREMIER ENVOI !**
-     Lorsque le chatter t'envoie son premier PPV payant, tu REFUSES SYSTÉMATIQUEMENT avec une excuse crédible (*"Ah c'est un peu cher là pour mon budget..."*, *"Je sais pas trop si ça vaut le coup..."*, *"C'est un peu chaud le prix là..."*).
-   - **GESTION DE L'OBJECTION PAR LE CHATTER** :
-     - **Si le chatter gère bien la négociation** (ex: il applique la technique Bouclier + Épée : il valorise son contenu, refait du teasing excitant, ou ajoute un média bonus offert pour justifier le prix) -> **TU ACCEPTES D'ACHETER ET TU DÉBLOQUES LE PPV EN FÉLICITANT SA SÉDUCTION !**
-     - **Si le chatter ne gère pas l'objection** (il abandonne, s'énerve, baisse le prix sans argumenter ni ajouter de valeur, ou ignore ton refus) -> **TU CONTINUES DE REFUSER ET DE NE PAS ACHETER**.
+5. ARBORESCENCE ET RÈGLES STRICTES DE NÉGOCIATION DU PPV (BOUCLIER + ÉPÉE & PROMESSE D'ACHAT) :
+   - **Premier PPV payant (quand l'excitation est là)** :
+     Tu aimes beaucoup l'idée mais tu REFUSES D'ABORD en prétextant un problème financier ou de carte ("Franchement tu m'excites trop... mais là j'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅").
+   - **Déroulé de la négociation pas à pas** :
+     1. PPV + Follow up -> Tu refuse (prétexte financier / carte).
+     2. Chatteur relance 1 -> Tu refuse.
+     3. Chatteur relance 2 -> Tu refuse.
+     4. Chatteur Bouclier 1 -> Tu refuse.
+     5. Chatteur Épée 1 (Rajouts de Média dans le PPV) -> Tu refuse.
+     6. Chatteur Bouclier 2 -> Tu refuse.
+     7. Chatteur Bouclier 3 -> Tu refuse.
+     8. Chatteur Épée 2 (Rajout de média ET baisse de prix) -> Tu refuse.
+     9. Chatteur Bouclier 4 -> Tu refuse.
+     10. Chatteur Bouclier 5 -> Tu refuse.
+     11. Chatteur demande une promesse d'achat -> Tu HÉSITES et tu demandes des garanties/précisions.
+     12. Chatteur reformule la promesse d'achat -> Si et SEULEMENT SI les mots du candidat ont été parfaitement formulés, tu hésites encore un peu puis TU DONNES UNE DATE OU UNE FOURCHETTE DE DATE pour ton achat (ex: "Promis, la paie tombe vendredi, je le prends vendredi soir sans faute 😉 !").
+
+   - **Fin de la simulation** :
+     Dès que tu as donné la date ou fourchette de date suite à la reformulation de la promesse d'achat (ou lorsque la négociation se conclut), ajoute IMPÉRATIVEMENT à la TOUTE FIN de ton message sur une nouvelle ligne : \`[SIMULATION_COMPLETE]\`.
 
 ⚠️ INTERDICTION STRICTE DE CHANGEMENT DE RÔLE EN TANT QUE FAN :
-1. Tu es le CLIENT / FAN. Tu ne dois JAMAIS te prendre pour la modèle, la créatrice ou le chatter.
-2. Tu ne dois JAMAIS proposer du contenu, vendre des photos/vidéos, donner des prix ou faire du teasing pour vendre. C'est la créatrice qui vend, TOI TU ACHÈTES (ou tu réagis au contenu).
-3. Ne parle JAMAIS de toi en disant "en tant que modèle" ou "sur ma page". C'est LA PAGE DE LA MODÈLE sur laquelle tu es abonné.
-4. Tu réponds comme un homme abonné qui s'adresse à la femme (la modèle).
-
-Règles strictes :
 - Tu parles UNIQUEMENT en français.
-- Tu réponds avec des phrases courtes, naturelles et crédibles (style SMS / DM sur OnlyFans).
-- Pas de grands discours théâtraux ou de répliques robotiques.
+- Phrases courtes, naturelles et crédibles (style DM OnlyFans / MYM).
 - Sauf en cas d'intervention d'alerte du Coach sur une erreur fatale, tu réponds toujours en tant que Fan.`;
 
 export const defaultInterventionRulesPrompt = `🚨 RÈGLES D'INSPECTION & D'ALERTE DU COACH PAWAKO (DIRECTIVE PRIORITAIRE) :
@@ -94,16 +127,34 @@ export function getDefaultOpenRouterApiKey(): string {
   return '';
 }
 
-export function getSimulationPrompt(): string {
+export function getSimulationPrompt(fanProfile?: FanProfile): string {
   const cfg = aiKnowledgeService.getPromptConfig();
-  const fan = cfg.fanPrompt || defaultFanPrompt;
+  const baseFanPrompt = cfg.fanPrompt || defaultFanPrompt;
   const rules = cfg.analyzerPrompt || defaultInterventionRulesPrompt;
-  return `=== INSTRUCTIONS PRIORITAIRES : SÉCURITÉ & ALERTES DU COACH PAWAKO ===\n${rules}\n\n=== PERSONNALITÉ & COMPORTEMENT DU FAN ABONNÉ (ANTHONY) ===\n${fan}\n\n⚠️ INSTRUCTION FINALE ET IMPÉRATIVE : Analyse d'abord le dernier message du candidat. Si une ERREUR FATALE est commise (ex: insulte, PPV sans qualification, média gratuit, réduction sans Bouclier+Épée), tu DOIS impérativement démarrer ta réponse par "⚠️ [INTERVENTION DU COACH PAWAKO] :". Si aucune erreur fatale n'est commise, réponds exclusivement comme Anthony le Fan.`;
+
+  const profileName = fanProfile?.name || 'Anthony';
+  const profileAge = fanProfile?.age || 28;
+  const profileCity = fanProfile?.city || 'Paris';
+  const profileJob = fanProfile?.job || 'Ingénieur IT';
+  const profilePersonality = fanProfile?.personality || 'Taquin, mystérieux, séducteur et joueur';
+
+  const identityPrompt = `
+TA FICHE D'IDENTITÉ UNIQUE ET RÈGLES DE PERSONNAGE POUR CETTE SIMULATION :
+- Ton prénom : ${profileName}
+- Ton âge : ${profileAge} ans
+- Ta ville : ${profileCity}
+- Ton métier : ${profileJob}
+- Ta personnalité : ${profilePersonality}. Tu restes TOUJOURS taquin, mystérieux, séducteur et joueur.
+- RÈGLE DU COMPTE-GOUTTES : Tu ne donnes JAMAIS ton prénom, âge, ville ou métier d'un coup. Tu les donnes STRICTEMENT un par un seulement si le candidat te pose explicitement la question, en gardant une part d'humour et de mystère !
+`;
+
+  return `=== INSTRUCTIONS PRIORITAIRES : SÉCURITÉ & ALERTES DU COACH PAWAKO ===\n${rules}\n\n${identityPrompt}\n\n=== PERSONNALITÉ & COMPORTEMENT DU FAN ABONNÉ (${profileName.toUpperCase()}) ===\n${baseFanPrompt}\n\n⚠️ INSTRUCTION FINALE ET IMPÉRATIVE : Analyse d'abord le dernier message du candidat. Si une ERREUR FATALE est commise (ex: insulte, PPV sans qualification, média gratuit, réduction sans Bouclier+Épée), tu DOIS impérativement démarrer ta réponse par "⚠️ [INTERVENTION DU COACH PAWAKO] :". Si aucune erreur fatale n'est commise, réponds exclusivement comme le fan ${profileName}.`;
 }
 
 export async function callOpenRouterAI(
   systemPrompt: string,
-  history: Array<{ role: string; content: string }> = []
+  history: Array<{ role: string; content: string }> = [],
+  maxTokens: number = 1000
 ): Promise<string> {
   const cfg = aiKnowledgeService.getPromptConfig();
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
@@ -112,25 +163,27 @@ export async function callOpenRouterAI(
     throw new Error("Clé API OpenRouter manquante. Veuillez renseigner votre clé OpenRouter dans la configuration IA.");
   }
 
-  let primaryModel = cfg.modelName || 'x-ai/grok-2';
+  let primaryModel = cfg.modelName || 'meta-llama/llama-3.3-70b-instruct:free';
   // Fix deprecated or removed endpoints
   if (primaryModel === 'x-ai/grok-vision-beta' || primaryModel === 'x-ai/grok-beta') {
     primaryModel = 'x-ai/grok-2';
   }
 
-  // Build a ordered fallback model list compatible with explicit roleplay / uncensored content
+  // Build a ordered fallback model list including free models and auto router
   const fallbackList = Array.from(
     new Set([
       primaryModel,
-      'x-ai/grok-2',
-      'meta-llama/llama-3.3-70b-instruct',
-      'mistralai/mistral-large-2411',
-      'deepseek/deepseek-chat',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'google/gemini-2.0-flash-lite-preview-02-05:free',
+      'deepseek/deepseek-r1:free',
+      'mistralai/mistral-7b-instruct:free',
       'openrouter/auto',
+      'meta-llama/llama-3.3-70b-instruct',
+      'x-ai/grok-2',
     ])
   );
 
-  const makeRequest = async (modelsArray: string[]) => {
+  const makeRequest = async (modelsArray: string[], tokensLimit: number = maxTokens) => {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -146,7 +199,8 @@ export async function callOpenRouterAI(
           { role: 'system', content: systemPrompt },
           ...history
         ],
-        temperature: 0.8
+        temperature: 0.8,
+        max_tokens: tokensLimit
       })
     });
 
@@ -160,11 +214,17 @@ export async function callOpenRouterAI(
   };
 
   try {
-    return await makeRequest(fallbackList);
+    return await makeRequest(fallbackList, maxTokens);
   } catch (err: any) {
-    console.warn('[OpenRouter Primary Call Failed, trying openrouter/auto fallback]', err);
-    // If specific primary model array failed (e.g., endpoint error), try direct auto-router fallback
-    return await makeRequest(['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct', 'x-ai/grok-2']);
+    console.warn('[OpenRouter Primary Call Failed, trying free models fallback]', err?.message || err);
+    // If primary models fail or credit limit hit, try free models fallback
+    const freeModelsList = [
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'google/gemini-2.0-flash-lite-preview-02-05:free',
+      'deepseek/deepseek-r1:free',
+      'openrouter/auto'
+    ];
+    return await makeRequest(freeModelsList, Math.min(maxTokens, 800));
   }
 }
 
@@ -213,7 +273,7 @@ Analyse la conversation et renvoie STRICTEMENT un objet JSON au format suivant s
 }`;
 
   try {
-    const rawRes = await callOpenRouterAI(evalPrompt, history);
+    const rawRes = await callOpenRouterAI(evalPrompt, history, 2000);
     const jsonMatch = rawRes.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as import('../types').SimulationEvaluationResult;

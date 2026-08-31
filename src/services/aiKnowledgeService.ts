@@ -185,21 +185,32 @@ export async function callGeminiAI(
     parts: [{ text: item.content }],
   }));
 
-  const res = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Bonjour' }] }],
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.8,
-      maxOutputTokens: maxTokens,
-    },
-  });
+  const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastErr: any = null;
 
-  const text = res.text?.trim();
-  if (!text) {
-    throw new Error('Réponse vide de Gemini API');
+  for (const modelName of modelsToTry) {
+    try {
+      const res = await ai.models.generateContent({
+        model: modelName,
+        contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Bonjour' }] }],
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.8,
+          maxOutputTokens: maxTokens,
+        },
+      });
+
+      const text = res.text?.trim();
+      if (text) {
+        return sanitizeFanOutput(text);
+      }
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[Gemini Model ${modelName} Failed]`, err?.message || err);
+    }
   }
-  return sanitizeFanOutput(text);
+
+  throw lastErr || new Error('Réponse vide de Gemini API');
 }
 
 export function generateSmartFallbackFanReply(
@@ -207,7 +218,13 @@ export function generateSmartFallbackFanReply(
   history: Array<{ role: string; content: string }> = []
 ): string {
   const lastUserMsg = [...history].reverse().find((h) => h.role === 'user')?.content.toLowerCase() || '';
+  const previousAssistantMsgs = new Set(
+    history.filter((h) => h.role === 'assistant').map((h) => h.content.trim())
+  );
 
+  const exchangeCount = history.filter((h) => h.role === 'user').length;
+
+  // Specific rule responses
   if (
     lastUserMsg.includes('fdp') ||
     lastUserMsg.includes('pute') ||
@@ -222,42 +239,77 @@ export function generateSmartFallbackFanReply(
     return 'Oh c\'est mignon ce petit cadeau ! Merci beaucoup 😉 Tu as d\'autres petites surprises comme ça ?';
   }
 
-  const exchangeCount = history.filter((h) => h.role === 'user').length;
+  const candidateReplies: string[] = [];
 
-  if (lastUserMsg.includes('prénom') || lastUserMsg.includes('appelles') || lastUserMsg.includes('nom')) {
-    return 'Moi c\'est Anthony 😉 Et toi, quel est le joli prénom derrière ce profil ?';
+  if (lastUserMsg.includes('thony') || lastUserMsg.includes('anthony') || lastUserMsg.includes('appeler') || lastUserMsg.includes('prénom') || lastUserMsg.includes('appelles') || lastUserMsg.includes('nom')) {
+    candidateReplies.push('Haha Thony ça me va super bien ! Et toi du coup c\'est quel joli prénom derrière ce profil ? 😉');
+    candidateReplies.push('Moi c\'est Anthony 😉 Tu peux m\'appeler Thony si tu veux ! Et toi ?');
   }
 
-  if (lastUserMsg.includes('âge') || lastUserMsg.includes('ans') || lastUserMsg.includes('jeune')) {
-    return 'J\'ai 28 ans ! Et toi tu me donnes quel âge ? 😉';
+  if (lastUserMsg.includes('journée') || lastUserMsg.includes('journee') || lastUserMsg.includes('ça va') || lastUserMsg.includes('ca va') || lastUserMsg.includes('aujourd\'hui') || lastUserMsg.includes('forme')) {
+    candidateReplies.push('Journée plutôt sympa de mon côté, j\'ai pas mal travaillé mais là je me détends enfin ! Et la tienne s\'est bien passée ?');
+    candidateReplies.push('Ça va au top ! Je profite de ma soirée. Et toi ta journée ?');
   }
 
-  if (lastUserMsg.includes('ville') || lastUserMsg.includes('d\'où') || lastUserMsg.includes('habites')) {
-    return 'Je suis sur Paris ! Tu viens d\'où toi ?';
+  if (lastUserMsg.includes('dessiner') || lastUserMsg.includes('voyager') || lastUserMsg.includes('passions') || lastUserMsg.includes('aime') || lastUserMsg.includes('aimer') || lastUserMsg.includes('loisir') || lastUserMsg.includes('sport')) {
+    candidateReplies.push('Dessiner et voyager ? J\'adore ! Moi j\'aime le sport, les voyages et les belles rencontres... Tu dessines quoi de beau ? 😉');
+    candidateReplies.push('Franchement voyager c\'est la vie ! Tu es partie dans quel pays récemment ?');
   }
 
-  if (lastUserMsg.includes('travail') || lastUserMsg.includes('métier') || lastUserMsg.includes('fais dans la vie')) {
-    return 'Je bosse dans l\'IT ! Un métier un peu geek mais ça me permet d\'être souvent en ligne 😉';
+  if (lastUserMsg.includes('timide') || lastUserMsg.includes('soûlante') || lastUserMsg.includes('soulante') || lastUserMsg.includes('gênée') || lastUserMsg.includes('genee') || lastUserMsg.includes('flattée')) {
+    candidateReplies.push('Mais pas du tout ! Tu n\'es pas soûlante, au contraire tu m\'intrigues et tu me plais bien 😉');
+    candidateReplies.push('Haha je ne suis pas timide, j\'aime bien me faire désirer un peu... Mais dis-m\'en plus sur toi !');
+  }
+
+  if (lastUserMsg.includes('âge') || lastUserMsg.includes('ans') || lastUserMsg.includes('jeune') || lastUserMsg.includes('vieux')) {
+    candidateReplies.push('J\'ai 28 ans ! Et toi tu me donnes quel âge ? 😉');
+  }
+
+  if (lastUserMsg.includes('ville') || lastUserMsg.includes('d\'où') || lastUserMsg.includes('habites') || lastUserMsg.includes('viens')) {
+    candidateReplies.push('Je suis sur Paris ! Tu viens d\'où toi ?');
+  }
+
+  if (lastUserMsg.includes('travail') || lastUserMsg.includes('métier') || lastUserMsg.includes('fais dans la vie') || lastUserMsg.includes('boulot')) {
+    candidateReplies.push('Je bosse dans l\'IT ! Un métier un peu geek mais ça me permet d\'être souvent en ligne 😉 Et toi ?');
   }
 
   if (lastUserMsg.includes('ppv') || lastUserMsg.includes('$') || lastUserMsg.includes('€') || lastUserMsg.includes('video') || lastUserMsg.includes('photo')) {
     if (exchangeCount <= 2) {
-      return 'Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir du contenu payant ! 😉';
-    }
-    if (exchangeCount < 10) {
-      return 'Franchement tu m\'excites trop... mais là j\'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅 Tu n\'as pas un petit extrait avant ?';
+      candidateReplies.push('Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir du contenu payant ! 😉');
+    } else if (exchangeCount < 10) {
+      candidateReplies.push('Franchement tu m\'excites trop... mais là j\'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅 Tu n\'as pas un petit extrait avant ?');
     }
   }
 
   if (lastUserMsg.includes('promets') || lastUserMsg.includes('promesse') || lastUserMsg.includes('quand') || lastUserMsg.includes('paie')) {
-    return 'Promis, dès que la paie tombe ce vendredi soir, je le prends sans faute 😉 ! Merci de patienter avec moi.';
+    candidateReplies.push('Promis, dès que la paie tombe ce vendredi soir, je le prends sans faute 😉 ! Merci de patienter avec moi.');
   }
 
-  if (exchangeCount >= 10) {
-    return 'Franchement j\'adore échanger avec toi ! Dès que ma paie arrive ce vendredi, je te prends le média sans hésitation 😉';
+  // Generic varied fallback pool
+  const genericPool = [
+    'Haha tu es bien taquine toi ! Dis-moi, qu\'est-ce qui te plaît le plus chez un homme ? 😉',
+    'J\'adore ton énergie ! Tu as l\'air super intéressante et chaleureuse.',
+    'Dis-moi en un peu plus sur toi, j\'aime bien en apprendre plus avant d\'aller plus loin !',
+    'Franchement tu m\'intrigues... Tu te connectes souvent ici ?',
+    'C\'est super sympa d\'échanger avec toi ! Qu\'est-ce que tu aimes faire le soir pour te détendre ?',
+    'Haha tu sais comment captiver mon attention toi 😉',
+    'Je sens qu\'on va vraiment bien s\'entendre tous les deux !',
+    'Haha tu aimes bien poser des questions toi ! Allez, dis-moi ce que tu as prévu ce week-end ?'
+  ];
+
+  // Combine matched candidates + generic pool
+  const fullCandidates = [...candidateReplies, ...genericPool];
+
+  // Pick first unused candidate
+  for (const reply of fullCandidates) {
+    if (!previousAssistantMsgs.has(reply.trim())) {
+      return reply;
+    }
   }
 
-  return 'Haha tu es bien curieux/se toi ! Dis-moi en un peu plus sur ce que tu aimes 😉';
+  // If all were used, pick dynamically based on index to prevent exact sequential repetition
+  const fallbackIndex = (exchangeCount + lastUserMsg.length) % genericPool.length;
+  return genericPool[fallbackIndex];
 }
 
 export async function callOpenRouterAI(
@@ -265,35 +317,37 @@ export async function callOpenRouterAI(
   history: Array<{ role: string; content: string }> = [],
   maxTokens: number = 350
 ): Promise<string> {
+  // 1. Try Gemini API FIRST (built-in, reliable, fast, handles French roleplay perfectly)
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      return await callGeminiAI(systemPrompt, history, maxTokens);
+    } catch (err: any) {
+      console.warn('[Gemini API Call Failed, trying OpenRouter fallback]', err?.message || err);
+    }
+  }
+
+  // 2. Try OpenRouter API if Gemini key fails or is missing
   const cfg = aiKnowledgeService.getPromptConfig();
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
-  // Free OpenRouter models list prioritised
   const freeModelsList = [
-    'dots-studio/dots-3-note-preview:free',
-    'liquid/lfm-2.5-2.6b:free',
-    'nvidia/nemotron-3.5-lightning:free',
-    'thinkingmachines/inkling-small:free',
+    'google/gemini-2.0-flash-exp:free',
     'meta-llama/llama-3.3-70b-instruct:free',
+    'deepseek/deepseek-chat:free',
+    'qwen/qwen-2.5-72b-instruct:free',
+    'mistralai/mistral-7b-instruct:free',
+    'meta-llama/llama-3.1-8b-instruct:free',
     'openrouter/auto',
   ];
 
-  let primaryModel = cfg.modelName || 'dots-studio/dots-3-note-preview:free';
-  if (primaryModel === 'x-ai/grok-vision-beta' || primaryModel === 'x-ai/grok-beta') {
-    primaryModel = 'x-ai/grok-2';
+  let primaryModel = cfg.modelName || 'google/gemini-2.0-flash-exp:free';
+  if (primaryModel.includes('grok')) {
+    primaryModel = 'meta-llama/llama-3.3-70b-instruct:free';
   }
 
-  const candidateModels = Array.from(
-    new Set([
-      primaryModel,
-      ...freeModelsList,
-      'meta-llama/llama-3.3-70b-instruct',
-    ])
-  );
-
+  const candidateModels = Array.from(new Set([primaryModel, ...freeModelsList]));
   const safeMaxTokens = Math.min(maxTokens, 350);
 
-  // 1. Try OpenRouter API with configured free models
   if (apiKey) {
     for (const modelId of candidateModels) {
       try {
@@ -303,24 +357,24 @@ export async function callOpenRouterAI(
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://pawako-formation.app',
-            'X-Title': 'PAWAKO Formation Simulation'
+            'X-Title': 'PAWAKO Formation Simulation',
           },
           body: JSON.stringify({
             model: modelId,
             messages: [
               { role: 'system', content: systemPrompt },
-              ...history
+              ...history,
             ],
             temperature: 0.8,
-            max_tokens: safeMaxTokens
-          })
+            max_tokens: safeMaxTokens,
+          }),
         });
 
         if (response.ok) {
           const data = await response.json();
           const content = data.choices?.[0]?.message?.content;
           if (content && content.trim().length > 0) {
-            return content.trim();
+            return sanitizeFanOutput(content.trim());
           }
         } else {
           const errData = await response.json().catch(() => ({}));
@@ -332,17 +386,8 @@ export async function callOpenRouterAI(
     }
   }
 
-  // 2. Try Gemini API fallback if available
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      return await callGeminiAI(systemPrompt, history, maxTokens);
-    } catch (err: any) {
-      console.warn('[Gemini API Call Failed]', err?.message || err);
-    }
-  }
-
-  // 3. Ultra-robust Fallback Engine if all AI APIs fail
-  console.warn('[AI Service] All AI APIs failed or depleted credits. Using Smart Fail-Safe Engine.');
+  // 3. Fallback Engine with anti-repetition protection
+  console.warn('[AI Service] All AI APIs failed. Using Smart Fail-Safe Engine.');
   return generateSmartFallbackFanReply(systemPrompt, history);
 }
 

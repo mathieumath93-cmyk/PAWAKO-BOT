@@ -340,7 +340,8 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   const handleSaveMainConfig = (e: React.FormEvent) => {
     e.preventDefault();
     onboardingService.updateConfig(config);
-    onShowToast('Configuration Enregistrée 🚀', 'Toutes les modifications du parcours, des modules et des quiz ont été enregistrées.', 'success');
+    firebaseSyncService.saveOnboardingConfig(config).catch(() => {});
+    onShowToast('Configuration Enregistrée 🚀', 'Toutes les modifications du parcours, des modules et des quiz ont été enregistrées sur le serveur.', 'success');
   };
 
   const handleUpdateStepConfig = (updatedStep: ModuleStepConfig) => {
@@ -354,6 +355,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     const newConfig = { ...config, stepConfigs: steps };
     setConfig(newConfig);
     onboardingService.updateConfig(newConfig);
+    firebaseSyncService.saveOnboardingConfig(newConfig).catch(() => {});
 
     // Sync roles, title & external link directly with Module object
     moduleService.updateModule(updatedStep.moduleId, {

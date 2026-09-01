@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   Bell,
+  Check,
   CheckCircle2,
   Database,
+  Edit3,
   ExternalLink,
   Globe,
   HelpCircle,
@@ -14,6 +16,7 @@ import {
   Settings,
   Shield,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   AdminNotification,
@@ -64,6 +67,29 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [newLinkName, setNewLinkName] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [newLinkIcon, setNewLinkIcon] = useState('ExternalLink');
+
+  // Edit Link inline state
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [editLinkName, setEditLinkName] = useState('');
+  const [editLinkUrl, setEditLinkUrl] = useState('');
+
+  const handleStartEditLink = (l: UsefulLink) => {
+    setEditingLinkId(l.id);
+    setEditLinkName(l.name);
+    setEditLinkUrl(l.url);
+  };
+
+  const handleSaveEditLink = (id: string) => {
+    if (editLinkUrl && !editLinkUrl.startsWith('https://')) {
+      alert('Toutes les URLs doivent obligatoirement utiliser HTTPS (https://)');
+      return;
+    }
+    onUpdateUsefulLink(id, {
+      name: editLinkName,
+      url: editLinkUrl,
+    });
+    setEditingLinkId(null);
+  };
 
   const handleSaveBranding = (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,17 +287,69 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 {usefulLinks.map((l) => (
                   <tr key={l.id} className="hover:bg-slate-950/40">
                     <td className="py-3 px-4 font-mono font-bold text-indigo-400">#{l.order}</td>
-                    <td className="py-3 px-4 font-semibold text-white">{l.name}</td>
-                    <td className="py-3 px-4 font-mono text-xs text-indigo-300">{l.url}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onDeleteUsefulLink(l.id)}
-                        className="p-1.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {editingLinkId === l.id ? (
+                      <>
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            value={editLinkName}
+                            onChange={(e) => setEditLinkName(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                            placeholder="Nom du lien"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="url"
+                            value={editLinkUrl}
+                            onChange={(e) => setEditLinkUrl(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-indigo-300 focus:outline-none focus:border-indigo-500"
+                            placeholder="https://..."
+                          />
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleSaveEditLink(l.id)}
+                              className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white"
+                              title="Enregistrer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingLinkId(null)}
+                              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                              title="Annuler"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-3 px-4 font-semibold text-white">{l.name}</td>
+                        <td className="py-3 px-4 font-mono text-xs text-indigo-300">{l.url}</td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleStartEditLink(l)}
+                              className="p-1.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400"
+                              title="Modifier"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => onDeleteUsefulLink(l.id)}
+                              className="p-1.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

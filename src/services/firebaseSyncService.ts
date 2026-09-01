@@ -1,7 +1,7 @@
-import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { store, defaultModules, defaultQuizzes } from './store';
-import { TrainingModule, Quiz, Member, UsefulLink } from '../types';
+import { TrainingModule, Quiz, Member, UsefulLink, OnboardingFlowConfig } from '../types';
 import { onboardingService } from './onboardingService';
 
 /**
@@ -330,10 +330,33 @@ class FirebaseSyncService {
         const linksSnap = await getDocs(collection(db, 'usefulLinks'));
         const loadedLinks: UsefulLink[] = [];
         linksSnap.forEach((doc) => loadedLinks.push(doc.data() as UsefulLink));
-        loadedLinks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        store.setUsefulLinks(loadedLinks);
+        if (loadedLinks.length > 0) {
+          loadedLinks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          store.setUsefulLinks(loadedLinks);
+        } else {
+          // If Firestore usefulLinks is empty, seed current local store links to Firestore
+          const localLinks = store.getUsefulLinks();
+          for (const l of localLinks) {
+            setDoc(doc(db, 'usefulLinks', l.id), l).catch(() => {});
+          }
+        }
       } catch (linkErr) {
         console.warn('⚠️ [SWR Revalidate UsefulLinks Info]', linkErr);
+      }
+
+      // 5. Revalidate OnboardingFlowConfig
+      try {
+        const configSnap = await getDoc(doc(db, 'systemConfig', 'onboardingFlowConfig'));
+        if (configSnap.exists()) {
+          const loadedConfig = configSnap.data() as OnboardingFlowConfig;
+          onboardingService.updateConfig(loadedConfig);
+        } else {
+          // Seed local config to Firestore
+          const localCfg = onboardingService.getConfig();
+          setDoc(doc(db, 'systemConfig', 'onboardingFlowConfig'), localCfg).catch(() => {});
+        }
+      } catch (cfgErr) {
+        console.warn('⚠️ [SWR Revalidate OnboardingConfig Info]', cfgErr);
       }
 
       this.lastSyncedAt = new Date().toISOString();
@@ -345,6 +368,15 @@ class FirebaseSyncService {
   }
 
   // --- Optimistic Writes ---
+
+  public async saveOnboardingConfig(config: OnboardingFlowConfig): Promise<void> {
+    onboardingService.updateConfig(config);
+    try {
+      await setDoc(doc(db, 'systemConfig', 'onboardingFlowConfig'), config);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'systemConfig/onboardingFlowConfig');
+    }
+  }
 
   public async saveModule(moduleData: TrainingModule): Promise<void> {
     // Optimistically save to local store first

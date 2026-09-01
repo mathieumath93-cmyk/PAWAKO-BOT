@@ -2,6 +2,7 @@ import { OnboardingFlowConfig, ModuleStepConfig, Quiz, QuizQuestion } from '../t
 import { roleService } from './roleService';
 import { discordService } from './discordService';
 import { store } from './store';
+import { firebaseSyncService } from './firebaseSyncService';
 
 const STORAGE_KEY = 'pawako_onboarding_flow_config';
 const COOLDOWN_STORAGE_KEY = 'pawako_member_quiz_cooldowns';
@@ -146,12 +147,15 @@ class OnboardingService {
     const mod = store.getModule(moduleId);
     const quiz = mod ? store.getQuiz(mod.quizId || '') : undefined;
 
+    // Direct synchronization: module URL takes priority if present
+    const effectiveLinkUrl = mod?.url || (mod?.resources && mod.resources[0]?.url) || existing?.externalLinkUrl || '';
+
     if (existing) {
       return {
         ...existing,
         moduleTitle: mod?.title || existing.moduleTitle,
         directivesText: mod?.content || existing.directivesText || 'Lisez les consignes attentivement avant de passer le quiz.',
-        externalLinkUrl: existing.externalLinkUrl || mod?.url || (mod?.resources && mod.resources[0]?.url) || '',
+        externalLinkUrl: effectiveLinkUrl,
         delayMinutesBeforeQuiz: existing.delayMinutesBeforeQuiz ?? quiz?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartName: existing.roleOnStartName || mod?.roleEnCoursName || '',
         roleOnPassName: existing.roleOnPassName || mod?.roleValidatedName || '',
@@ -164,7 +168,7 @@ class OnboardingService {
       moduleId,
       moduleTitle: mod?.title || 'Module de Formation',
       directivesText: mod?.content || 'Lisez les consignes attentivement avant de passer le quiz.',
-      externalLinkUrl: mod?.url || (mod?.resources && mod.resources[0]?.url) || '',
+      externalLinkUrl: effectiveLinkUrl,
       delayMinutesBeforeQuiz: quiz?.delayMinutesBeforeQuiz ?? 0,
       roleOnStartName: mod?.roleEnCoursName || '',
       roleOnPassName: mod?.roleValidatedName || '',
@@ -186,22 +190,27 @@ class OnboardingService {
     // Bi-directional sync with store module and quiz
     const mod = store.getModule(step.moduleId);
     if (mod) {
-      store.updateModule(step.moduleId, {
+      const updatedMod = store.updateModule(step.moduleId, {
         title: step.moduleTitle,
         content: step.directivesText || mod.content,
         url: step.externalLinkUrl || mod.url,
         roleEnCoursName: step.roleOnStartName || mod.roleEnCoursName,
         roleValidatedName: step.roleOnPassName || mod.roleValidatedName,
       });
+      firebaseSyncService.saveModule(updatedMod).catch(() => {});
+
       const quiz = mod.quizId ? store.getQuiz(mod.quizId) : store.getQuizzes().find((q) => q.moduleId === step.moduleId);
       if (quiz) {
-        store.updateQuiz(quiz.id, {
+        const updatedQuiz = store.updateQuiz(quiz.id, {
           delayMinutesBeforeQuiz: step.delayMinutesBeforeQuiz ?? quiz.delayMinutesBeforeQuiz,
           successMessage: step.successMessage || quiz.successMessage,
           failureMessage: step.failureMessage || quiz.failureMessage,
         });
+        firebaseSyncService.saveQuiz(updatedQuiz).catch(() => {});
       }
     }
+
+    firebaseSyncService.saveOnboardingConfig(this.config).catch(() => {});
   }
 
   /**

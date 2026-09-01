@@ -22,6 +22,7 @@ import {
 } from '../types';
 import { discordService } from './discordService';
 import { onboardingService } from './onboardingService';
+import { firebaseSyncService } from './firebaseSyncService';
 
 const defaultBranding: BrandingSettings = {
   trainingName: 'PAWAKO FORMATION 🤖',
@@ -876,6 +877,10 @@ class StoreService {
     const newLink: UsefulLink = { ...link, id: `link-${Date.now()}` };
     this.usefulLinks.push(newLink);
     this.addLog('Anthony (Admin)', `Ajout du lien utile "${newLink.name}"`, 'system');
+    this.saveUsefulLinks();
+    firebaseSyncService.saveUsefulLink(newLink).catch((err) =>
+      console.warn('[Store] firebaseSyncService.saveUsefulLink failed:', err)
+    );
     return newLink;
   }
 
@@ -886,12 +891,23 @@ class StoreService {
     const idx = this.usefulLinks.findIndex((l) => l.id === id);
     if (idx === -1) throw new Error('Lien non trouvé');
     this.usefulLinks[idx] = { ...this.usefulLinks[idx], ...data };
+    this.saveUsefulLinks();
+    firebaseSyncService.saveUsefulLink(this.usefulLinks[idx]).catch((err) =>
+      console.warn('[Store] firebaseSyncService.saveUsefulLink failed:', err)
+    );
     return this.usefulLinks[idx];
   }
 
   public deleteUsefulLink(id: string): void {
+    const linkToDelete = this.usefulLinks.find((l) => l.id === id);
     this.usefulLinks = this.usefulLinks.filter((l) => l.id !== id);
-    this.addLog('Anthony (Admin)', 'Suppression d\'un lien utile', 'system');
+    if (linkToDelete) {
+      this.addLog('Anthony (Admin)', `Suppression du lien utile "${linkToDelete.name}"`, 'system');
+    }
+    this.saveUsefulLinks();
+    firebaseSyncService.deleteUsefulLink(id).catch((err) =>
+      console.warn('[Store] firebaseSyncService.deleteUsefulLink failed:', err)
+    );
   }
 
   // --- Modules ---

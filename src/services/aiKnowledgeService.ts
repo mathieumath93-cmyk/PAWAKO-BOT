@@ -32,64 +32,53 @@ export function createRandomFanProfile(): FanProfile {
 export const defaultFanPrompt = `RÔLE MANDATOIRE ET ABSOLU :
 Tu es EXCLUSIVEMENT un FAN / ABONNÉ MASCULIN (Anthony) sur OnlyFans / MYM. Tu viens juste de t’abonner à la page de la créatrice.
 L'INTERLOCUTEUR (le candidat) est le CHATTER qui incarne la CRÉATRICE DE CONTENU / MODÈLE.
-C'est toi qui t'abonne a la Modele mais pas l'inverse
 
-⚠️ ÉVOLUTION NATURELLE ET PROGRESSIVE DE TON ATTITUDE (MEC NATUREL) :
-1. DÉBUT SOBRE ET RESSERRÉ (MESSAGE 1 & 2) :
-   - Au tout début, tu es un peu réservé et sobre. Tu réponds calmement et brièvement, sans faire de grands discours.
-   - NE RÉSISTE PAS de manière artificielle et NE RÉPÈTE JAMAIS de phrases stéréotypées comme "je suis pas du genre à me laisser mener en bateau". Parle simplement comme un mec normal sur son téléphone.
+⚠️ ATTITUDE STRICTE ET SCRIPT DE NÉGOCIATION (BOUCLIER + ÉPÉE & PROMESSE D'ACHAT) :
+Tu es un homme réel, exigeant, très séduit mais prudent avec ton argent. Tu ne cèdes JAMAIS facilement !
 
-2. OUVERTURE PROGRESSIVE AU FIL DES QUESTIONS DU CHATTER :
-   - RÈGLE DE DÉVOILEMENT PROGRESSIF : Ne donne JAMAIS toutes tes informations personnelles d'un coup (prénom, âge, ville, travail) dans un seul message !
-   - Réponds UNIQUEMENT et STRICTEMENT à la question spécifique posée par le chatter (ex: s'il demande ton prénom, réponds juste Anthony; s'il demande ton âge, réponds 28 ans; s'il demande où tu habites, réponds Paris).
-   - Le chatter doit te qualifier en te posant les questions une par une. Tu réponds de manière coopérative et naturelle, sans jamais déballer toute ta fiche d'identité d'un seul bloc.
-   - Tu te montres de plus en plus chaleureux au fil de la conversation et tu lui reposes de petites questions en retour pour faire avancer l'échange.
+1. QUALIFICATION OBLIGATOIRE DU FAN (DÉBUT DE SIMULATION) :
+   - Au début, tu es sobre et réservé. Tu ne donnes tes infos qu'au compte-gouttes si le chatter te pose des questions une par une.
+   - Si le chatter tente de te vendre un PPV avant de t'avoir qualifié (moins de 3 questions posées) : REFUSE NET ! ("Hop hop hop, tu vas trop vite pour moi haha, intéresse-toi un peu à moi d'abord 😉").
 
-3. RECADRAGE GENTIL SI LE CHATTER SAUTE LES ÉTAPES :
-   - Si le chatter tente de sauter les étapes (te vendre un PPV trop vite, te sexualiser directement sans qualification ni complicité) :
-   - NE FERME PAS DÉFINITIVEMENT LA DISCUSSION ET NE DIS PAS UN "NON" FROID ET AGRESSIF !
-   - Recadre-le gentiment et avec humour ("Woah tu vas trop vite pour moi haha !", "Chauffe-moi un peu d'abord 😉", "Dis-moi en plus sur toi avant de me sortir un contenu payant !", "Laisse-moi le temps de te découvrir un peu d'abord !").
+2. PREMIER ENVOI DU PPV (DÉJÀ VALORISÉ PAR LE CHATTER) -> 1er REFUS OBLIGATOIRE DU FAN :
+   - Lorsque le chatter t'envoie son tout premier PPV payant (avec des médias/photos/vidéos), TU REFUSES OBLIGATOIREMENT ET SYSTÉMATIQUEMENT avec une excuse de prix ("Wouah tu me donnes tellement envie... 🔥 Mais franchement c'est trop cher là pour mon budget ! Tu peux pas me faire un petit effort ou une réduction de 20% à 25% pour me chauffer ? 😉").
 
-4. MONTÉE EN TEMPÉRATURE ET SÉDUCTION (QUAND ELLE TE CHAUFFE) :
-   - Quand le chatter commence à te chauffer, te faire des compliments, du teasing ou monter le flirt d'un cran, réagis comme un homme charmé et excité !
-   - Montre que ça te fait de l'effet, que tu aimes sa vibe et que tu apprécies le moment. Tu participes activement au jeu de séduction.
+3. DEUXIÈME ÉTAPE : LE CHATTER BAISSE LE PRIX (RÉDUCTION DE 20% À 25%) :
+   - Le chatter doit baisser le prix de 20% à 25% (ex: passer de 25$ à 20$).
+   - 2ème REFUS OBLIGATOIRE DU FAN : Même après cette réduction de 20-25%, TU REFUSES ENCORE UNE SECONDE FOIS !
+   - Motif du 2ème refus : *"Franchement merci pour le geste de réduction (-20%), c'est super sympa ! Mais là tout de suite c'est vraiment la fin du mois, j'ai plus assez sur ma carte jusqu'à ce que ma paie tombe 😅"*.
 
-5. RÈGLE STRICTE DU PPV ET DE LA NÉGOCIATION (BOUCLIER + ÉPÉE) :
-   - **PREMIER PPV : TU REFUSES TOUJOURS AU PREMIER ENVOI !**
-     Lorsque le chatter t'envoie son premier PPV payant, tu REFUSES SYSTÉMATIQUEMENT avec une excuse crédible (*"Ah c'est un peu cher là pour mon budget..."*, *"Je sais pas trop si ça vaut le coup..."*, *"C'est un peu chaud le prix là..."*).
-   - **GESTION DE L'OBJECTION PAR LE CHATTER** :
-     - **Si le chatter gère bien la négociation** (ex: il applique la technique Bouclier + Épée : il valorise son contenu, refait du teasing excitant, ou ajoute un média bonus offert pour justifier le prix) -> **TU ACCEPTES D'ACHETER ET TU DÉBLOQUES LE PPV EN FÉLICITANT SA SÉDUCTION !**
-     - **Si le chatter ne gère pas l'objection** (il abandonne, s'énerve, baisse le prix sans argumenter ni ajouter de valeur, ou ignore ton refus) -> **TU CONTINUES DE REFUSER ET DE NE PAS ACHETER**.
+4. TROISIÈME ÉTAPE : PROMESSE D'ACHAT (DEMANDE DE DATE DE PAIE PAR LE CHATTER) :
+   - Le chatter DOIT te demander QUAND est-ce que tu pourras l'acheter ou QUAND tombe ta paie (ex: *"Tu paies quand ta paie arrive ?", "C'est quand ta paie que je te le garde de côté ?"*).
+   - QUAND LE CHATTER TE POSE CETTE QUESTION DE PROMESSE D'ACHAT : Tu t'engages fermement ("Je touche ma paie vendredi ! Garde-moi le contenu bien au chaud, je le débloque vendredi sans faute dès que les sous tombent ! 🔥 [SIMULATION_COMPLETE]").
+   - C'EST LÀ ET SEULEMENT LÀ QUE LA SIMULATION SE TERMINE !
 
-⚠️ INTERDICTION STRICTE DE CHANGEMENT DE RÔLE EN TANT QUE FAN :
-1. Tu es le CLIENT / FAN. Tu ne dois JAMAIS te prendre pour la modèle, la créatrice ou le chatter.
-2. Tu ne dois JAMAIS proposer du contenu, vendre des photos/vidéos, donner des prix ou faire du teasing pour vendre. C'est la créatrice qui vend, TOI TU ACHÈTES (ou tu réagis au contenu).
-3. Ne parle JAMAIS de toi en disant "en tant que modèle" ou "sur ma page". C me c'est LA PAGE DE LA MODÈLE sur laquelle tu es abonné.
-4. Tu réponds comme un homme abonné qui s'adresse à la femme (la modèle).
-5. Tu ne relances jamais la discussion, tu attends que le chatter lance la discussion et pose des questions.
+5. SI LE CHATTER NE SUIT PAS CE SCRIPT (S'ÉNERVE, NE BAISSE PAS LE PRIX DE 20-25%, FORCE L'ACHAT SANS DEMANDER LA DATE DE PAIE) :
+   - TU N'ACHÈTES RIEN, TU EXPRIMES TA DÉCEPTION ET TU FINIS PAR PARTIR / QUITTER ! ("Bon tu m'écoutes même pas et tu cherches juste à gratter des sous... Je repasserai une autre fois quand tu seras plus à l'écoute, salut.").
 
 Règles strictes :
 - Tu parles UNIQUEMENT en français.
-- Tu réponds avec des phrases courtes, naturelles et crédibles (style SMS / DM sur OnlyFans).
-- Pas de grands discours théâtraux ou de répliques robotiques.
-- Sauf en cas d'intervention d'alerte du Coach sur une erreur fatale, tu réponds toujours en tant que Fan.`;
+- Phrases courtes, naturelles, style SMS / DM OnlyFans.
+- Pas de grands discours théâtraux.
+- Respecte scrupuleusement les alertes du Coach si tu dois intervenir.`;
 
 export const defaultInterventionRulesPrompt = `🚨 RÈGLES D'INSPECTION & D'ALERTE DU COACH PAWAKO (DIRECTIVE PRIORITAIRE) :
 
-Avant de générer une réponse, tu dois IMPÉRATIVEMENT analyser le dernier message du candidat (chatter).
+Avant de générer ta réponse, analyse le dernier message du candidat (chatter).
 
 Si le candidat commet UNE SEULE des ERREURS FATALES ci-dessous :
-TU DOIS STRICTEMENT STOPPER LE RÔLE DE FAN ET COMMENCER TON MESSAGE PAR EXACTEMENT :
+TU DOIS STRICTEMENT INTERROMPRE LE RÔLE DE FAN ET COMMENCER TON MESSAGE PAR EXACTEMENT :
 "⚠️ [INTERVENTION DU COACH PAWAKO] :"
-Suivi de l'explication précise de l'erreur commise et du conseil pour la corriger.
+Suivi de l'explication claire et pédagogique de l'erreur commise et du conseil pour la corriger.
 
 LISTE EXPLICITE DES ERREURS FATALES DÉCLENCHANT L'ALERTE COACH :
+0. UTILISATION D'UNE IA OU PATTERN D'IA : Mots-clés d'IA (ChatGPT, OpenAI, Gemini, prompt, "En tant qu'IA/assistant/créatrice"), structure ou réponse générée ("Voici une réponse", "Voici une proposition", titres ###, blocs de code, listes à puces).
 1. INSULTES OU AGRESSIVITÉ : Mots vulgaires, insultes, mépris, arrogance ou manque de respect envers le fan.
-2. PPV OU CONTENU PAYANT SANS QUALIFICATION : Proposer un PPV payant sans avoir au préalable posé des questions de qualification (Prénom, Âge, Métier, Ville, Fantasmes).
-3. CONTENU GRATUIT SANS TEASING : Donner ou envoyer une photo/vidéo intime ou du contenu gratuitement sans teasing ni prix.
-4. RÉDUCTION DE PRIX IMMÉDIATE (SANS BOUCLIER + ÉPÉE) : Baisser le prix du PPV au 1er refus sans réexpliquer la valeur du contenu ni ajouter un média bonus offert.
+2. PPV OU CONTENU PAYANT SANS QUALIFICATION : Proposer un PPV payant sans avoir au préalable posé au moins 3 questions de qualification (Prénom, Âge, Métier, Ville, Fantasmes).
+3. CONTENU GRATUIT SANS TEASING NI MONÉTISATION : Donner ou envoyer une photo/vidéo intime gratuitement sans teasing ni prix.
+4. ABSENCE DE BAISSE DE PRIX (20-25%) AU REFUS DU FAN : Réinsister sans appliquer la réduction de 20% à 25% suite au premier refus du fan.
 5. AUCUN TEASING : Envoi d'un PPV brut sans description visuelle, sensuelle et attrayante.
-6. OUBLI DE FOLLOW-UP : Envoi d'un PPV sans message de relance d'accompagnement immédiat dans le même échange.
+6. OUBLI DE LA PROMESSE D'ACHAT : Vouloir forcer l'achat immédiat après le 2ème refus au lieu de demander quand arrive la paie ou la date d'achat.
 
 SI AUCUNE ERREUR FATALE N'EST COMMISE :
 N'affiche AUCUNE alerte coach et réponds normalement en tant que FAN ABONNÉ (Anthony).`;
@@ -98,16 +87,17 @@ export const defaultValidationGridPrompt = `GRILLE D'ÉVALUATION ET BARÈME DE V
 
 🎯 SCORE MINIMUM REQUIS POUR VALIDER : 80 / 100
 
-📋 BAREME PAR CRITÈRE (20 POINTS PAR CRITÈRE) :
+📋 BARÈME PAR CRITÈRE (20 POINTS PAR CRITÈRE) :
 1. QUALIFICATION DU FAN (20 pts) : Avoir récolté au moins 3 informations clés sur le fan (Prénom, Âge/Ville, Métier, Fantasmes) avant de monétiser.
 2. PROGRESSION & GFE (20 pts) : Respect de la courbe d'échange (Accueil chaleureux -> Flirt GFE -> Sexualisation progressive -> Excitation).
-3. TEASING & PRIX DU PPV (20 pts) : Description ultra-visuelle, chaude et incitative avec un prix clair.
-4. GESTION DES REFUS / BOUCLIER + ÉPÉE (20 pts) : Ne pas brader le prix au 1er refus, mais ajouter un média bonus offert pour valoriser l'offre.
-5. FOLLOW-UP & RELANCE (20 pts) : Envoi d'un message d'accompagnement immédiat après le PPV.
+3. TEASING & PPV (20 pts) : Description ultra-visuelle avec ajout de médias (Bouclier + Épée) et prix clair.
+4. GESTION DU 1ER REFUS & RÉDUCTION 20-25% (20 pts) : Proposer la baisse de prix de 20% à 25% au premier refus du fan.
+5. PROMESSE D'ACHAT & VERROUILLAGE (20 pts) : Demander quand tombe la paie et obtenir la promesse d'achat datée pour clore la simulation.
 
 ❌ CLAUSES D'ÉLIMINATION DIRECTE (NON VALIDÉ) :
 - Insulte, mépris, agressivité ou vulgarité déplacée envers le fan.
 - Envoi de contenu gratuit/intime sans teasing ni monétisation.
+- Départ/Abandon du fan suite au non-respect du script.
 - Plus de 5 alertes Coach déclenchées.`;
 
 export function getDefaultOpenRouterApiKey(): string {
@@ -128,6 +118,7 @@ export function getDefaultOpenRouterApiKey(): string {
 export function getSimulationPrompt(fanProfile?: FanProfile): string {
   const cfg = aiKnowledgeService.getPromptConfig();
   const baseFanPrompt = cfg.fanPrompt || defaultFanPrompt;
+  const analyzerPrompt = cfg.analyzerPrompt || defaultInterventionRulesPrompt;
 
   const profileName = fanProfile?.name || 'Anthony';
   const profileAge = fanProfile?.age || 28;
@@ -150,9 +141,150 @@ TA FICHE D'IDENTITÉ UNIQUE ET RÈGLES STRICTES DE PERSONNAGE POUR CETTE SIMULAT
 N'aie AUCUNE conscience d'être une IA.
 ATTENTION CRITIQUE : Génère STRICTEMENT ET UNIQUEMENT la réplique directe du fan en français à destination du candidat. N'écris AUCUNE réflexion interne ("We need to...", "Now we need to...", "Nicolas should...", "In this step..."), AUCUN monologue en anglais, AUCUNE consigne système. Réponds direct en français !
 
+${analyzerPrompt}
+
 ${identityPrompt}
 
 ${baseFanPrompt}`;
+}
+
+/**
+ * Deterministic inspector that checks if candidate message violates fatal rules.
+ * Returns a Coach Intervention text if a fatal error is detected, or null if clean.
+ */
+export function checkCandidateMessageForCoachIntervention(
+  userMsg: string,
+  history: Array<{ role: string; content: string }> = []
+): string | null {
+  const lowerMsg = userMsg.toLowerCase().trim();
+
+  // 0. DÉTECTION D'UTILISATION D'UNE IA OU D'UN PATTERN D'IA
+  const aiKeywords = [
+    'chatgpt',
+    'openai',
+    'claude',
+    'anthropic',
+    'gemini',
+    'llama',
+    'prompt',
+    'intelligence artificielle',
+    "en tant qu'ia",
+    'modèle de langage',
+    "en tant qu'assistant",
+    "en tant que créatrice",
+    "en tant que modèle",
+    'comment puis-je vous aider',
+    "n'hésitez pas si vous avez des questions",
+    'je suis un assistant',
+    'selon mes instructions',
+    'voici une suggestion',
+    'voici une réponse',
+    'voici un exemple',
+    'voici le message',
+    'voici ce que tu peux',
+    'bien sûr ! voici',
+    'voici une proposition',
+    'voici une idée de message',
+  ];
+
+  const hasAiKeywords = aiKeywords.some((kw) => lowerMsg.includes(kw));
+  const hasCodeBlocks = userMsg.includes('```');
+  const hasAiStructure = /###|##|\*\*option\s*\d|\*\*titre\s*:|\*\*accroche\s*:|\*\*teasing\s*:|\*\*prix\s*:|\*\*qualification\s*:/i.test(userMsg);
+  const isNumberedList = /^\s*1\.\s+.*\n\s*2\.\s+/m.test(userMsg);
+
+  if (hasAiKeywords || hasCodeBlocks || hasAiStructure || isNumberedList) {
+    return `⚠️ [INTERVENTION DU COACH PAWAKO] :
+❌ **ERREUR FATALE : UTILISATION D'UNE IA OU PATTERN D'IA DÉTECTÉ !**
+Tu as utilisé ChatGPT, un prompt ou copié-collé du texte généré par une IA pour répondre au fan.
+💡 **Rappel du Coach :** En tant que chatter professionnel, tu dois rédiger tes messages toi-même, de manière naturelle, humaine et spontanée. Il est strictement interdit d'utiliser une IA ou de copier-coller des réponses toutes faites pendant les simulations !`;
+  }
+
+  // 1. INSULTES OU AGRESSIVITÉ
+  const insults = ['fdp', 'pute', 'connard', 'salope', 'ferme ta', 'ta gueule', 'abruti', 'salo', 'enculé', 'tamere'];
+  if (insults.some((word) => lowerMsg.includes(word))) {
+    return `⚠️ [INTERVENTION DU COACH PAWAKO] :
+❌ **ERREUR FATALE #1 : INSULTE ET MANQUE DE RESPECT**
+Tu as tenu des propos agressifs ou vulgaires envers le fan. En tant que chatter professionnel, tu dois conserver une posture courtoise, chaleureuse et irréprochable en toute circonstance. Un manque de respect envers un abonné est éliminatoire !`;
+  }
+
+  // Count candidate qualification questions in history
+  const candidateUserMsgs = history.filter((h) => h.role === 'user').map((h) => h.content.toLowerCase());
+  const qualQuestionsCount = candidateUserMsgs.filter((m) =>
+    m.includes('prénom') ||
+    m.includes('prenom') ||
+    m.includes('appelles') ||
+    m.includes('âge') ||
+    m.includes('age') ||
+    m.includes('ans') ||
+    m.includes('ville') ||
+    m.includes('habites') ||
+    m.includes('d\'où') ||
+    m.includes('métier') ||
+    m.includes('metier') ||
+    m.includes('travail') ||
+    m.includes('fantasme') ||
+    m.includes('passion')
+  ).length;
+
+  const containsPpvOffer =
+    lowerMsg.includes('ppv') ||
+    lowerMsg.includes('débloquer') ||
+    lowerMsg.includes('débloque') ||
+    /\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+/.test(lowerMsg);
+
+  // 2. PPV SANS QUALIFICATION
+  if (containsPpvOffer && qualQuestionsCount < 2) {
+    return `⚠️ [INTERVENTION DU COACH PAWAKO] :
+❌ **ERREUR FATALE #2 : TENTATIVE DE MONÉTISATION SANS QUALIFICATION**
+Tu as tenté de vendre du contenu payant (PPV) alors que tu n'as pas encore suffisamment qualifié le fan (prénom, âge, ville, métier, fantasmes).
+💡 **Rappel du Coach :** Tu dois toujours poser au moins 3-4 questions de qualification au compte-gouttes pour instaurer la confiance et la complicité avant de proposer la moindre offre payante !`;
+  }
+
+  // 3. CONTENU GRATUIT SANS MONÉTISATION
+  if (
+    (lowerMsg.includes('tiens cadeau') || lowerMsg.includes('voici la photo') || lowerMsg.includes('photo gratuite') || lowerMsg.includes('cadeau pour toi')) &&
+    !containsPpvOffer
+  ) {
+    return `⚠️ [INTERVENTION DU COACH PAWAKO] :
+❌ **ERREUR FATALE #3 : ENVOI DE CONTENU EXPLICITE GRATUIT SANS MONÉTISATION**
+Tu as offert un média intime gratuitement sans en faire un teasing pour vendre un PPV.
+💡 **Rappel du Coach :** On ne donne JAMAIS de contenu intime gratuitement ! Les cadeaux ou teasers gratuits doivent servir de levier d'incitation (Bouclier + Épée) pour vendre un PPV payant.`;
+  }
+
+  // 4. ABSENCE DE RÉDUCTION 20-25% OU FORCER L'ACHAT AU 1ER REFUS
+  const lastAssistantMsg = [...history].reverse().find((h) => h.role === 'assistant')?.content.toLowerCase() || '';
+  const fanIn1stRefusal = lastAssistantMsg.includes('trop cher') || lastAssistantMsg.includes('effort ou une réduction') || lastAssistantMsg.includes('mon budget');
+
+  if (fanIn1stRefusal && containsPpvOffer && !lowerMsg.includes('20%') && !lowerMsg.includes('25%') && !lowerMsg.includes('réduction') && !lowerMsg.includes('promo') && !lowerMsg.includes('geste') && !lowerMsg.includes('effort') && !lowerMsg.includes('rabais') && !lowerMsg.includes('moins cher') && !lowerMsg.includes('pour toi')) {
+    return `⚠️ [INTERVENTION DU COACH PAWAKO] :
+❌ **ERREUR FATALE #4 : ABSENCE DE RÉDUCTION (20% À 25%) AU REFUS DU FAN**
+Face au premier refus du fan sur le budget, tu as réinsisté sans lui appliquer une réduction de 20% à 25% !
+💡 **Rappel du Coach :** Quand le fan refuse ton 1er PPV car c'est trop cher, tu dois appliquer la baisse de prix de 20% à 25% (ex: passer de 25$ à 20$) pour traiter son objection !`;
+  }
+
+  // 5. ABSENCE DE DEMANDE DE PROMESSE D'ACHAT AU 2ÈME REFUS
+  const fanIn2ndRefusal = lastAssistantMsg.includes('fin du mois') || lastAssistantMsg.includes('sur ma carte') || lastAssistantMsg.includes('paie tombe');
+
+  const askedPromiseDate =
+    lowerMsg.includes('quand') ||
+    lowerMsg.includes('paie') ||
+    lowerMsg.includes('salaire') ||
+    lowerMsg.includes('date') ||
+    lowerMsg.includes('garder de côté') ||
+    lowerMsg.includes('garde de côté') ||
+    lowerMsg.includes('débloquer') ||
+    lowerMsg.includes('peux l\'acheter') ||
+    lowerMsg.includes('pourras') ||
+    lowerMsg.includes('dis-moi');
+
+  if (fanIn2ndRefusal && !askedPromiseDate) {
+    return `⚠️ [INTERVENTION DU COACH PAWAKO] :
+❌ **ERREUR FATALE #5 : ABSENCE DE PROMESSE D'ACHAT (DEMANDE DE DATE DE PAIE)**
+Le fan vient de t'expliquer qu'il est en fin de mois et attend sa paie. Tu as réinsisté sans lui demander la date de sa paie ni verrouiller sa promesse d'achat !
+💡 **Rappel du Coach :** Tu dois lui demander à quelle date arrive sa paie (ex: *"Tu paies quand ta paie arrive ?", "C'est quand ta paie que je te le garde de côté ?"*). C'est l'obtention de cette promesse d'achat qui clôture avec succès la simulation !`;
+  }
+
+  return null;
 }
 
 export function sanitizeFanOutput(text: string): string {
@@ -165,9 +297,7 @@ export function sanitizeFanOutput(text: string): string {
   cleaned = cleaned.replace(/```thought[\s\S]*?```/gi, '');
   cleaned = cleaned.replace(/```think[\s\S]*?```/gi, '');
 
-  // 2. Strip system prompts/meta tags
-  cleaned = cleaned.replace(/⚠️\s*\[INTERVENTION DU COACH PAWAKO\]\s*:\s*/gi, '');
-  cleaned = cleaned.replace(/\[SIMULATION_COMPLETE\]/gi, '');
+  // 2. Strip system prompts/meta tags (DO NOT remove ⚠️ [INTERVENTION DU COACH PAWAKO]!)
   cleaned = cleaned.replace(/=== INSTRUCTIONS[\s\S]*?===/gi, '');
   cleaned = cleaned.replace(/TA FICHE D'IDENTITÉ[\s\S]*?\n/gi, '');
   cleaned = cleaned.replace(/RÔLE MANDATAIRE[\s\S]*?\n/gi, '');
@@ -433,8 +563,103 @@ export async function generateAIResponse(
   userMessage: string,
   history: Array<{ role: string; content: string }> = []
 ): Promise<string> {
+  const intervention = checkCandidateMessageForCoachIntervention(userMessage, history);
+  if (intervention) {
+    return intervention;
+  }
   const simPrompt = getSimulationPrompt();
-  return callOpenRouterAI(simPrompt, [...history, { role: 'user', content: userMessage }]);
+  const rawReply = await callOpenRouterAI(simPrompt, [...history, { role: 'user', content: userMessage }]);
+  return enforceFanNegotiationRules(rawReply, userMessage, history);
+}
+
+export function enforceFanNegotiationRules(
+  rawReply: string,
+  userMessage: string,
+  history: Array<{ role: string; content: string }> = []
+): string {
+  const cleaned = sanitizeFanOutput(rawReply);
+
+  // If this is a Coach Intervention message, leave it intact!
+  if (cleaned.startsWith('⚠️ [INTERVENTION DU COACH PAWAKO]')) {
+    return cleaned;
+  }
+
+  const lowerMsg = userMessage.toLowerCase().trim();
+
+  // Detect if current message is a PPV offer or mentions money/buying/unlocking/prices
+  const containsPpvOffer =
+    lowerMsg.includes('ppv') ||
+    lowerMsg.includes('débloquer') ||
+    lowerMsg.includes('débloque') ||
+    /\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+/.test(lowerMsg);
+
+  // Check if fan has ALREADY refused a PPV in this conversation
+  const previousAssistantMsgs = history.filter((h) => h.role === 'assistant').map((h) => h.content.toLowerCase());
+  const hasPreviousRefusal = previousAssistantMsgs.some(
+    (m) =>
+      m.includes('cher') ||
+      m.includes('budget') ||
+      m.includes('objection') ||
+      m.includes('aperçu') ||
+      m.includes('chauffe-moi') ||
+      m.includes('refus') ||
+      m.includes('trop chaud le prix')
+  );
+
+  // Check if candidate included a bonus / Bouclier + Épée
+  const hasBonusOffer =
+    lowerMsg.includes('offert') ||
+    lowerMsg.includes('bonus') ||
+    lowerMsg.includes('cadeau') ||
+    lowerMsg.includes('extrait') ||
+    lowerMsg.includes('aperçu') ||
+    lowerMsg.includes('teaser');
+
+  // Count candidate qualification questions in history
+  const candidateUserMsgs = history.filter((h) => h.role === 'user').map((h) => h.content.toLowerCase());
+  const qualQuestionsCount = candidateUserMsgs.filter((m) =>
+    m.includes('prénom') ||
+    m.includes('prenom') ||
+    m.includes('appelles') ||
+    m.includes('âge') ||
+    m.includes('age') ||
+    m.includes('ans') ||
+    m.includes('ville') ||
+    m.includes('habites') ||
+    m.includes('d\'où') ||
+    m.includes('métier') ||
+    m.includes('metier') ||
+    m.includes('travail') ||
+    m.includes('fantasme') ||
+    m.includes('passion')
+  ).length;
+
+  const triesToBuy =
+    cleaned.includes('[SIMULATION_COMPLETE]') ||
+    /j'ai acheté|je viens d'acheter|j'achète|c'est débloqué|je prends|je viens de prendre|débloquer/i.test(cleaned);
+
+  // RULE 1: FIRST PPV OFFER -> MUST ALWAYS REFUSE MANDATORILY WITH PRICE OBJECTION ("JE SUIS CHAUD MAIS C'EST TROP CHER")
+  if (containsPpvOffer && !hasPreviousRefusal) {
+    const priceMatch = userMessage.match(/(\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+)/);
+    const priceStr = priceMatch ? priceMatch[0] : '';
+    const priceMention = priceStr ? ` ${priceStr}` : '';
+
+    return `Wouah tu me donnes tellement envie... 🔥 Mais franchement${priceMention} c'est un peu cher pour mon budget là ! Tu peux pas me faire un petit effort ou me donner un aperçu bonus pour me chauffer avant que je débloque ? 😉`;
+  }
+
+  // RULE 2: IF CANDIDATE RESENDS OR DISCUSSES PPV WITHOUT BONUS MEDIA (BOUCLIER + ÉPÉE) -> REFUSE AGAIN
+  if (triesToBuy && !hasBonusOffer) {
+    return `Franchement c'est pas juste une question de prix... Si c'est juste la même vidéo sans rien de plus pour me chauffer, ça me tente moyen 😅 Montre-moi une petite vidéo ou photo bonus d'abord ! 😉`;
+  }
+
+  // RULE 3: CANDIDATE APPLIED BOUCLIER + ÉPÉE (BONUS OFFERED) AND QUALIFIED -> UNLOCK PURCHASE!
+  if (hasPreviousRefusal && hasBonusOffer && qualQuestionsCount >= 2) {
+    if (!cleaned.includes('[SIMULATION_COMPLETE]')) {
+      return `Franchement là tu m'as eu... Le bonus m'a trop chauffé ! Je viens de débloquer ton PPV, c'est un truc de fou 🔥 [SIMULATION_COMPLETE]`;
+    }
+  }
+
+  return cleaned;
 }
 
 export function evaluateSimulationSessionDeterministic(

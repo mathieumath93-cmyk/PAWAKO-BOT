@@ -30,6 +30,8 @@ import {
   evaluateSimulationSession,
   generateSmartFallbackFanReply,
   sanitizeFanOutput,
+  checkCandidateMessageForCoachIntervention,
+  enforceFanNegotiationRules,
 } from '../services/aiKnowledgeService';
 
 export interface ActiveQuizSession {
@@ -1041,27 +1043,58 @@ export class PawakoBotRunner {
           return;
         }
 
-        const isStopSimuCmd =
+        const isEvalOrStopCmd =
           content.startsWith('!stop') ||
           content.startsWith('!fin-anthony') ||
           content.startsWith('!fin-simu') ||
           content.startsWith('!fin-simulation') ||
-          content.startsWith('!arreter-simu') ||
-          content.startsWith('!cancel-simu') ||
-          content.startsWith('!pause-simu');
+          content.startsWith('!eval') ||
+          content.startsWith('!eval-simu') ||
+          content.startsWith('!score') ||
+          content.startsWith('!notes') ||
+          content.startsWith('!mes-notes') ||
+          content.startsWith('!arreter-simu');
 
-        if (isStopSimuCmd) {
-          this.stoppedSimulationChannels.add(message.channel.id);
+        if (isEvalOrStopCmd) {
           const session = this.activeAnthonySessions.get(message.channel.id);
           if (session) {
-            if (session.inactivityTimer) clearTimeout(session.inactivityTimer);
-            this.activeAnthonySessions.delete(message.channel.id);
+            await message.reply('⏳ **Analyse et évaluation de la simulation par le Coach PAWAKO...**').catch(() => {});
+            await this.completeAnthonySimulationSession(session, message.channel);
+            return;
+          } else {
+            // Check if user has past simulation attempts to show their notes
+            const candMember = store.getMembers().find((m) => m.discordId === message.author.id || m.personalChannelId === message.channel.id);
+            if (candMember) {
+              const attempts = store.getSimulationAttemptsForMember(candMember.id);
+              if (attempts.length > 0) {
+                const latest = attempts[attempts.length - 1];
+                const criteriaText = (latest.criteria || [])
+                  .map((c) => `• **${c.name}** : **${c.score}/${c.maxPoints} pts** ${c.passed ? '✅' : '❌'}\n  └ *${c.comment}*`)
+                  .join('\n');
+
+                const notesEmbed = new EmbedBuilder()
+                  .setTitle(`📋 RELEVÉ DE NOTES & ÉVALUATION SIMULATION — ${candMember.username}`)
+                  .setDescription(
+                    `Voici le relevé de notes de ta dernière simulation IA PAWAKO :\n\n` +
+                      `🎯 **NOTE GLOBALE :** **${latest.totalScore} / 100** (${latest.passed ? '✅ VALIDÉ' : '❌ NON VALIDÉ'})\n` +
+                      `📅 **Date :** ${latest.timestamp}\n` +
+                      `💬 **Verdict du Coach :** ${latest.globalVerdict}\n\n` +
+                      `📋 **DÉTAIL DU BARÈME PAR CRITÈRE :**\n${criteriaText}`
+                  )
+                  .setColor(latest.passed ? 0x10b981 : 0xef4444)
+                  .setFooter({ text: 'PAWAKO FORMATION • Relevé de Notes' })
+                  .setTimestamp();
+
+                await message.reply({ embeds: [notesEmbed] }).catch(() => {});
+                return;
+              }
+            }
+
+            await message.reply(
+              'ℹ️ **Aucune simulation active dans ce salon.** Lance une simulation avec `!start-simu` pour passer ton épreuve !'
+            ).catch(() => {});
+            return;
           }
-          await message.reply(
-            '🛑 **Session de simulation arrêtée avec succès dans ce salon.**\n' +
-              '💡 *Le bot ne répondra plus dans ce salon tant qu\'une nouvelle simulation n\'est pas lancée avec `!start-simu`.*'
-          ).catch(() => {});
-          return;
         }
 
         // --- CANDIDATE MESSAGES IN ACTIVE ANTHONY SIMULATION CHANNEL ---
@@ -4933,15 +4966,21 @@ export class PawakoBotRunner {
       if (!session.fanProfile) {
         session.fanProfile = createRandomFanProfile();
       }
-      const prompt = getSimulationPrompt(session.fanProfile);
+
       const history = session.conversationHistory.slice(0, -1).map((h) => ({
         role: h.role === 'user' ? 'user' : 'assistant',
         content: h.role === 'assistant' ? sanitizeFanOutput(h.content) : h.content,
       }));
 
+      // Deterministic Inspector Check for Coach Interventions
+      const intervention = checkCandidateMessageForCoachIntervention(candidateMsg, history);
+      if (intervention) {
+        return intervention;
+      }
+
+      const prompt = getSimulationPrompt(session.fanProfile);
       const rawReply = await callOpenRouterAI(prompt, [...history, { role: 'user', content: candidateMsg }]);
-      const reply = sanitizeFanOutput(rawReply);
-      session.conversationHistory.push({ role: 'assistant', content: reply });
+      const reply = enforceFanNegotiationRules(rawReply, candidateMsg, history);
       return reply;
     } catch (err: any) {
       console.error('[SIMULATION AI FALLBACK ACTIVE]', err?.message || err);
@@ -4953,8 +4992,7 @@ export class PawakoBotRunner {
         getSimulationPrompt(session.fanProfile),
         [...cleanHistory, { role: 'user', content: candidateMsg }]
       );
-      const cleanedFallback = sanitizeFanOutput(fallbackReply);
-      session.conversationHistory.push({ role: 'assistant', content: cleanedFallback });
+      const cleanedFallback = enforceFanNegotiationRules(fallbackReply, candidateMsg, cleanHistory);
       return cleanedFallback;
     }
   }

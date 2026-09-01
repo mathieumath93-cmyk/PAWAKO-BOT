@@ -48,7 +48,7 @@ const defaultNotifications: AdminNotification[] = [];
 const defaultHealth: SystemHealth = {
   botConnected: true,
   botLatencyMs: 24,
-  supabaseConnected: true,
+  firebaseConnected: true,
   webServerStatus: 'online',
   pendingActions: 0,
   recentErrorCount: 0,
@@ -1954,7 +1954,7 @@ ${statusText}
   public triggerDiagnostic(): SystemHealth {
     this.health.botConnected = true;
     this.health.botLatencyMs = Math.floor(Math.random() * 20) + 15;
-    this.health.supabaseConnected = true;
+    this.health.firebaseConnected = true;
     this.health.webServerStatus = 'online';
     this.health.pendingActions = 0;
     this.health.retryQueueCount = 0;

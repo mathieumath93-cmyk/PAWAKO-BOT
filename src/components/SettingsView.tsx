@@ -221,8 +221,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
             <div className="flex items-center gap-3">
               <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
               <div>
-                <div className="text-xs font-bold text-white">Supabase Cloud Database</div>
-                <div className="text-[10px] text-slate-400 font-mono">https://qozrmsyhfxhvnudxfuhu.supabase.co</div>
+                <div className="text-xs font-bold text-white">Firebase Firestore Database (Google Cloud)</div>
+                <div className="text-[10px] text-slate-400 font-mono">ai-studio-pawakoformation</div>
               </div>
             </div>
 

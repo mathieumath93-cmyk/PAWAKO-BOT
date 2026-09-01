@@ -351,7 +351,7 @@ export interface DiscordPermissionAudit {
 export interface SystemHealth {
   botConnected: boolean;
   botLatencyMs: number;
-  supabaseConnected: boolean;
+  firebaseConnected: boolean;
   webServerStatus: 'online' | 'degraded' | 'offline';
   pendingActions: number;
   recentErrorCount: number;

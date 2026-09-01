@@ -331,22 +331,22 @@ export async function callOpenRouterAI(
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
   const freeModelsList = [
-    'google/gemini-2.0-flash-exp:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'deepseek/deepseek-chat:free',
-    'qwen/qwen-2.5-72b-instruct:free',
-    'mistralai/mistral-7b-instruct:free',
-    'meta-llama/llama-3.1-8b-instruct:free',
+    'openrouter/free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'google/gemma-2-9b-it:free',
+    'deepseek/deepseek-r1:free',
+    'qwen/qwen-2.5-coder-32b-instruct:free',
+    'mistralai/mistral-small-24b-instruct-2501:free',
     'openrouter/auto',
   ];
 
-  let primaryModel = cfg.modelName || 'google/gemini-2.0-flash-exp:free';
-  if (primaryModel.includes('grok')) {
-    primaryModel = 'meta-llama/llama-3.3-70b-instruct:free';
+  let primaryModel = cfg.modelName || 'openrouter/free';
+  if (primaryModel.includes('grok') || primaryModel.includes('70b') || primaryModel.includes('chat:free')) {
+    primaryModel = 'openrouter/free';
   }
 
   const candidateModels = Array.from(new Set([primaryModel, ...freeModelsList]));
-  const safeMaxTokens = Math.min(maxTokens, 350);
+  const safeMaxTokens = Math.min(maxTokens, 150);
 
   if (apiKey) {
     for (const modelId of candidateModels) {

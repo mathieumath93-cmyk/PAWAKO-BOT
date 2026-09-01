@@ -421,7 +421,7 @@ export class PawakoBotRunner {
         ],
       });
 
-      this.client.on('ready', () => {
+      this.client.on('clientReady', () => {
         this.isConnected = true;
         this.isConnecting = false;
         const guildId = process.env.DISCORD_GUILD_ID;

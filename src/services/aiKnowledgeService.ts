@@ -381,38 +381,39 @@ export async function callOpenRouterAI(
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
   if (apiKey && apiKey.length > 5) {
-    const candidateModels = ['openrouter/free', 'openrouter/auto'];
-    for (const modelId of candidateModels) {
-      try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://pawako-formation.app',
-            'X-Title': 'PAWAKO Formation Simulation',
-          },
-          body: JSON.stringify({
-            model: modelId,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              ...history,
-            ],
-            temperature: 0.8,
-            max_tokens: Math.min(maxTokens, 150),
-          }),
-        });
+    const modelId = cfg.modelName || 'openrouter/auto';
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://pawako-formation.app',
+          'X-Title': 'PAWAKO Formation Simulation',
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history,
+          ],
+          temperature: 0.8,
+          max_tokens: Math.min(maxTokens, 350),
+        }),
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          const content = data.choices?.[0]?.message?.content;
-          if (content && content.trim().length > 0) {
-            return sanitizeFanOutput(content.trim());
-          }
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content && content.trim().length > 0) {
+          return sanitizeFanOutput(content.trim());
         }
-      } catch (err: any) {
-        // Quietly catch API fetch errors
+      } else {
+        const errorText = await response.text();
+        console.warn(`[OpenRouter API Error] (${response.status}):`, errorText);
       }
+    } catch (err: any) {
+      console.warn('[OpenRouter Fetch Error]:', err?.message || err);
     }
   }
 

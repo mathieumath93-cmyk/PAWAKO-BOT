@@ -367,21 +367,12 @@ export async function callOpenRouterAI(
   history: Array<{ role: string; content: string }> = [],
   maxTokens: number = 350
 ): Promise<string> {
-  // 1. Try Gemini API FIRST (built-in, reliable, fast, handles French roleplay perfectly)
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      return await callGeminiAI(systemPrompt, history, maxTokens);
-    } catch (err: any) {
-      // Quietly fall through
-    }
-  }
-
-  // 2. Try OpenRouter API if Gemini key is missing or failed
   const cfg = aiKnowledgeService.getPromptConfig();
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
+  // 1. Try OpenRouter API FIRST with @preset/pawako-bot if OpenRouter key is available
   if (apiKey && apiKey.length > 5) {
-    const modelId = cfg.modelName || 'openrouter/auto';
+    const modelId = cfg.modelName || '@preset/pawako-bot';
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -397,7 +388,7 @@ export async function callOpenRouterAI(
             { role: 'system', content: systemPrompt },
             ...history,
           ],
-          temperature: 0.8,
+          temperature: cfg.temperature ?? 0.8,
           max_tokens: Math.min(maxTokens, 350),
         }),
       });
@@ -414,6 +405,15 @@ export async function callOpenRouterAI(
       }
     } catch (err: any) {
       console.warn('[OpenRouter Fetch Error]:', err?.message || err);
+    }
+  }
+
+  // 2. Try Gemini API as secondary fallback if OpenRouter key missing or call failed
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      return await callGeminiAI(systemPrompt, history, maxTokens);
+    } catch (err: any) {
+      // Quietly fall through
     }
   }
 
@@ -552,7 +552,7 @@ class AiKnowledgeService {
       analyzerPrompt: defaultInterventionRulesPrompt,
       fanPrompt: defaultFanPrompt,
       coachPrompt: '',
-      modelName: 'gemini-3.7-flash',
+      modelName: '@preset/pawako-bot',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,
@@ -576,14 +576,16 @@ class AiKnowledgeService {
           updatedAnalyzerPrompt = defaultInterventionRulesPrompt;
         }
 
-        let cleanModelName = parsed.modelName || 'gemini-3.7-flash';
+        let cleanModelName = parsed.modelName || '@preset/pawako-bot';
         if (
           cleanModelName.includes('grok') ||
           cleanModelName.includes('dots-3') ||
           cleanModelName.includes('liquid') ||
-          cleanModelName.includes(':free')
+          cleanModelName.includes(':free') ||
+          cleanModelName === 'gemini-3.7-flash' ||
+          cleanModelName === 'openrouter/auto'
         ) {
-          cleanModelName = 'gemini-3.7-flash';
+          cleanModelName = '@preset/pawako-bot';
         }
 
         this.promptConfig = {
@@ -654,7 +656,7 @@ class AiKnowledgeService {
       analyzerPrompt: defaultInterventionRulesPrompt,
       fanPrompt: defaultFanPrompt,
       coachPrompt: '',
-      modelName: 'gemini-3.7-flash',
+      modelName: '@preset/pawako-bot',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,

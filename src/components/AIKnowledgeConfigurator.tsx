@@ -253,25 +253,20 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">Modèle / Routing OpenRouter</label>
+                <label className="text-xs font-bold text-slate-300 block">Modèle / Engine d'IA</label>
                 <select
-                  value={promptCfg.modelName || 'dots-studio/dots-3-note-preview:free'}
+                  value={promptCfg.modelName || 'gemini-3.7-flash'}
                   onChange={(e) => setPromptCfg({ ...promptCfg, modelName: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-mono font-bold focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="dots-studio/dots-3-note-preview:free">dots-studio/dots-3-note-preview:free (Gratuit)</option>
-                  <option value="liquid/lfm-2.5-2.6b:free">liquid/lfm-2.5-2.6b:free (Gratuit)</option>
-                  <option value="nvidia/nemotron-3.5-lightning:free">nvidia/nemotron-3.5-lightning:free (Gratuit)</option>
-                  <option value="thinkingmachines/inkling-small:free">thinkingmachines/inkling-small:free (Gratuit)</option>
-                  <option value="meta-llama/llama-3.3-70b-instruct:free">meta-llama/llama-3.3-70b-instruct:free (Gratuit)</option>
-                  <option value="openrouter/auto">openrouter/auto (Auto-Routing Intelligent & Repli)</option>
+                  <option value="gemini-3.7-flash">gemini-3.7-flash (Gemini API Nactif Ultra-rapide & Recommandé)</option>
+                  <option value="openrouter/free">openrouter/free (OpenRouter Gratuit Auto)</option>
+                  <option value="openrouter/auto">openrouter/auto (OpenRouter Auto-Routing)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct (Llama 3.3 70B - Payant)</option>
                   <option value="x-ai/grok-2">x-ai/grok-2 (Grok 2 - Payant)</option>
-                  <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct (Uncensored)</option>
-                  <option value="mistralai/mistral-large-2411">mistralai/mistral-large-2411 (Mistral Large)</option>
-                  <option value="gryphe/mythomax-l2-13b">gryphe/mythomax-l2-13b (Roleplay Uncensored)</option>
                 </select>
                 <p className="text-[10px] text-slate-400">
-                  OpenRouter choisit ou bascule automatiquement vers les modèles tolérant le contenu adulte & explicite sans erreur.
+                  Gemini Flash gère de façon fluide, instantanée et naturelle le jeu de rôle simulation PAWAKO.
                 </p>
               </div>
             </div>

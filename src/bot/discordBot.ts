@@ -13,6 +13,7 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  MessageFlags,
 } from 'discord.js';
 import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
@@ -1291,7 +1292,7 @@ export class PawakoBotRunner {
             store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
 
           if (!member) {
-            await interaction.reply({ content: '⚠️ Candidat introuvable dans la base de données.', ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: '⚠️ Candidat introuvable dans la base de données.', flags: MessageFlags.Ephemeral }).catch(() => {});
             return;
           }
 
@@ -1374,7 +1375,7 @@ export class PawakoBotRunner {
 
         // --- HANDLER FOR CANDIDATE SUBMITTING THE INTEGRATION MODAL FORM ---
         if (interaction.isModalSubmit() && customId.startsWith('modal_integration_form')) {
-          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
           const targetId = customId.replace('modal_integration_form_', '');
           const member =
@@ -1519,9 +1520,9 @@ export class PawakoBotRunner {
 
           const sarcasticMsg = `### ${rawMsg}${timeRemainingText}`;
           if (!interaction.deferred && !interaction.replied) {
-            await interaction.reply({ content: sarcasticMsg, ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: sarcasticMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
           } else {
-            await interaction.followUp({ content: sarcasticMsg, ephemeral: true }).catch(() => {});
+            await interaction.followUp({ content: sarcasticMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
           }
           return;
         }
@@ -1568,7 +1569,7 @@ export class PawakoBotRunner {
         }
 
         if (interaction.isModalSubmit() && customId.startsWith('modal_reprogram_simu_')) {
-          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
           const targetId = customId.replace('modal_reprogram_simu_', '');
           const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
           if (!member) {
@@ -1595,7 +1596,7 @@ export class PawakoBotRunner {
         }
 
         if (interaction.isModalSubmit() && customId.startsWith('modal_reprogram_tools_')) {
-          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
           const targetId = customId.replace('modal_reprogram_tools_', '');
           const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
           if (!member) {
@@ -1636,7 +1637,7 @@ export class PawakoBotRunner {
           } else {
             if (!interaction.deferred && !interaction.replied) {
               // Ephemeral MUST be true for start_onboarding AND staff actions so public/candidate channels aren't flooded with staff logs!
-              await interaction.deferReply({ ephemeral: isStartOnboarding || isStaffAction }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
+              await interaction.deferReply({ flags: (isStartOnboarding || isStaffAction) ? MessageFlags.Ephemeral : undefined }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
             }
           }
 

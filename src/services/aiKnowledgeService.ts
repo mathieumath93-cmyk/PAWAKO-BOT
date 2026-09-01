@@ -185,7 +185,7 @@ export async function callGeminiAI(
     parts: [{ text: item.content }],
   }));
 
-  const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  const modelsToTry = ['gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-flash-latest'];
   let lastErr: any = null;
 
   for (const modelName of modelsToTry) {
@@ -206,7 +206,6 @@ export async function callGeminiAI(
       }
     } catch (err: any) {
       lastErr = err;
-      console.warn(`[Gemini Model ${modelName} Failed]`, err?.message || err);
     }
   }
 
@@ -322,33 +321,16 @@ export async function callOpenRouterAI(
     try {
       return await callGeminiAI(systemPrompt, history, maxTokens);
     } catch (err: any) {
-      console.warn('[Gemini API Call Failed, trying OpenRouter fallback]', err?.message || err);
+      // Quietly fall through
     }
   }
 
-  // 2. Try OpenRouter API if Gemini key fails or is missing
+  // 2. Try OpenRouter API if Gemini key is missing or failed
   const cfg = aiKnowledgeService.getPromptConfig();
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
-  const freeModelsList = [
-    'openrouter/free',
-    'meta-llama/llama-3.2-3b-instruct:free',
-    'google/gemma-2-9b-it:free',
-    'deepseek/deepseek-r1:free',
-    'qwen/qwen-2.5-coder-32b-instruct:free',
-    'mistralai/mistral-small-24b-instruct-2501:free',
-    'openrouter/auto',
-  ];
-
-  let primaryModel = cfg.modelName || 'openrouter/free';
-  if (primaryModel.includes('grok') || primaryModel.includes('70b') || primaryModel.includes('chat:free')) {
-    primaryModel = 'openrouter/free';
-  }
-
-  const candidateModels = Array.from(new Set([primaryModel, ...freeModelsList]));
-  const safeMaxTokens = Math.min(maxTokens, 150);
-
-  if (apiKey) {
+  if (apiKey && apiKey.length > 5) {
+    const candidateModels = ['openrouter/free', 'openrouter/auto'];
     for (const modelId of candidateModels) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -366,7 +348,7 @@ export async function callOpenRouterAI(
               ...history,
             ],
             temperature: 0.8,
-            max_tokens: safeMaxTokens,
+            max_tokens: Math.min(maxTokens, 150),
           }),
         });
 
@@ -376,18 +358,14 @@ export async function callOpenRouterAI(
           if (content && content.trim().length > 0) {
             return sanitizeFanOutput(content.trim());
           }
-        } else {
-          const errData = await response.json().catch(() => ({}));
-          console.warn(`[OpenRouter Model Failed] ${modelId}:`, errData?.error?.message || response.statusText);
         }
       } catch (err: any) {
-        console.warn(`[OpenRouter Model Exception] ${modelId}:`, err?.message || err);
+        // Quietly catch API fetch errors
       }
     }
   }
 
-  // 3. Fallback Engine with anti-repetition protection
-  console.warn('[AI Service] All AI APIs failed. Using Smart Fail-Safe Engine.');
+  // 3. Ultra-fast, non-repetitive Fail-Safe Engine
   return generateSmartFallbackFanReply(systemPrompt, history);
 }
 
@@ -522,7 +500,7 @@ class AiKnowledgeService {
       analyzerPrompt: defaultInterventionRulesPrompt,
       fanPrompt: defaultFanPrompt,
       coachPrompt: '',
-      modelName: 'x-ai/grok-2',
+      modelName: 'gemini-3.7-flash',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,
@@ -545,12 +523,23 @@ class AiKnowledgeService {
         if (!updatedAnalyzerPrompt.includes('INSULTES')) {
           updatedAnalyzerPrompt = defaultInterventionRulesPrompt;
         }
+
+        let cleanModelName = parsed.modelName || 'gemini-3.7-flash';
+        if (
+          cleanModelName.includes('grok') ||
+          cleanModelName.includes('dots-3') ||
+          cleanModelName.includes('liquid') ||
+          cleanModelName.includes(':free')
+        ) {
+          cleanModelName = 'gemini-3.7-flash';
+        }
+
         this.promptConfig = {
           ...this.promptConfig,
           ...parsed,
           analyzerPrompt: updatedAnalyzerPrompt,
           fanPrompt: updatedFanPrompt,
-          modelName: parsed.modelName || 'x-ai/grok-2',
+          modelName: cleanModelName,
           openRouterApiKey: parsed.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
         };
       }
@@ -613,7 +602,7 @@ class AiKnowledgeService {
       analyzerPrompt: defaultInterventionRulesPrompt,
       fanPrompt: defaultFanPrompt,
       coachPrompt: '',
-      modelName: 'x-ai/grok-2',
+      modelName: 'gemini-3.7-flash',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,

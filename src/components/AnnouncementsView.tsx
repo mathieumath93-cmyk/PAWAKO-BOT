@@ -30,9 +30,9 @@ const TEMPLATES = [
     mentionType: '@candidat' as const,
   },
   {
-    name: '⚠️ Rappel Inactivité 3 Jours',
-    title: '⚠️ RAPPEL DE SÉCURITÉ & MODÉRATION — REGLEMENT INACTIVITÉ',
-    content: `Attention à l'ensemble des candidats en cours de formation !\n\nUn rappel que notre système de modération automatique **expulsera sans préavis tout candidat inactif pendant plus de 3 jours (72 heures)**.\n\n• **24h sans action :** 1ère relance douce\n• **48h sans action :** 2ème relance urgente\n• **72h sans action :** Kick-off automatique du serveur Discord\n\nPensez à passer vos quiz réguliers ou à contacter le Staff si vous rencontrez une difficulté.`,
+    name: '⚠️ Rappel Inactivité',
+    title: '⚠️ RAPPEL DE SÉCURITÉ & SUIVI — RÈGLEMENT INACTIVITÉ',
+    content: `Attention à l'ensemble des candidats en cours de formation !\n\nUn rappel que l'équipe Staff effectue un suivi régulier de l'avancement de vos modules.\n\nEn cas d'inactivité prolongée sans justification auprès du Staff, votre parcours pourra être interrompu et l'accès au serveur révoqué.\n\nPensez à passer vos quiz réguliers ou à contacter le Staff si vous rencontrez une difficulté ! 🚀`,
     colorHex: '#ef4444',
     mentionType: '@everyone' as const,
   },

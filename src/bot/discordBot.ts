@@ -3516,8 +3516,12 @@ export class PawakoBotRunner {
     if (!this.client || !this.isConnected) return;
     const allMembers = store.getMembers();
     const nowMs = Date.now();
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
     for (const m of allMembers) {
       if (
+        m.isActive !== false &&
+        m.candidateState === 'simulation' &&
         m.simulationScheduledTimestamp &&
         nowMs >= m.simulationScheduledTimestamp &&
         !m.simulationReminderSent
@@ -3525,6 +3529,11 @@ export class PawakoBotRunner {
         m.simulationReminderSent = true;
         store.saveMembers();
         firebaseSyncService.saveMember(m).catch(() => {});
+
+        // Skip sending notification if the scheduled date was over 12 hours ago (outdated)
+        if (nowMs - m.simulationScheduledTimestamp > TWELVE_HOURS_MS) {
+          continue;
+        }
 
         const candChan = await this.getCandidateChannel(m, true);
         if (candChan) {
@@ -3731,8 +3740,12 @@ export class PawakoBotRunner {
     const cfg = onboardingService.getConfig();
     const meetUrl = cfg.toolsFormationMeetUrl || 'https://meet.google.com/pawako-tools-formation';
 
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
     const dueMembers = allMembers.filter(
       (m) =>
+        m.isActive !== false &&
+        m.candidateState === 'formation_outils' &&
         m.toolsFormationScheduledTimestamp &&
         nowMs >= m.toolsFormationScheduledTimestamp &&
         !m.toolsFormationReminderSent
@@ -3740,23 +3753,33 @@ export class PawakoBotRunner {
 
     if (dueMembers.length === 0) return;
 
+    // Filter out candidates whose scheduled date was over 12 hours ago
+    const freshMembers = dueMembers.filter(
+      (m) => nowMs - (m.toolsFormationScheduledTimestamp || 0) <= TWELVE_HOURS_MS
+    );
+
+    // Mark all due as sent so they won't re-trigger
+    for (const m of dueMembers) {
+      m.toolsFormationReminderSent = true;
+      store.saveMembers();
+      firebaseSyncService.saveMember(m).catch(() => {});
+    }
+
+    if (freshMembers.length === 0) return;
+
     // Get or Create Private Voice Channel
     let voiceChan: any = null;
     const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
     if (guildId) {
       const guild = await this.client.guilds.fetch(guildId).catch(() => null);
       if (guild) {
-        voiceChan = await this.getOrCreateToolsVoiceChannel(guild, dueMembers);
+        voiceChan = await this.getOrCreateToolsVoiceChannel(guild, freshMembers);
       }
     }
 
     const voiceLinkStr = voiceChan ? `<#${voiceChan.id}>` : `[Google Meet](${meetUrl})`;
 
-    for (const m of dueMembers) {
-      m.toolsFormationReminderSent = true;
-      store.saveMembers();
-      firebaseSyncService.saveMember(m).catch(() => {});
-
+    for (const m of freshMembers) {
       const candChan = await this.getCandidateChannel(m, true);
       if (candChan) {
         const candMention = `<@${m.discordId || m.id.replace('mem-', '')}>`;
@@ -4001,11 +4024,6 @@ export class PawakoBotRunner {
 
         // Check 10h00 HF tools formation reminders
         this.checkToolsFormationReminders();
-
-        // Check 3 days inactivity auto kick-off for candidates ONLY strictly at 19h00 HF once per day
-        if (hours === 19) {
-          this.checkInactiveCandidatesAndAutoKick(false).catch(() => {});
-        }
 
         // Update leaderboard in #classement-formation
         this.updateLeaderboardChannel().catch(() => {});
@@ -5069,141 +5087,17 @@ export class PawakoBotRunner {
 
   /**
    * Auto Kick-off & Inactivity Reminders Runner
-   * Checks candidates ONLY (EXCLUDING staff/admins) for 24h, 48h reminders and 72h (3 days) auto-kick.
-   * Runs strictly ONCE per day at fixed time (19h00 HF) and persists date to avoid re-triggering on server reload.
+   * Disabled - inactivity reminders and kicks are now handled manually by Staff.
    */
-  public async checkInactiveCandidatesAndAutoKick(force: boolean = false): Promise<void> {
-    if (!this.client || !this.isConnected) return;
-
-    const now = Date.now();
-    const pDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
-    const year = pDate.getFullYear();
-    const month = String(pDate.getMonth() + 1).padStart(2, '0');
-    const day = String(pDate.getDate()).padStart(2, '0');
-    const todayKey = `${year}-${month}-${day}`;
-
-    // Skip if not forced and already ran today (prevents spam on server reload!)
-    if (!force && store.getLastInactivityCheckDate() === todayKey) {
-      return;
-    }
-
-    this.lastInactivityCheckTimestamp = now;
-    store.setLastInactivityCheckDate(todayKey);
-    console.log(`[PAWAKO BOT] 🔍 Exécution de la vérification quotidienne d'inactivité (19h00 HF - ${todayKey})...`);
-
-    try {
-      const allMembers = store.getMembers();
-      const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000; // 72h
-      const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;   // 48h
-      const ONE_DAY_MS = 1 * 24 * 60 * 60 * 1000;    // 24h
-
-      for (const member of allMembers) {
-        // 1. Skip if already kicked, inactive, or completed
-        if (member.isActive === false || member.candidateState === 'expulse_inactivite' || member.candidateState === 'formation_terminee') {
-          continue;
-        }
-
-        // 2. ABSOLUTE STAFF PROTECTION: Never kick Staff, Formateur, or Admin!
-        const isStaff = (member.roles || []).some((r) => {
-          const lower = (r || '').toLowerCase();
-          return lower.includes('admin') || lower.includes('staff') || lower.includes('formateur') || lower.includes('bureau');
-        });
-        if (isStaff) continue;
-
-        // 3. Determine last activity timestamp
-        let lastActivityTs = member.lastActiveAtTimestamp;
-        if (!lastActivityTs && member.lastActiveAt) {
-          const parts = member.lastActiveAt.split(' ');
-          if (parts.length === 2) {
-            const [d, m, y] = parts[0].split('/').map(Number);
-            const [h, min] = parts[1].split(':').map(Number);
-            if (d && m && y) {
-              lastActivityTs = new Date(y, m - 1, d, h || 0, min || 0).getTime();
-            }
-          }
-        }
-        if (!lastActivityTs) {
-          lastActivityTs = now;
-        }
-
-        const inactiveDuration = now - lastActivityTs;
-        const currentWarningLevel = member.inactivityWarningLevel || 0;
-
-        // LEVEL 3: 72 Hours (3 Days) Inactivity -> AUTO KICK-OFF!
-        if (inactiveDuration >= THREE_DAYS_MS) {
-          if (currentWarningLevel < 3) {
-            console.log(`[PAWAKO BOT] 🚨 Exécution Kick-off 3j pour le candidat : ${member.username} (${member.id})`);
-            // Mark state immediately to prevent re-entry
-            member.inactivityWarningLevel = 3;
-            member.isActive = false;
-            member.candidateState = 'expulse_inactivite';
-            store.saveMembers();
-
-            await this.kickMemberAndNotify(member, 'Inactivité supérieure à 3 jours (72h) sans action malgré les relances.');
-          }
-          continue;
-        }
-
-        // LEVEL 2: 48 Hours Inactivity -> Urgent Warning (Sent ONLY ONCE)
-        if (inactiveDuration >= TWO_DAYS_MS && currentWarningLevel < 2) {
-          // Immediately update warning level to 2 so it is NEVER sent again
-          member.inactivityWarningLevel = 2;
-          store.saveMembers();
-
-          const candChan = await this.getCandidateChannel(member, false);
-          if (candChan) {
-            const discordUserId = member.discordId || member.id.replace('mem-', '');
-            const embed = new EmbedBuilder()
-              .setTitle('⚠️ RAPPEL URGENT — RISQUE D\'EXCLUSION DANS 24H')
-              .setDescription(
-                `Bonjour <@${discordUserId}>,\n\n` +
-                `Tu n'as effectué **aucune action** sur ton parcours depuis plus de **48 heures**.\n\n` +
-                `⚠️ **Attention :** Conformément à notre politique de formation, sans réponse ou progression de ta part dans les **24 prochaines heures (total 72h)**, tu seras **expulsé(e) automatiquement** du serveur de formation.\n\n` +
-                `👉 *Connecte-toi vite pour passer ton prochain quiz ou contacter l'équipe Staff !*`
-              )
-              .setColor(0xEF4444)
-              .setFooter({ text: 'PAWAKO FORMATION • Modération & Inactivité' })
-              .setTimestamp();
-
-            await candChan.send({ content: `⚠️ <@${discordUserId}>`, embeds: [embed] }).catch(() => {});
-          }
-          continue;
-        }
-
-        // LEVEL 1: 24 Hours Inactivity -> Friendly Reminder (Sent ONLY ONCE)
-        if (inactiveDuration >= ONE_DAY_MS && currentWarningLevel < 1) {
-          // Immediately update warning level to 1 so it is NEVER sent again
-          member.inactivityWarningLevel = 1;
-          store.saveMembers();
-
-          const candChan = await this.getCandidateChannel(member, false);
-          if (candChan) {
-            const discordUserId = member.discordId || member.id.replace('mem-', '');
-            const embed = new EmbedBuilder()
-              .setTitle('🔔 RAPPEL D\'AVANCEMENT — INACTIVITÉ 24H')
-              .setDescription(
-                `Bonjour <@${discordUserId}>,\n\n` +
-                `🎈 Cela fait **24 heures** que tu n'as pas donné de nouvelles sur ton parcours.\n\n` +
-                `N'oublie pas de continuer tes modules pour valider ta formation au plus vite ! Si tu es bloqué(e), l'équipe Staff est là pour t'aider.\n\n` +
-                `👉 *Tape \`!profil\` pour voir ton avancement.*`
-              )
-              .setColor(0xF59E0B)
-              .setFooter({ text: 'PAWAKO FORMATION • Suivi des Candidats' })
-              .setTimestamp();
-
-            await candChan.send({ content: `🔔 <@${discordUserId}>`, embeds: [embed] }).catch(() => {});
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[checkInactiveCandidatesAndAutoKick Error]', err);
-    }
+  public async checkInactiveCandidatesAndAutoKick(_force: boolean = false): Promise<void> {
+    // Disabled: Handled manually by Staff
+    return;
   }
 
   /**
    * Kick member from Discord guild + notify private channel & staff log channel + update DB state
    */
-  public async kickMemberAndNotify(member: Member, reason: string = 'Inactivité 3 jours sans action'): Promise<boolean> {
+  public async kickMemberAndNotify(member: Member, reason: string = 'Inactivité sans action'): Promise<boolean> {
     if (!this.client || !this.isConnected) {
       store.kickMemberForInactivity(member.id, reason);
       return false;
@@ -5219,15 +5113,15 @@ export class PawakoBotRunner {
         const candChan = await this.getCandidateChannel(member, false);
         if (candChan) {
           const embed = new EmbedBuilder()
-            .setTitle('🚨 ALERTE EXPULSION — INACTIVITÉ 3 JOURS')
+            .setTitle('🚨 ALERTE EXPULSION')
             .setDescription(
               `📢 <@${discordUserId}>,\n\n` +
-              `Conformément au règlement de formation, tu as été **inactif(ve) pendant 3 jours consécutifs (72h)** sans effectuer d'action sur tes modules.\n\n` +
-              `❌ **Tu as été exclu(e) du serveur Discord de formation.**\n\n` +
+              `Conformément au règlement de formation, tu as été exclu(e) du serveur Discord.\n\n` +
+              `❌ **Exclusion effectuée par la modération.**\n\n` +
               `_Raison : ${reason}_`
             )
             .setColor(0xDC2626)
-            .setFooter({ text: 'PAWAKO FORMATION • Modération Automatique Bot' })
+            .setFooter({ text: 'PAWAKO FORMATION • Modération' })
             .setTimestamp();
 
           await candChan.send({ content: `🚨 <@${discordUserId}>`, embeds: [embed] }).catch(() => {});
@@ -5241,9 +5135,9 @@ export class PawakoBotRunner {
         const logChan = guild ? await this.getOrCreateStaffOnlyChannel(guild, 'log-formation', 'Logs & Modération Formation') : null;
         if (logChan) {
           const logEmbed = new EmbedBuilder()
-            .setTitle('🚨 MODÉRATION BOT — EXPULSION KICK-OFF 3J')
+            .setTitle('🚨 MODÉRATION — EXPULSION KICK-OFF')
             .setDescription(
-              `⚡ **Expulsion automatique exécutée par le bot**\n\n` +
+              `⚡ **Expulsion exécutée par le staff**\n\n` +
               `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
               `• **ID Discord :** \`${discordUserId}\`\n` +
               `• **Dernière activité :** ${member.lastActiveAt || 'Inconnue'}\n` +

@@ -365,46 +365,54 @@ export function generateSmartFallbackFanReply(
 export async function callOpenRouterAI(
   systemPrompt: string,
   history: Array<{ role: string; content: string }> = [],
-  maxTokens: number = 350
+  maxTokens: number = 500
 ): Promise<string> {
   const cfg = aiKnowledgeService.getPromptConfig();
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
-  // 1. Try OpenRouter API FIRST with @preset/pawako-bot if OpenRouter key is available
+  // 1. Try OpenRouter API if API key is available
   if (apiKey && apiKey.length > 5) {
-    const modelId = cfg.modelName || '@preset/pawako-bot';
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://pawako-formation.app',
-          'X-Title': 'PAWAKO Formation Simulation',
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...history,
-          ],
-          temperature: cfg.temperature ?? 0.8,
-          max_tokens: Math.min(maxTokens, 350),
-        }),
-      });
+    const primaryModel = cfg.modelName || '@preset/pawako-bot';
+    // Try user's preset first, then fallback to openrouter/auto if preset returns tool/provider error
+    const modelsToTry = [primaryModel];
+    if (primaryModel !== 'openrouter/auto') {
+      modelsToTry.push('openrouter/auto');
+    }
 
-      if (response.ok) {
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
-        if (content && content.trim().length > 0) {
-          return sanitizeFanOutput(content.trim());
+    for (const modelId of modelsToTry) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://pawako-formation.app',
+            'X-Title': 'PAWAKO Formation Simulation',
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...history,
+            ],
+            temperature: cfg.temperature ?? 0.8,
+            max_tokens: Math.max(maxTokens, 1000),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content && content.trim().length > 0) {
+            return sanitizeFanOutput(content.trim());
+          }
+        } else {
+          const errorText = await response.text();
+          console.warn(`[OpenRouter API Warning] (${response.status}) pour ${modelId}:`, errorText);
         }
-      } else {
-        const errorText = await response.text();
-        console.warn(`[OpenRouter API Error] (${response.status}):`, errorText);
+      } catch (err: any) {
+        console.warn(`[OpenRouter Fetch Error] pour ${modelId}:`, err?.message || err);
       }
-    } catch (err: any) {
-      console.warn('[OpenRouter Fetch Error]:', err?.message || err);
     }
   }
 

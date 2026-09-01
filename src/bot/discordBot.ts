@@ -29,6 +29,7 @@ import {
   FanProfile,
   evaluateSimulationSession,
   generateSmartFallbackFanReply,
+  sanitizeFanOutput,
 } from '../services/aiKnowledgeService';
 
 export interface ActiveQuizSession {
@@ -1284,9 +1285,10 @@ export class PawakoBotRunner {
         // Register candidate activity timestamp on button/modal interaction
         store.touchMemberActivity(user.id);
 
-        // --- HANDLER FOR CANDIDATE CLICKING "🔄 Recommencer la Simulation de zéro" ---
-        if (interaction.isButton() && customId.startsWith('restart_simu_')) {
-          const targetId = customId.replace('restart_simu_', '');
+        // --- HANDLER FOR CANDIDATE CLICKING "🚀 Démarrer la Simulation" OR "🔄 Recommencer la Simulation" ---
+        if (interaction.isButton() && (customId.startsWith('launch_simu_') || customId.startsWith('restart_simu_'))) {
+          const isRestart = customId.startsWith('restart_simu_');
+          const targetId = customId.replace(isRestart ? 'restart_simu_' : 'launch_simu_', '');
           const member =
             store.getMember(targetId) ||
             store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
@@ -1299,9 +1301,13 @@ export class PawakoBotRunner {
           await interaction.deferReply().catch(() => {});
           const success = await this.startAnthonySimulationSession(member, interaction.channel, user.id);
           if (success) {
-            await interaction.editReply({ content: '🚀 **Simulation réinitialisée avec succès ! C\'est parti pour cette nouvelle tentative de zéro !**' }).catch(() => {});
+            await interaction.editReply({
+              content: isRestart
+                ? '🚀 **Simulation réinitialisée avec succès ! C\'est parti pour cette nouvelle tentative de zéro !**'
+                : '🚀 **Test de Simulation démarré avec succès ! L\'IA Fan (Anthony) vient d\'entrer dans le salon.**'
+            }).catch(() => {});
           } else {
-            await interaction.editReply({ content: '⚠️ Impossible de réinitialiser la simulation.' }).catch(() => {});
+            await interaction.editReply({ content: '⚠️ Impossible de démarrer la simulation.' }).catch(() => {});
           }
           return;
         }
@@ -2755,11 +2761,10 @@ export class PawakoBotRunner {
 
           if (!member.candidateState || member.candidateState === 'nouveau' || member.candidateState === 'module_en_cours' || member.candidateState === 'cooldown_actif' || member.candidateState === 'quiz_disponible') {
             member.candidateState = 'simulation';
-          }
-
-          const candChan = await this.getCandidateChannel(member, true);
-          if (candChan) {
-            await this.startAnthonySimulationSession(member, candChan).catch(() => {});
+            if (!member.simulationScheduledTimestamp) {
+              member.simulationScheduledTimestamp = getNext14hParisTimestamp();
+              member.simulationReminderSent = false;
+            }
           }
 
           if (member.candidateState === 'simulation' && !member.simuMpSentToStaff) {
@@ -4494,27 +4499,38 @@ export class PawakoBotRunner {
         // Guarantee candidate private channel creation / retrieval
         const candChan = await this.getCandidateChannel(member, true);
         if (candChan) {
+          member.candidateState = 'simulation';
+          member.simulationScheduledTimestamp = getNext14hParisTimestamp();
+          member.simulationReminderSent = false;
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+
+          const next14hDateStr = new Date(member.simulationScheduledTimestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+
           const simEmbed = new EmbedBuilder()
-            .setTitle('🚀 TEST DE SIMULATION EN DIRECT (IA)')
+            .setTitle('🚀 MODULE 5 VALIDÉ — INVITATION AU TEST DE SIMULATION')
             .setDescription(
               `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
               `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
-              `Pas d'attente ni de convocation ! Notre IA est déjà prête dans ce salon pour mener le test avec toi.\n\n` +
-              `Découvre la mise en situation ci-dessous et réponds directement pour lancer le chat ! 🚀`
+              `Ton test de simulation est au programme pour **14h00 HF** (${next14hDateStr}).\n\n` +
+              `💡 **Prêt(e) à passer ton test dès maintenant ?** Tu peux le lancer en direct à tout moment en cliquant sur le bouton ci-dessous ou en tapant **\`!start-simu\`** dans ce salon ! 🚀`
             )
             .setColor(0x3b82f6)
-            .setFooter({ text: 'PAWAKO FORMATION • Test de Simulation IA en Direct' })
+            .setFooter({ text: 'PAWAKO FORMATION • Test de Simulation IA' })
             .setTimestamp();
+
+          const simRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`launch_simu_${member.id}`)
+              .setLabel('🚀 Démarrer la Simulation')
+              .setStyle(ButtonStyle.Primary)
+          );
 
           await candChan.send({
             content: `<@${discordUserId}>`,
             embeds: [simEmbed],
+            components: [simRow],
           }).catch((e: any) => console.warn('[Sim Launch Send Error]', e));
-
-          // Directly start Anthony Simulation session in the candidate channel
-          await this.startAnthonySimulationSession(member, candChan).catch((e: any) =>
-            console.warn('[Auto Start Anthony Sim Error]', e)
-          );
         }
 
         // Direct MP / Staff Alert Notification
@@ -4920,20 +4936,26 @@ export class PawakoBotRunner {
       const prompt = getSimulationPrompt(session.fanProfile);
       const history = session.conversationHistory.slice(0, -1).map((h) => ({
         role: h.role === 'user' ? 'user' : 'assistant',
-        content: h.content,
+        content: h.role === 'assistant' ? sanitizeFanOutput(h.content) : h.content,
       }));
 
-      const reply = await callOpenRouterAI(prompt, [...history, { role: 'user', content: candidateMsg }]);
+      const rawReply = await callOpenRouterAI(prompt, [...history, { role: 'user', content: candidateMsg }]);
+      const reply = sanitizeFanOutput(rawReply);
       session.conversationHistory.push({ role: 'assistant', content: reply });
       return reply;
     } catch (err: any) {
       console.error('[SIMULATION AI FALLBACK ACTIVE]', err?.message || err);
+      const cleanHistory = session.conversationHistory.slice(0, -1).map((h) => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: h.role === 'assistant' ? sanitizeFanOutput(h.content) : h.content,
+      }));
       const fallbackReply = generateSmartFallbackFanReply(
         getSimulationPrompt(session.fanProfile),
-        [...session.conversationHistory.slice(0, -1), { role: 'user', content: candidateMsg }]
+        [...cleanHistory, { role: 'user', content: candidateMsg }]
       );
-      session.conversationHistory.push({ role: 'assistant', content: fallbackReply });
-      return fallbackReply;
+      const cleanedFallback = sanitizeFanOutput(fallbackReply);
+      session.conversationHistory.push({ role: 'assistant', content: cleanedFallback });
+      return cleanedFallback;
     }
   }
 

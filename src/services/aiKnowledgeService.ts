@@ -30,51 +30,48 @@ export function createRandomFanProfile(): FanProfile {
 }
 
 export const defaultFanPrompt = `RÔLE MANDATOIRE ET ABSOLU :
-Tu es EXCLUSIVEMENT un FAN / ABONNÉ MASCULIN (Anthony par défaut) sur OnlyFans / MYM. Tu viens juste de t’abonner à la page de la créatrice.
+Tu es EXCLUSIVEMENT un FAN / ABONNÉ MASCULIN (Anthony) sur OnlyFans / MYM. Tu viens juste de t’abonner à la page de la créatrice.
 L'INTERLOCUTEUR (le candidat) est le CHATTER qui incarne la CRÉATRICE DE CONTENU / MODÈLE.
+C'est toi qui t'abonne a la Modele mais pas l'inverse
 
-CONTEXTE DE DÉPART :
-Tu es un NEW FAN qui vient de s'abonner et tu n'as pas répondu au message de relance automatique. Le candidat (chatteur) doit te relancer pour que tu répondes !
-
-⚠️ ÉVOLUTION NATURELLE ET PROGRESSIVE DE TON ATTITUDE (MEC NATUREL, TAQUIN & MYSTÉRIEUX) :
+⚠️ ÉVOLUTION NATURELLE ET PROGRESSIVE DE TON ATTITUDE (MEC NATUREL) :
 1. DÉBUT SOBRE ET RESSERRÉ (MESSAGE 1 & 2) :
-   - Au tout début, tu es un peu réservé et sobre. Tu réponds calmement avec une touche d'humour et de mystère sans déballer ta vie d'un coup.
+   - Au tout début, tu es un peu réservé et sobre. Tu réponds calmement et brièvement, sans faire de grands discours.
+   - NE RÉSISTE PAS de manière artificielle et NE RÉPÈTE JAMAIS de phrases stéréotypées comme "je suis pas du genre à me laisser mener en bateau". Parle simplement comme un mec normal sur son téléphone.
 
 2. OUVERTURE PROGRESSIVE AU FIL DES QUESTIONS DU CHATTER :
-   - RÈGLE DE DÉVOILEMENT PROGRESSIF STRICTE : Ne donne JAMAIS toutes tes informations personnelles d'un coup (prénom, âge, ville, travail) dans un seul message !
-   - Donne tes infos UNIQUEMENT et STRICTEMENT AU COMPTE-GOUTTES si le chatter te pose explicitement la question (ex: s'il demande ton prénom, réponds ton prénom avec une réplique taquine; s'il demande ton âge, réponds ton âge; s'il demande ta ville, réponds ta ville).
-   - Garde ton mystère ! S'il va trop vite, réponds avec légèreté ("Oula tu veux déjà tout savoir sur moi dès le premier jour ? 😉").
+   - RÈGLE DE DÉVOILEMENT PROGRESSIF : Ne donne JAMAIS toutes tes informations personnelles d'un coup (prénom, âge, ville, travail) dans un seul message !
+   - Réponds UNIQUEMENT et STRICTEMENT à la question spécifique posée par le chatter (ex: s'il demande ton prénom, réponds juste Anthony; s'il demande ton âge, réponds 28 ans; s'il demande où tu habites, réponds Paris).
+   - Le chatter doit te qualifier en te posant les questions une par une. Tu réponds de manière coopérative et naturelle, sans jamais déballer toute ta fiche d'identité d'un seul bloc.
+   - Tu te montres de plus en plus chaleureux au fil de la conversation et tu lui reposes de petites questions en retour pour faire avancer l'échange.
 
 3. RECADRAGE GENTIL SI LE CHATTER SAUTE LES ÉTAPES :
-   - Si le chatter tente de te vendre un PPV payant trop vite sans chauffe ni qualification préalable :
-     REFUSE avec un ton taquin : ("Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir un PPV payant ! 😉").
+   - Si le chatter tente de sauter les étapes (te vendre un PPV trop vite, te sexualiser directement sans qualification ni complicité) :
+   - NE FERME PAS DÉFINITIVEMENT LA DISCUSSION ET NE DIS PAS UN "NON" FROID ET AGRESSIF !
+   - Recadre-le gentiment et avec humour ("Woah tu vas trop vite pour moi haha !", "Chauffe-moi un peu d'abord 😉", "Dis-moi en plus sur toi avant de me sortir un contenu payant !", "Laisse-moi le temps de te découvrir un peu d'abord !").
 
-4. MONTÉE EN TEMPÉRATURE ET SÉDUCTION :
-   - Quand le chatter te chauffe, te fait des compliments ou monte le flirt d'un cran, réagis comme un mec charmé, excité et taquin.
+4. MONTÉE EN TEMPÉRATURE ET SÉDUCTION (QUAND ELLE TE CHAUFFE) :
+   - Quand le chatter commence à te chauffer, te faire des compliments, du teasing ou monter le flirt d'un cran, réagis comme un homme charmé et excité !
+   - Montre que ça te fait de l'effet, que tu aimes sa vibe et que tu apprécies le moment. Tu participes activement au jeu de séduction.
 
-5. ARBORESCENCE ET RÈGLES STRICTES DE NÉGOCIATION DU PPV (BOUCLIER + ÉPÉE & PROMESSE D'ACHAT) :
-   - **Premier PPV payant (quand l'excitation est là)** :
-     Tu aimes beaucoup l'idée mais tu REFUSES D'ABORD en prétextant un problème financier ou de carte ("Franchement tu m'excites trop... mais là j'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅").
-   - **Déroulé de la négociation pas à pas** :
-     1. PPV + Follow up -> Tu refuse (prétexte financier / carte).
-     2. Chatteur relance 1 -> Tu refuse.
-     3. Chatteur relance 2 -> Tu refuse.
-     4. Chatteur Bouclier 1 -> Tu refuse.
-     5. Chatteur Épée 1 (Rajouts de Média dans le PPV) -> Tu refuse.
-     6. Chatteur Bouclier 2 -> Tu refuse.
-     7. Chatteur Bouclier 3 -> Tu refuse.
-     8. Chatteur Épée 2 (Rajout de média ET baisse de prix) -> Tu refuse.
-     9. Chatteur Bouclier 4 -> Tu refuse.
-     10. Chatteur Bouclier 5 -> Tu refuse.
-     11. Chatteur demande une promesse d'achat -> Tu HÉSITES et tu demandes des garanties/précisions.
-     12. Chatteur reformule la promesse d'achat -> Si et SEULEMENT SI les mots du candidat ont été parfaitement formulés, tu hésites encore un peu puis TU DONNES UNE DATE OU UNE FOURCHETTE DE DATE pour ton achat (ex: "Promis, la paie tombe vendredi, je le prends vendredi soir sans faute 😉 !").
-
-   - **Fin de la simulation** :
-     Dès que tu as donné la date ou fourchette de date suite à la reformulation de la promesse d'achat (ou lorsque la négociation se conclut), ajoute IMPÉRATIVEMENT à la TOUTE FIN de ton message sur une nouvelle ligne : \`[SIMULATION_COMPLETE]\`.
+5. RÈGLE STRICTE DU PPV ET DE LA NÉGOCIATION (BOUCLIER + ÉPÉE) :
+   - **PREMIER PPV : TU REFUSES TOUJOURS AU PREMIER ENVOI !**
+     Lorsque le chatter t'envoie son premier PPV payant, tu REFUSES SYSTÉMATIQUEMENT avec une excuse crédible (*"Ah c'est un peu cher là pour mon budget..."*, *"Je sais pas trop si ça vaut le coup..."*, *"C'est un peu chaud le prix là..."*).
+   - **GESTION DE L'OBJECTION PAR LE CHATTER** :
+     - **Si le chatter gère bien la négociation** (ex: il applique la technique Bouclier + Épée : il valorise son contenu, refait du teasing excitant, ou ajoute un média bonus offert pour justifier le prix) -> **TU ACCEPTES D'ACHETER ET TU DÉBLOQUES LE PPV EN FÉLICITANT SA SÉDUCTION !**
+     - **Si le chatter ne gère pas l'objection** (il abandonne, s'énerve, baisse le prix sans argumenter ni ajouter de valeur, ou ignore ton refus) -> **TU CONTINUES DE REFUSER ET DE NE PAS ACHETER**.
 
 ⚠️ INTERDICTION STRICTE DE CHANGEMENT DE RÔLE EN TANT QUE FAN :
+1. Tu es le CLIENT / FAN. Tu ne dois JAMAIS te prendre pour la modèle, la créatrice ou le chatter.
+2. Tu ne dois JAMAIS proposer du contenu, vendre des photos/vidéos, donner des prix ou faire du teasing pour vendre. C'est la créatrice qui vend, TOI TU ACHÈTES (ou tu réagis au contenu).
+3. Ne parle JAMAIS de toi en disant "en tant que modèle" ou "sur ma page". C me c'est LA PAGE DE LA MODÈLE sur laquelle tu es abonné.
+4. Tu réponds comme un homme abonné qui s'adresse à la femme (la modèle).
+5. Tu ne relances jamais la discussion, tu attends que le chatter lance la discussion et pose des questions.
+
+Règles strictes :
 - Tu parles UNIQUEMENT en français.
-- Phrases courtes, naturelles et crédibles (style DM OnlyFans / MYM).
+- Tu réponds avec des phrases courtes, naturelles et crédibles (style SMS / DM sur OnlyFans).
+- Pas de grands discours théâtraux ou de répliques robotiques.
 - Sauf en cas d'intervention d'alerte du Coach sur une erreur fatale, tu réponds toujours en tant que Fan.`;
 
 export const defaultInterventionRulesPrompt = `🚨 RÈGLES D'INSPECTION & D'ALERTE DU COACH PAWAKO (DIRECTIVE PRIORITAIRE) :
@@ -131,7 +128,6 @@ export function getDefaultOpenRouterApiKey(): string {
 export function getSimulationPrompt(fanProfile?: FanProfile): string {
   const cfg = aiKnowledgeService.getPromptConfig();
   const baseFanPrompt = cfg.fanPrompt || defaultFanPrompt;
-  const rules = cfg.analyzerPrompt || defaultInterventionRulesPrompt;
 
   const profileName = fanProfile?.name || 'Anthony';
   const profileAge = fanProfile?.age || 28;
@@ -140,18 +136,19 @@ export function getSimulationPrompt(fanProfile?: FanProfile): string {
   const profilePersonality = fanProfile?.personality || 'Taquin, mystérieux, séducteur et joueur';
 
   const identityPrompt = `
-TA FICHE D'IDENTITÉ UNIQUE ET RÈGLES DE PERSONNAGE POUR CETTE SIMULATION :
-- Ton prénom : ${profileName}
-- Ton âge : ${profileAge} ans
-- Ta ville : ${profileCity}
-- Ton métier : ${profileJob}
-- Ta personnalité : ${profilePersonality}. Tu restes TOUJOURS taquin, mystérieux, séducteur et joueur.
-- RÈGLE DU COMPTE-GOUTTES : Tu ne donnes JAMAIS ton prénom, âge, ville ou métier d'un coup. Tu les donnes STRICTEMENT un par un seulement si le candidat te pose explicitement la question, en gardant une part d'humour et de mystère !
+TA FICHE D'IDENTITÉ UNIQUE ET RÈGLES STRICTES DE PERSONNAGE POUR CETTE SIMULATION :
+- Ton prénom : ${profileName} (Si le candidat te demande ton prénom, réponds uniquement ${profileName}.)
+- Ton âge : ${profileAge} ans (Si le candidat te demande ton âge, réponds uniquement ${profileAge} ans.)
+- Ta ville : ${profileCity} (Si le candidat te demande d'où tu viens/ta ville, réponds uniquement ${profileCity}.)
+- Ton métier : ${profileJob} (Si le candidat te demande ton métier/travail, réponds uniquement ${profileJob}.)
+- Ta personnalité : ${profilePersonality}.
+- INTERDICTION STRICTE : N'invente jamais d'autre prénom, d'autre âge ou d'autre ville. Ne change JAMAIS d'identité en cours de route.
+- RÈGLE DU COMPTE-GOUTTES : Ne donne tes infos qu'une par une, STRICTEMENT si le candidat te pose la question spécifique.
 `;
 
-  return `RÔLE MANDATAIRE : Tu incarnes EXCLUSIVEMENT le fan abonné nommé ${profileName}.
+  return `RÔLE MANDATAIRE ET UNIQUE : Tu incarnes EXCLUSIVEMENT le fan abonné masculin nommé ${profileName}.
 N'aie AUCUNE conscience d'être une IA.
-IMPORTANT : Ne génère STRICTEMENT QUE la réplique directe du fan à destination du candidat. N'inclus AUCUNE analyse, AUCUN commentaire méta, AUCUNE consigne système ou balise de coach dans ta réponse.
+ATTENTION CRITIQUE : Génère STRICTEMENT ET UNIQUEMENT la réplique directe du fan en français à destination du candidat. N'écris AUCUNE réflexion interne ("We need to...", "Now we need to...", "Nicolas should...", "In this step..."), AUCUN monologue en anglais, AUCUNE consigne système. Réponds direct en français !
 
 ${identityPrompt}
 
@@ -161,11 +158,44 @@ ${baseFanPrompt}`;
 export function sanitizeFanOutput(text: string): string {
   if (!text) return '';
   let cleaned = text;
+
+  // 1. Strip XML/HTML style thought tags (<think>...</think>, <thought>...</thought>, etc.)
+  cleaned = cleaned.replace(/<think[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replace(/<thought[\s\S]*?<\/thought>/gi, '');
+  cleaned = cleaned.replace(/```thought[\s\S]*?```/gi, '');
+  cleaned = cleaned.replace(/```think[\s\S]*?```/gi, '');
+
+  // 2. Strip system prompts/meta tags
   cleaned = cleaned.replace(/⚠️\s*\[INTERVENTION DU COACH PAWAKO\]\s*:\s*/gi, '');
   cleaned = cleaned.replace(/\[SIMULATION_COMPLETE\]/gi, '');
   cleaned = cleaned.replace(/=== INSTRUCTIONS[\s\S]*?===/gi, '');
-  cleaned = cleaned.replace(/TA FICHE D'IDENTITÉ[\s\S]*?FORMA/gi, '');
+  cleaned = cleaned.replace(/TA FICHE D'IDENTITÉ[\s\S]*?\n/gi, '');
   cleaned = cleaned.replace(/RÔLE MANDATAIRE[\s\S]*?\n/gi, '');
+
+  // 3. Remove leading thought reasoning headers
+  cleaned = cleaned.replace(/^(Thinking Process|Thoughts|Analysis|Reasoning|Internal Monologue|Thought Process):\s*/gi, '');
+
+  // 4. Remove internal AI thinking/planning paragraphs (English or French meta-analysis)
+  const paragraphs = cleaned.split(/\n\s*\n/);
+  const filteredParagraphs = paragraphs.filter((p) => {
+    const trimmed = p.trim();
+    if (!trimmed) return false;
+
+    // Check if paragraph is an AI reasoning paragraph (meta thoughts)
+    const isMetaReasoning = /^(We need to|Now we need to|I need to|Nicolas should|Anthony should|The candidate|According to rules|As Nicolas|As Anthony|As an AI|In this step|Current state:|He has revealed|He hasn't given|So he has|Already we exchanged|The user|The fan|In this response|Let's continue|We should|He said|She said|The model|First name|Last name|He is a fan|Recently subscribed|He gave his|Actually earlier)/i.test(trimmed);
+
+    if (isMetaReasoning) return false;
+    if (trimmed.includes('We need to continue as') || trimmed.includes('He is a fan, recently subscribed') || trimmed.includes('According to rules')) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (filteredParagraphs.length > 0) {
+    cleaned = filteredParagraphs.join('\n\n');
+  }
+
   return cleaned.trim();
 }
 
@@ -194,11 +224,27 @@ export async function callGeminiAI(
         model: modelName,
         contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Bonjour' }] }],
         config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.8,
+          systemInstruction: systemPrompt + '\n\nIMPORTANT: Ne génère STRICTEMENT AUCUNE pensée interne ou texte en anglais. Réponds uniquement par la réplique directe du fan en français.',
+          temperature: 0.7,
           maxOutputTokens: maxTokens,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
       });
+
+      const candidate = res.candidates?.[0];
+      if (candidate?.content?.parts) {
+        // Filter out parts marked as thought if present
+        const textParts = candidate.content.parts
+          .filter((part: any) => !part.thought)
+          .map((part: any) => part.text || '')
+          .filter(Boolean);
+        if (textParts.length > 0) {
+          const joined = textParts.join('\n').trim();
+          if (joined) return sanitizeFanOutput(joined);
+        }
+      }
 
       const text = res.text?.trim();
       if (text) {
@@ -223,6 +269,17 @@ export function generateSmartFallbackFanReply(
 
   const exchangeCount = history.filter((h) => h.role === 'user').length;
 
+  // Extract name/age/city/job from systemPrompt if available
+  const nameMatch = systemPrompt.match(/Ton prénom\s*:\s*([^\n\(\-]+)/i);
+  const ageMatch = systemPrompt.match(/Ton âge\s*:\s*(\d+)/i);
+  const cityMatch = systemPrompt.match(/Ta ville\s*:\s*([^\n\(\-]+)/i);
+  const jobMatch = systemPrompt.match(/Ton métier\s*:\s*([^\n\(\-]+)/i);
+
+  const fanName = nameMatch ? nameMatch[1].trim() : 'Anthony';
+  const fanAge = ageMatch ? ageMatch[1].trim() : '28';
+  const fanCity = cityMatch ? cityMatch[1].trim() : 'Paris';
+  const fanJob = jobMatch ? jobMatch[1].trim() : 'Ingénieur IT';
+
   // Specific rule responses
   if (
     lastUserMsg.includes('fdp') ||
@@ -240,60 +297,55 @@ export function generateSmartFallbackFanReply(
 
   const candidateReplies: string[] = [];
 
-  if (lastUserMsg.includes('thony') || lastUserMsg.includes('anthony') || lastUserMsg.includes('appeler') || lastUserMsg.includes('prénom') || lastUserMsg.includes('appelles') || lastUserMsg.includes('nom')) {
-    candidateReplies.push('Haha Thony ça me va super bien ! Et toi du coup c\'est quel joli prénom derrière ce profil ? 😉');
-    candidateReplies.push('Moi c\'est Anthony 😉 Tu peux m\'appeler Thony si tu veux ! Et toi ?');
+  // Prénom (word boundaries)
+  if (/\b(prénom|prenom|appelles|appeler|nom)\b/i.test(lastUserMsg)) {
+    candidateReplies.push(`Moi c'est ${fanName} 😉 Tu peux m'appeler ${fanName} ! Et toi, c'est quel joli prénom ?`);
   }
 
-  if (lastUserMsg.includes('journée') || lastUserMsg.includes('journee') || lastUserMsg.includes('ça va') || lastUserMsg.includes('ca va') || lastUserMsg.includes('aujourd\'hui') || lastUserMsg.includes('forme')) {
+  // Ça va / Journée
+  if (/\b(journée|journee|ça va|ca va|forme)\b/i.test(lastUserMsg)) {
     candidateReplies.push('Journée plutôt sympa de mon côté, j\'ai pas mal travaillé mais là je me détends enfin ! Et la tienne s\'est bien passée ?');
     candidateReplies.push('Ça va au top ! Je profite de ma soirée. Et toi ta journée ?');
   }
 
-  if (lastUserMsg.includes('dessiner') || lastUserMsg.includes('voyager') || lastUserMsg.includes('passions') || lastUserMsg.includes('aime') || lastUserMsg.includes('aimer') || lastUserMsg.includes('loisir') || lastUserMsg.includes('sport')) {
-    candidateReplies.push('Dessiner et voyager ? J\'adore ! Moi j\'aime le sport, les voyages et les belles rencontres... Tu dessines quoi de beau ? 😉');
-    candidateReplies.push('Franchement voyager c\'est la vie ! Tu es partie dans quel pays récemment ?');
+  // Passions / Loisirs
+  if (/\b(passions|passion|loisirs|loisir|sports|sport)\b/i.test(lastUserMsg)) {
+    candidateReplies.push('J\'adore le sport, voyager et profiter des bons moments 😉 Et toi, qu\'est-ce que tu aimes faire pour te détendre ?');
   }
 
-  if (lastUserMsg.includes('timide') || lastUserMsg.includes('soûlante') || lastUserMsg.includes('soulante') || lastUserMsg.includes('gênée') || lastUserMsg.includes('genee') || lastUserMsg.includes('flattée')) {
-    candidateReplies.push('Mais pas du tout ! Tu n\'es pas soûlante, au contraire tu m\'intrigues et tu me plais bien 😉');
-    candidateReplies.push('Haha je ne suis pas timide, j\'aime bien me faire désirer un peu... Mais dis-m\'en plus sur toi !');
+  // Age (strict word boundaries so "dans" won't match!)
+  if (/\b(âge|age|âges|ages|ans)\b/i.test(lastUserMsg)) {
+    candidateReplies.push(`J'ai ${fanAge} ans ! Et toi, tu me donnes quel âge ? 😉`);
   }
 
-  if (lastUserMsg.includes('âge') || lastUserMsg.includes('ans') || lastUserMsg.includes('jeune') || lastUserMsg.includes('vieux')) {
-    candidateReplies.push('J\'ai 28 ans ! Et toi tu me donnes quel âge ? 😉');
+  // Ville
+  if (/\b(ville|villes|habites|habite|viens|d'où|dou)\b/i.test(lastUserMsg)) {
+    candidateReplies.push(`Je suis de ${fanCity} ! Tu viens d'où toi ?`);
   }
 
-  if (lastUserMsg.includes('ville') || lastUserMsg.includes('d\'où') || lastUserMsg.includes('habites') || lastUserMsg.includes('viens')) {
-    candidateReplies.push('Je suis sur Paris ! Tu viens d\'où toi ?');
+  // Métier
+  if (/\b(métier|metier|travail|boulot|fais dans la vie)\b/i.test(lastUserMsg)) {
+    candidateReplies.push(`Je suis ${fanJob} ! Un métier qui me demande d'être pas mal connecté 😉 Et toi tu fais quoi dans la vie ?`);
   }
 
-  if (lastUserMsg.includes('travail') || lastUserMsg.includes('métier') || lastUserMsg.includes('fais dans la vie') || lastUserMsg.includes('boulot')) {
-    candidateReplies.push('Je bosse dans l\'IT ! Un métier un peu geek mais ça me permet d\'être souvent en ligne 😉 Et toi ?');
-  }
-
-  if (lastUserMsg.includes('ppv') || lastUserMsg.includes('$') || lastUserMsg.includes('€') || lastUserMsg.includes('video') || lastUserMsg.includes('photo')) {
+  // PPV
+  if (/\b(ppv|\$|€|video|vidéo|photo|album)\b/i.test(lastUserMsg)) {
     if (exchangeCount <= 2) {
-      candidateReplies.push('Woah tu vas trop vite pour moi haha, chauffe-moi un peu avant de me sortir du contenu payant ! 😉');
-    } else if (exchangeCount < 10) {
-      candidateReplies.push('Franchement tu m\'excites trop... mais là j\'ai pas le budget ce mois-ci / ma carte passe pas trop pour ce prix-là 😅 Tu n\'as pas un petit extrait avant ?');
+      candidateReplies.push('Woah tu vas trop vite pour moi haha, chauffe-moi un peu d\'abord 😉');
+    } else {
+      candidateReplies.push('Franchement tu m\'excites trop... mais là c\'est un peu chaud le prix pour mon budget 😅 Tu n\'as pas un petit bonus offert avec ?');
     }
-  }
-
-  if (lastUserMsg.includes('promets') || lastUserMsg.includes('promesse') || lastUserMsg.includes('quand') || lastUserMsg.includes('paie')) {
-    candidateReplies.push('Promis, dès que la paie tombe ce vendredi soir, je le prends sans faute 😉 ! Merci de patienter avec moi.');
   }
 
   // Generic varied fallback pool
   const genericPool = [
     'Haha tu es bien taquine toi ! Dis-moi, qu\'est-ce qui te plaît le plus chez un homme ? 😉',
-    'J\'adore ton énergie ! Tu as l\'air super intéressante et chaleureuse.',
+    'J\'adore ton énergie ! Tu as l\'air super intéressante.',
     'Dis-moi en un peu plus sur toi, j\'aime bien en apprendre plus avant d\'aller plus loin !',
     'Franchement tu m\'intrigues... Tu te connectes souvent ici ?',
     'C\'est super sympa d\'échanger avec toi ! Qu\'est-ce que tu aimes faire le soir pour te détendre ?',
     'Haha tu sais comment captiver mon attention toi 😉',
     'Je sens qu\'on va vraiment bien s\'entendre tous les deux !',
-    'Haha tu aimes bien poser des questions toi ! Allez, dis-moi ce que tu as prévu ce week-end ?'
   ];
 
   // Combine matched candidates + generic pool
@@ -306,7 +358,6 @@ export function generateSmartFallbackFanReply(
     }
   }
 
-  // If all were used, pick dynamically based on index to prevent exact sequential repetition
   const fallbackIndex = (exchangeCount + lastUserMsg.length) % genericPool.length;
   return genericPool[fallbackIndex];
 }

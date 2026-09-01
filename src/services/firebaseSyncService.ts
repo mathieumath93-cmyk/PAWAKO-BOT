@@ -44,14 +44,14 @@ class FirebaseSyncService {
     const members = store.getMembers();
     const config = onboardingService.getConfig();
     const autoCfg = config.autoReminders || {
-      enabled: true,
+      enabled: false,
       thresholdHours: [2, 6, 8, 24],
       unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
       unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',
     };
 
     if (!autoCfg.enabled) {
-      return { checked: members.length, flagged: 0, details: ['Relances automatiques désactivées dans les paramètres'] };
+      return { checked: members.length, flagged: 0, details: ['Relances automatiques désactivées'] };
     }
 
     const thresholds = (autoCfg.thresholdHours && autoCfg.thresholdHours.length > 0)
@@ -262,9 +262,6 @@ class FirebaseSyncService {
    * Immediately resolves with stale data while launching revalidation in background.
    */
   public async initSync(): Promise<void> {
-    // Start background inactivity monitoring worker
-    this.startInactivityWorker();
-
     // Return inflight promise if background revalidation is already running
     if (this.inFlightPromise) {
       return this.inFlightPromise;
@@ -324,8 +321,6 @@ class FirebaseSyncService {
         const loadedMembers: Member[] = [];
         membersSnap.forEach((doc) => loadedMembers.push(doc.data() as Member));
         store.setMembers(loadedMembers);
-        // Run auto-reminder inactivity evaluation
-        await this.checkAndApplyAutoReminders().catch(() => {});
       } catch (memErr) {
         console.warn('⚠️ [SWR Revalidate Members Info]', memErr);
       }
@@ -422,6 +417,32 @@ class FirebaseSyncService {
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `usefulLinks/${linkId}`);
     }
+  }
+
+  /**
+   * Purges all residual auto-reminder and inactivity flags from all members in store & Firestore
+   */
+  public async purgeAllReminderFlags(): Promise<number> {
+    const members = store.getMembers();
+    let cleanedCount = 0;
+    for (const member of members) {
+      if (
+        member.autoReminderFlag ||
+        member.autoReminderLevel ||
+        member.inactivityWarningLevel ||
+        (member.remindersSent && Object.keys(member.remindersSent).length > 0)
+      ) {
+        member.autoReminderFlag = false;
+        member.autoReminderLevel = undefined;
+        member.autoReminderReason = undefined;
+        member.inactivityWarningLevel = 0;
+        member.remindersSent = {};
+        cleanedCount++;
+        await this.saveMember(member).catch(() => {});
+      }
+    }
+    store.saveMembers();
+    return cleanedCount;
   }
 }
 

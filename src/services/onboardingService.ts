@@ -24,7 +24,7 @@ const defaultConfig: OnboardingFlowConfig = {
   mathieuDiscordId: '',
   stepConfigs: defaultStepConfigs,
   autoReminders: {
-    enabled: true,
+    enabled: false,
     thresholdHours: [2, 6, 8, 24],
     unstartedMessage: '👋 Coucou <@{discordId}> ! Ton salon privé de formation est prêt. N\'oublie pas de cliquer sur **"{buttonLabel}"** pour débuter ton parcours !',
     unfinishedQuizMessage: '⏰ Coucou <@{discordId}> ! Tu as démarré le module **{moduleTitle}** mais ton quiz n\'est pas encore terminé. N\'hésite pas à y répondre pour débloquer la suite !',

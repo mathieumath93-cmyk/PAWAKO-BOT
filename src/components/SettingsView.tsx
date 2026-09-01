@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send, Trash2, RefreshCw, Zap } from 'lucide-react';
 import { discordService } from '../services/discordService';
 import { onboardingService } from '../services/onboardingService';
+import { firebaseSyncService } from '../services/firebaseSyncService';
 
 interface SettingsViewProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
@@ -73,6 +74,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
   };
 
   const [isResetting, setIsResetting] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
+
+  const handlePurgeReminders = async () => {
+    setIsPurging(true);
+    try {
+      const count = await firebaseSyncService.purgeAllReminderFlags();
+      onShowToast('Purger les Relances Réussi !', `${count} membre(s) réinitialisé(s) et nettoyé(s) dans Firestore et localement.`, 'success');
+    } catch {
+      onShowToast('Erreur Purge', 'Impossible de purger les relances.', 'info');
+    } finally {
+      setIsPurging(false);
+    }
+  };
 
   const handleResetAllData = async () => {
     if (!window.confirm('Êtes-vous sûr de vouloir effectuer un nettoyage complet des données ? Cette action réinitialise les logs, tentatives de quiz et le cache.')) {
@@ -231,6 +245,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
               }`}
             >
               <span className="w-4 h-4 bg-white rounded-full shadow-md"></span>
+            </button>
+          </div>
+        </div>
+
+        {/* Database Purge & Sync Card */}
+        <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-6 space-y-3 shadow-xl">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Purge des Relances & Synchro Base de Données</h3>
+                <p className="text-xs text-slate-400">
+                  Efface les anciens drapeaux et compteurs d'inactivité obsolètes sur tous les membres dans Firestore et localement.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePurgeReminders}
+              disabled={isPurging}
+              className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-lg shadow-amber-600/20 flex items-center gap-2 cursor-pointer transition-all shrink-0"
+            >
+              {isPurging ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Purge en cours...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Purger & Nettoyer BDD</span>
+                </>
+              )}
             </button>
           </div>
         </div>

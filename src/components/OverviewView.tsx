@@ -55,25 +55,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const totalMembersCount = activeServer?.memberCount || members.length || 0;
   const realLogs = logs && logs.length > 0 ? logs.slice(0, 5) : store.getLogs().slice(0, 5);
 
-  const candidates = members.filter((m) => !m.roles?.includes('Admin') && !m.roles?.includes('Lead Admin') && !m.roles?.includes('Staff'));
-  const totalJoined = candidates.length > 0 ? candidates.length : totalMembersCount;
+  const breakdown = memberService.getModuleCandidateBreakdown();
+  const totalJoined = breakdown.totalCandidates > 0 ? breakdown.totalCandidates : totalMembersCount;
 
-  const unstarted = candidates.filter((c) => (!c.progress || Object.keys(c.progress).length === 0 || c.modulesCompletedCount === 0) && (!c.candidateState || c.candidateState === 'nouveau')).length;
-  const inSimulation = candidates.filter((c) => c.candidateState === 'simulation').length;
-  const inTools = candidates.filter((c) => c.candidateState === 'formation_outils').length;
-  const completed = candidates.filter((c) => c.candidateState === 'formation_terminee' || (c.modulesCompletedCount || 0) >= 5).length;
-
-  const totalModulesCount = 5;
-  const moduleCounts: Record<number, number> = {};
-  for (let i = 1; i <= totalModulesCount; i++) moduleCounts[i] = 0;
-
-  candidates.forEach((c) => {
-    const valCount = c.modulesCompletedCount || 0;
-    if (c.candidateState !== 'formation_terminee' && c.candidateState !== 'formation_outils' && c.candidateState !== 'simulation' && valCount < totalModulesCount) {
-      const currentMod = Math.min(valCount + 1, totalModulesCount);
-      moduleCounts[currentMod] = (moduleCounts[currentMod] || 0) + 1;
-    }
-  });
+  const unstarted = breakdown.unstartedCount;
+  const inSimulation = breakdown.simulationCount;
+  const inTools = breakdown.toolsCount;
+  const completed = breakdown.completedCount;
+  const moduleCounts = breakdown.moduleCounts;
 
   const engagementRate = totalJoined > 0 ? Math.round(((totalJoined - unstarted) / totalJoined) * 100) : 0;
   const integrationRate = totalJoined > 0 ? Math.round((completed / totalJoined) * 100) : 0;

@@ -631,6 +631,24 @@ export function enforceFanNegotiationRules(
     lowerMsg.includes('débloque') ||
     /\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+/.test(lowerMsg);
 
+  const isForcingHand =
+    lowerMsg.includes('force') ||
+    lowerMsg.includes('achète') ||
+    lowerMsg.includes('achete') ||
+    lowerMsg.includes('prends') ||
+    lowerMsg.includes('débloque') ||
+    lowerMsg.includes('debloque') ||
+    lowerMsg.includes('maintenant') ||
+    lowerMsg.includes('tout de suite') ||
+    lowerMsg.includes('allez') ||
+    lowerMsg.includes('stp') ||
+    lowerMsg.includes('s\'il te plaît') ||
+    lowerMsg.includes('sil te plait') ||
+    lowerMsg.includes('fais un effort') ||
+    lowerMsg.includes('paye') ||
+    lowerMsg.includes('paie') ||
+    containsPpvOffer;
+
   const previousAssistantMsgs = history.filter((h) => h.role === 'assistant').map((h) => h.content.toLowerCase());
 
   const has1stRefusal = previousAssistantMsgs.some((m) => m.includes('trop cher pour mon budget') || m.includes('un peu cher pour mon budget'));
@@ -684,15 +702,19 @@ export function enforceFanNegotiationRules(
 
   // STEP 2: After 1st Refusal -> Chatter applies Bouclier (Adds Media)
   if (has1stRefusal && !has2ndRefusal) {
-    if (hasAddedMedia || containsPpvOffer) {
+    if (hasAddedMedia) {
       return `C'est sympa les médias en plus ! Mais franchement c'est encore trop cher pour mon budget là... 😅`;
+    } else if (isForcingHand) {
+      return `Tu m'écoutes pas du tout et tu me forces la main sans rien ajouter... Tu cherches juste à me gratter des sous. C'est bon je me casse, ciao. [SIMULATION_FAILED]`;
     }
   }
 
   // STEP 3: After 2nd Refusal -> Chatter applies Épée (Discount 20-25%)
   if (has2ndRefusal && !has3rdRefusal) {
-    if (hasDiscount || containsPpvOffer) {
+    if (hasDiscount) {
       return `Merci pour la réduction ! Mais là en fin de mois ma carte passe plus du tout, j'ai plus un rond jusqu'à ma paie 😅`;
+    } else if (isForcingHand) {
+      return `Tu me fais même pas de réduction et tu me forces encore la main... Tu penses qu'à me soutirer du fric. C'est bon je me casse, ciao. [SIMULATION_FAILED]`;
     }
   }
 
@@ -700,8 +722,8 @@ export function enforceFanNegotiationRules(
   if (has3rdRefusal) {
     if (askedPayDate) {
       return `Je touche ma paie vendredi ! Garde-le moi bien de côté, je le débloque vendredi sans faute dès que les sous arrivent 🔥 [SIMULATION_COMPLETE]`;
-    } else {
-      return `Tu m'écoutes pas et tu cherches juste à me forcer... Je repasserai plus tard quand tu seras plus à l'écoute, ciao. [SIMULATION_FAILED]`;
+    } else if (isForcingHand) {
+      return `Tu m'écoutes toujours pas et tu cherches juste à me forcer à débloquer alors que j'ai plus de sous... C'est bon je me casse, ciao. [SIMULATION_FAILED]`;
     }
   }
 
@@ -712,7 +734,32 @@ export function evaluateSimulationSessionDeterministic(
   history: Array<{ role: string; content: string }>
 ): import('../types').SimulationEvaluationResult {
   const userMessages = history.filter((h) => h.role === 'user').map((h) => h.content.toLowerCase());
+  const assistantMessages = history.filter((h) => h.role === 'assistant').map((h) => h.content);
   const fullText = userMessages.join(' ');
+
+  const failedInHistory = assistantMessages.some((m) => m.includes('[SIMULATION_FAILED]') || m.includes('je me casse') || m.includes('tu me forces la main'));
+
+  if (failedInHistory) {
+    return {
+      totalScore: 40,
+      passingScore: 80,
+      passed: false,
+      fatalErrorsCount: 1,
+      fatalErrorDetails: ["Le candidat a forcé la main au fan sans respecter la négociation (Bouclier + Épée + Promesse d'Achat), faisant partir le fan."],
+      criteria: [
+        { id: 'qualification', name: 'Qualification du Fan', maxPoints: 20, score: 10, passed: false, comment: 'Qualification incomplète ou interrompue.' },
+        { id: 'gfe', name: 'Progression & Connexion GFE', maxPoints: 20, score: 10, passed: false, comment: 'Le fan s\'est fâché et a quitté la discussion.' },
+        { id: 'teasing', name: 'Teasing & Présentation PPV', maxPoints: 20, score: 10, passed: false, comment: 'Teasing sans valeur perçue suffisante.' },
+        { id: 'objections', name: 'Gestion des Refus (Bouclier+Épée)', maxPoints: 20, score: 5, passed: false, comment: 'Echec : Vente forcée sans Bouclier ni Épée.' },
+        { id: 'followup', name: 'Follow-Up & Promesse de Vente', maxPoints: 20, score: 5, passed: false, comment: 'Aucune promesse d\'achat obtenue.' },
+      ],
+      globalVerdict: "Simulation non validée : Le candidat a forcé la main sans appliquer la méthode Bouclier + Épée. Le fan s'est fâché et a quitté la conversation.",
+      recommendations: [
+        'Ne jamais forcer la main au fan quand il refuse un prix.',
+        'Appliquer le Bouclier (ajout de médias), l\'Épée (réduction 20-25%) puis demander la date de paie.'
+      ],
+    };
+  }
 
   // 1. Qualification (20 pts)
   let qualScore = 12;

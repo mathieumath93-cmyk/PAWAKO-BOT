@@ -274,6 +274,92 @@ class MemberService {
     }
     return updated;
   }
+
+  public getModuleCandidateBreakdown() {
+    const candidates = this.getMembers().filter(
+      (m) =>
+        !m.roles?.some((r) =>
+          ['admin', 'staff', 'lead admin', 'formateur', 'direction', 'support'].some((kw) =>
+            r.toLowerCase().includes(kw)
+          )
+        )
+    );
+
+    const modules = store.getModules();
+    const totalModulesCount = modules.length || 5;
+
+    const moduleCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const moduleMembers: Record<number, Member[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+
+    let unstartedCount = 0;
+    let simulationCount = 0;
+    let toolsCount = 0;
+    let completedCount = 0;
+    let inactive3dCount = 0;
+
+    const unstartedMembers: Member[] = [];
+    const simulationMembers: Member[] = [];
+    const toolsMembers: Member[] = [];
+    const completedMembers: Member[] = [];
+
+    candidates.forEach((c) => {
+      if (c.candidateState === 'expulse_inactivite') {
+        inactive3dCount++;
+        return;
+      }
+
+      const valCount = Object.values(c.progress || {}).filter((p) => p.status === 'valide').length;
+      const hasStarted =
+        Boolean(c.candidateState && c.candidateState !== 'nouveau') ||
+        Object.values(c.progress || {}).some(
+          (p) => (p.attemptsCount && p.attemptsCount > 0) || p.status === 'en_cours' || p.status === 'valide'
+        );
+
+      if (c.candidateState === 'formation_terminee' || valCount >= totalModulesCount) {
+        completedCount++;
+        completedMembers.push(c);
+      } else if (c.candidateState === 'formation_outils') {
+        toolsCount++;
+        toolsMembers.push(c);
+      } else if (c.candidateState === 'simulation') {
+        simulationCount++;
+        simulationMembers.push(c);
+      } else if (valCount === 0 && !hasStarted) {
+        unstartedCount++;
+        unstartedMembers.push(c);
+      } else {
+        let modNum = 1;
+        if (c.currentModuleId) {
+          const matched = modules.find((m) => m.id === c.currentModuleId);
+          if (matched && matched.order) modNum = matched.order;
+          else if (c.currentModuleId.includes('-')) {
+            const parsed = parseInt(c.currentModuleId.split('-')[1], 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) modNum = parsed;
+          }
+        } else {
+          modNum = Math.min(valCount + 1, 5);
+        }
+        modNum = Math.max(1, Math.min(5, modNum));
+        moduleCounts[modNum] = (moduleCounts[modNum] || 0) + 1;
+        moduleMembers[modNum].push(c);
+      }
+    });
+
+    return {
+      totalCandidates: candidates.length,
+      unstartedCount,
+      unstartedMembers,
+      moduleCounts,
+      moduleMembers,
+      simulationCount,
+      simulationMembers,
+      toolsCount,
+      toolsMembers,
+      completedCount,
+      completedMembers,
+      inactive3dCount,
+    };
+  }
 }
 
 export const memberService = new MemberService();

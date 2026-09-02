@@ -1261,13 +1261,17 @@ export class PawakoBotRunner {
               } else {
                 // Regular Fan message (plain text)
                 const isSimulationComplete = anthonyReply.includes('[SIMULATION_COMPLETE]');
-                const cleanFanReply = anthonyReply.replace(/\[SIMULATION_COMPLETE\]/gi, '').trim();
+                const isSimulationFailed = anthonyReply.includes('[SIMULATION_FAILED]');
+                const cleanFanReply = anthonyReply
+                  .replace(/\[SIMULATION_COMPLETE\]/gi, '')
+                  .replace(/\[SIMULATION_FAILED\]/gi, '')
+                  .trim();
 
                 if ('send' in message.channel && cleanFanReply) {
                   await (message.channel as any).send(cleanFanReply).catch(() => {});
                 }
 
-                if (isSimulationComplete) {
+                if (isSimulationComplete || isSimulationFailed) {
                   await this.completeAnthonySimulationSession(session!, message.channel);
                   return;
                 }
@@ -3916,15 +3920,21 @@ export class PawakoBotRunner {
       const modules = store.getModules();
       const totalModules = modules.length || 5;
 
-      // Categorize members strictly by their current / highest progression point (no duplicates)
+      // Categorize members strictly by their current / highest progression point
       let unstartedCount = 0;
-      const moduleInProgressCounts: Record<string, number> = {};
+      const moduleMembersMap: Record<string, Member[]> = {};
       modules.forEach((mod) => {
-        moduleInProgressCounts[mod.id] = 0;
+        moduleMembersMap[mod.id] = [];
       });
-      let completedAllCount = 0;
-
+      let simulationMembers: Member[] = [];
+      let toolsFormationMembers: Member[] = [];
+      let completedAllMembers: Member[] = [];
       const unstartedMembers: Member[] = [];
+
+      let autoReminder6hCount = 0;
+      let autoReminder12hCount = 0;
+      let autoReminder24hCount = 0;
+      let inactive3dCount = 0;
 
       members.forEach((m) => {
         if (m.isActive === false) return;
@@ -3937,6 +3947,16 @@ export class PawakoBotRunner {
         );
         if (isStaff) return;
 
+        // Check auto-reminder and inactivity levels
+        if (m.autoReminderFlag) {
+          if (m.autoReminderLevel === '24h') autoReminder24hCount++;
+          else if (m.autoReminderLevel === '12h') autoReminder12hCount++;
+          else autoReminder6hCount++;
+        }
+        if (m.candidateState === 'expulse_inactivite') {
+          inactive3dCount++;
+        }
+
         const validatedModulesCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
         const hasStarted =
           Boolean(m.candidateState && m.candidateState !== 'nouveau') ||
@@ -3945,24 +3965,39 @@ export class PawakoBotRunner {
           );
 
         if (m.candidateState === 'formation_terminee' || validatedModulesCount >= totalModules) {
-          completedAllCount++;
+          completedAllMembers.push(m);
+        } else if (m.candidateState === 'formation_outils') {
+          toolsFormationMembers.push(m);
+        } else if (m.candidateState === 'simulation') {
+          simulationMembers.push(m);
         } else if (validatedModulesCount === 0 && !hasStarted) {
           unstartedCount++;
           unstartedMembers.push(m);
         } else {
           // En cours sur son module actuel
           const curModId = m.currentModuleId || (modules[validatedModulesCount]?.id) || modules[0]?.id;
-          if (curModId && moduleInProgressCounts[curModId] !== undefined) {
-            moduleInProgressCounts[curModId]++;
+          if (curModId && moduleMembersMap[curModId]) {
+            moduleMembersMap[curModId].push(m);
           } else if (modules[0]) {
-            moduleInProgressCounts[modules[0].id] = (moduleInProgressCounts[modules[0].id] || 0) + 1;
+            moduleMembersMap[modules[0].id].push(m);
           }
         }
       });
 
+      const completedAllCount = completedAllMembers.length;
       const activeOrCompleted = totalJoined - unstartedCount;
       const engagementPct = totalJoined > 0 ? Math.round((activeOrCompleted / totalJoined) * 100) : 0;
       const completionPct = totalJoined > 0 ? Math.round((completedAllCount / totalJoined) * 100) : 0;
+
+      // Calculate today's simulation stats
+      const simAttempts = store.getSimulationAttempts() || [];
+      const todayStr = store.getFormattedNow().split(' ')[0] || '';
+      const todaySims = simAttempts.filter((a) => a.timestamp && a.timestamp.startsWith(todayStr));
+      const todaySimPassed = todaySims.filter((a) => a.passed).length;
+      const todaySimFailed = todaySims.length - todaySimPassed;
+      const todayAvgSimScore = todaySims.length > 0
+        ? Math.round(todaySims.reduce((sum, a) => sum + (a.totalScore || 0), 0) / todaySims.length)
+        : 0;
 
       const periodTitles = {
         daily: '📊 STATISTIQUES JOURNALIÈRES (18h00 HF)',
@@ -3971,22 +4006,35 @@ export class PawakoBotRunner {
       };
 
       const modulesBreakdownLines = modules.map((mod, idx) => {
-        const count = moduleInProgressCounts[mod.id] || 0;
-        return `• **${mod.title}** (Niveau ${idx + 1}) : **${count} candidat(s)** en cours`;
+        const modMems = moduleMembersMap[mod.id] || [];
+        const count = modMems.length;
+        const namesList = count > 0
+          ? ` (${modMems.map((m) => `**${m.username}**`).slice(0, 5).join(', ')}${count > 5 ? '...' : ''})`
+          : '';
+        return `• **${mod.title}** (Niveau ${idx + 1}) : **${count} candidat(s)**${namesList}`;
       });
 
       const statsEmbed = new EmbedBuilder()
         .setTitle(periodTitles[type] || periodTitles.daily)
         .setDescription(
           `📈 **Bilan Global de la Formation PAWAKO**\n` +
-          `*(Calcul basé exclusivement sur l'avancement réel des modules et quiz validés)*\n\n` +
-          `👥 **Total des Inscrits (Membres ayant rejoint) :** **${totalJoined}**\n\n` +
-          `😴 **N'ayant encore rien lancé (0 module démarré) :** **${unstartedCount} membre(s)**\n` +
-          `*(Un message privé de motivation "Boost Revenus" leur a été envoyé)*\n\n` +
-          `📚 **Répartition par Dernier Module Atteint (Sans redondance) :**\n` +
+          `*(Calcul basé exclusivement sur l'avancement réel par module)*\n\n` +
+          `👥 **Total Inscrits :** **${totalJoined}**  |  📊 **Engagement :** **${engagementPct}%**\n\n` +
+          `😴 **0 module démarré (Inactifs initial) :** **${unstartedCount} membre(s)**\n` +
+          `*(Message "Boost Revenus" transmis par DM)*\n\n` +
+          `📚 **Répartition Candidats par Module :**\n` +
           `${modulesBreakdownLines.join('\n')}\n\n` +
-          `🎓 **Formation 100% Terminée (Validés) :** **${completedAllCount} membre(s)** (${completionPct}%)\n\n` +
-          `📊 **Taux d'engagement global :** **${engagementPct}%** (${activeOrCompleted}/${totalJoined} membres actifs ou diplômés)`
+          `🎯 **Simulations IA Anthony (En cours : ${simulationMembers.length}) :**\n` +
+          `• Simulations aujourd'hui : **${todaySims.length}** (${todaySimPassed} validées, ${todaySimFailed} échecs)\n` +
+          `• Score moyen aujourd'hui : **${todayAvgSimScore}/100**\n` +
+          (simulationMembers.length > 0 ? `• Candidats en simu : ${simulationMembers.map((m) => `**${m.username}**`).join(', ')}\n` : '') +
+          `\n🛠️ **Formation Outils (En cours : ${toolsFormationMembers.length}) :**\n` +
+          (toolsFormationMembers.length > 0 ? `• Candidats : ${toolsFormationMembers.map((m) => `**${m.username}**`).join(', ')}\n` : '• Aucun candidat actuellement\n') +
+          `\n🚨 **Suivi Relances & Inactivité :**\n` +
+          `• 🔔 Relances 6h : **${autoReminder6hCount}**  |  12h : **${autoReminder12hCount}**  |  24h : **${autoReminder24hCount}**\n` +
+          `• 🔴 Expulsés 3j Inactivité : **${inactive3dCount}**\n\n` +
+          `🎓 **Diplômés / Formés Intégrés :** **${completedAllCount} membre(s)** (${completionPct}%)\n` +
+          (completedAllMembers.length > 0 ? `• Membres : ${completedAllMembers.map((m) => `**${m.username}**`).slice(0, 10).join(', ')}` : '')
         )
         .setColor(0x6366f1)
         .setFooter({ text: 'PAWAKO FORMATION • Rapport Automatique Staff (18h00 HF)' })

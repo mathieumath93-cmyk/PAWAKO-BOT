@@ -896,14 +896,47 @@ class DiscordService {
   /**
    * Send a custom embed / message to a specified Discord channel
    */
-  public async sendCustomEmbed(options: {
-    channelName: string;
-    channelId?: string;
-    guildId?: string;
-    embed: any;
-    components?: any[];
-    content?: string;
-  }): Promise<{ success: boolean; message: string; messageId?: string }> {
+  public async sendCustomEmbed(
+    optionsOrChannel:
+      | string
+      | {
+          channelName: string;
+          channelId?: string;
+          guildId?: string;
+          embed: any;
+          components?: any[];
+          content?: string;
+        },
+    title?: string,
+    description?: string,
+    color?: number,
+    contentArg?: string
+  ): Promise<{ success: boolean; message: string; messageId?: string }> {
+    let options: {
+      channelName: string;
+      channelId?: string;
+      guildId?: string;
+      embed: any;
+      components?: any[];
+      content?: string;
+    };
+
+    if (typeof optionsOrChannel === 'string') {
+      options = {
+        channelName: optionsOrChannel,
+        channelId: /^\d{17,20}$/.test(optionsOrChannel) ? optionsOrChannel : undefined,
+        content: contentArg,
+        embed: {
+          title: title || 'Message Staff PAWAKO 🛡️',
+          description: description || '',
+          color: color ?? 0x6366f1,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } else {
+      options = optionsOrChannel;
+    }
+
     const cleanChannel = (options.channelName || '#general').replace(/^#/, '');
     const activeGuildId = options.guildId || discordSyncService.getActiveGuildId();
 

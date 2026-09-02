@@ -1319,6 +1319,16 @@ class StoreService {
     return this.members;
   }
 
+  public updateCandidateState(memberId: string, candidateState: Member['candidateState']): Member | null {
+    const member = this.getMember(memberId);
+    if (!member) return null;
+    member.candidateState = candidateState;
+    member.lastActiveAt = this.getFormattedNow();
+    this.saveMembers();
+    firebaseSyncService.saveMember(member).catch(() => {});
+    return member;
+  }
+
   public getMember(id: string): Member | undefined {
     if (!id) return undefined;
     const cleanId = id.replace('mem-', '');

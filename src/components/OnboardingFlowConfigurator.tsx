@@ -108,7 +108,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         ...foundStep,
         moduleTitle: activeModuleObj?.title || foundStep.moduleTitle,
         directivesText: activeModuleObj?.content || foundStep.directivesText,
-        externalLinkUrl: foundStep.externalLinkUrl || activeModuleObj?.url || '',
+        externalLinkUrl: foundStep.externalLinkUrl !== undefined ? foundStep.externalLinkUrl : (activeModuleObj?.url || ''),
         delayMinutesBeforeQuiz: foundStep.delayMinutesBeforeQuiz ?? activeQuizObj?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'En cours',
         roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Validé',
@@ -793,7 +793,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
                   </label>
                   <input
                     type="url"
-                    value={currentStep.externalLinkUrl || activeModuleObj.url || ''}
+                    value={currentStep.externalLinkUrl !== undefined ? currentStep.externalLinkUrl : (activeModuleObj?.url || '')}
                     onChange={(e) => {
                       const url = e.target.value;
                       handleUpdateStepConfig({ ...currentStep, externalLinkUrl: url });

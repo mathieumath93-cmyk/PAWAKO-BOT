@@ -147,8 +147,11 @@ class OnboardingService {
     const mod = store.getModule(moduleId);
     const quiz = mod ? store.getQuiz(mod.quizId || '') : undefined;
 
-    // Direct synchronization: module URL takes priority if present
-    const effectiveLinkUrl = mod?.url || (mod?.resources && mod.resources[0]?.url) || existing?.externalLinkUrl || '';
+    // Priority order: stepConfig's externalLinkUrl (if set), then module's url, then module resources
+    const effectiveLinkUrl =
+      existing?.externalLinkUrl !== undefined && existing?.externalLinkUrl !== ''
+        ? existing.externalLinkUrl
+        : mod?.url || (mod?.resources && mod.resources[0]?.url) || '';
 
     if (existing) {
       return {
@@ -193,7 +196,7 @@ class OnboardingService {
       const updatedMod = store.updateModule(step.moduleId, {
         title: step.moduleTitle,
         content: step.directivesText || mod.content,
-        url: step.externalLinkUrl || mod.url,
+        url: step.externalLinkUrl !== undefined ? step.externalLinkUrl : mod.url,
         roleEnCoursName: step.roleOnStartName || mod.roleEnCoursName,
         roleValidatedName: step.roleOnPassName || mod.roleValidatedName,
       });

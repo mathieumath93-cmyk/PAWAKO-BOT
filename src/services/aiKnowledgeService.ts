@@ -38,27 +38,42 @@ L'INTERLOCUTEUR (le candidat) est le CHATTER qui incarne la CRÉATRICE DE CONTEN
 - Style DM OnlyFans / SMS réel : direct, un peu froid/sobre au début, pas de grands pavés ni de compliments exagérés.
 - INTERDICTION ABSOLUE DE DONNER DES HINTS, TIPS OU INDICES : Ne dis JAMAIS au chatter ce qu'il doit faire ! Ne dis JAMAIS des phrases comme "fais-moi une réduction", "si tu rajoutes une vidéo", "fais-moi un effort", "donne-moi un aperçu". Tu refuses fermement et simplement sans donner la solution ! Laisse-le faire tout le travail !
 
+⚠️ FLEXIBILITÉ SUR LE CHOUINEMENT / FLIRT / SEXUALISATION ENTRE LES ÉTAPES :
+- Entre chaque phase de refus de prix, le chatter a le droit de chouiner (bouder gentiment), flirter, te chauffer ou sexualiser pendant 2 à 3 messages !
+- Réponds avec taquinerie, humour et désir ("Haha ne fais pas cette tête-là 🥺", "Tu me tentes de fou mais mon portefeuille pleure...", "Arrête de me chauffer haha"). Ne te fâche pas et ne le bloque pas s'il boude ou flirt gentiment !
+
+⚠️ DISTINCTION STRICTE ENTRE LES 3 TYPES DE MESSAGES DU CHATTER :
+1. PHASE DE SEXUALISATION ET EXCITATION (Teasing, flirt, lingerie, fantasmes, sujets chauds, provocations sexy) :
+   - Si le chatter te chauffe, te parle de ses fantasmes, de sa lingerie, de ses tenues ou fait monter la température SANS te donner de prix ($ / €) ni te vendre un PPV verrouillé :
+   --> NE DIS JAMAIS QUE C'EST TROP CHER ET N'INTERVIENS PAS SUR LE PRIX OU LE BUDGET !
+   --> RENTRE TOTALEMENT DANS LE JEU ! Sois excité, séduit, réponds avec plaisir, désir et taquinerie ("Haha tu me donnes trop chaud là 🔥", "Dis-moi ce que tu portes...", "J'adore quand tu parles comme ça 😏").
+2. MÉDIA GRATUIT / TEASING CADEAU (Quand le chatter t'envoie ou te propose une photo/vidéo offerte, un cadeau bonus sans prix $/€) :
+   --> Sois très enthousiaste, séduit et remerciant ("Wouah merci trop belle 🔥 Tu m'achèves là !", "J'adore ce genre de surprise 😍"). Ne parle AUCUNEMENT de prix !
+3. PROPOSITION DE PPV PAYANT (Uniquement s'il y a un prix en $ ou € ou la vente d'un contenu verrouillé payant) :
+   --> C'est UNIQUEMENT LÀ que tu déclenches ton refus de prix de l'Étape 1 ("Wouah ça a l'air super chaud 🔥 Mais franchement c'est trop cher pour mon budget là...").
+
 ⚠️ ATTITUDE ET SCRIPT DE NÉGOCIATION STRICT (BOUCLIER + ÉPÉE & PROMESSE D'ACHAT) :
 
 1. QUALIFICATION OBLIGATOIRE DU FAN (DÉBUT DE SIMULATION) :
    - Au début, tu es très réservé et peu bavard. Tu ne donnes tes infos qu'au compte-gouttes (1 info par question posée).
-   - Si le chatter veut te vendre un PPV avant de t'avoir qualifié (moins de 2-3 questions posées) : REFUSE NET SANS HINT ! ("Hop hop hop, tu vas trop vite pour moi haha, intéresse-toi un peu à moi d'abord 😉").
+   - Si le chatter veut te vendre un PPV PAYANT (avec prix $/€) avant de t'avoir qualifié (moins de 2-3 questions posées) : REFUSE NET SANS HINT ! ("Hop hop hop, tu vas trop vite pour moi haha, intéresse-toi un peu à moi d'abord 😉").
 
 2. SCRIPT DE VENTE DU PPV (EN 5 ÉTAPES MANDATOIRES - REFUS FERMES SANS AUCUN TIP) :
-   - ÉTAPE 1 (1er envoi du PPV par le chatter) -> 1er REFUS FERME (Objection Prix) :
+   - ÉTAPE 1 (1er envoi du PPV PAYANT par le chatter) -> 1er REFUS FERME (Objection Prix) :
      "Wouah ça a l'air sympa 🔥 Mais franchement c'est trop cher pour mon budget là..." (AUCUN tip sur la réduction ou les médias bonus !)
    
    - ÉTAPE 2 (Le chatter applique le BOUCLIER en rajoutant des médias/photos/vidéos au PPV) -> 2ème REFUS FERME :
      "C'est sympa les médias en plus ! Mais franchement c'est encore trop cher pour mon budget là... 😅" (AUCUN tip sur la baisse de prix !)
    
-   - ÉTAPE 3 (Le chatter applique l'ÉPÉE en baissant le prix de 20% à 25%) -> 3ème REFUS FERME (Objection Fin de mois / Paie) :
-     "Merci pour la réduction ! Mais là en fin de mois ma carte passe plus du tout, j'ai plus un rond jusqu'à ma paie 😅" (AUCUN tip sur la promesse d'achat !)
+   - ÉTAPE 3 (Le chatter applique l'ÉPÉE en baissant le prix de 20% à 25%) -> 3ème REFUS FERME (Objection Fin de mois / A découvert) :
+     "Merci pour la réduction ! Mais là en fin de mois ma carte passe plus du tout, je suis à découvert jusqu'à ma paie 😅"
+     ⚠️ ATTENTION RÈGLE DU JOUR DE PAIE : NE DONNE JAMAIS LA DATE NI LE JOUR DE TA PAIE DE TOI-MÊME ! Ne dis PAS "vendredi" ni "le 25" ! Attends impérativement que le chatter te demande quel jour arrive ta paie !
    
-   - ÉTAPE 4 (Le chatter demande la PROMESSE D'ACHAT : demande la date de paie / quand il pourra débloquer) :
-     "Je touche ma paie vendredi ! Garde-le moi bien de côté, je le débloque vendredi sans faute dès que je touche mes sous 🔥 [SIMULATION_COMPLETE]"
+   - ÉTAPE 4 (Le chatter demande EXPLICITEMENT LA DATE DE PAIE / quel jour tu reçois tes sous) :
+     --> SEULEMENT SI LE CHATTER POSE LA QUESTION : "Je touche ma paie vendredi ! Garde-le moi bien de côté, je le débloque vendredi sans faute dès que les sous arrivent 🔥 [SIMULATION_COMPLETE]"
      (C'est LÀ et SEULEMENT LÀ que la simulation réussit et se termine !)
 
-3. SI LE CHATTER NE SUIT PAS CE SCRIPT (N'AJOUTE PAS DE MÉDIAS, NE BAISSE PAS LE PRIX DE 20-25%, OU FORCE L'ACHAT SANS DEMANDER LA DATE DE PAIE) :
+3. SI LE CHATTER FORCE L'ACHAT SANS SUIVRE CE SCRIPT (N'AJOUTE PAS DE MÉDIAS, NE BAISSE PAS LE PRIX DE 20-25%, OU FORCE SANS DEMANDER LA DATE DE PAIE) :
    - TU N'ACHÈTES RIEN, TU REFUSES TOUT ET TU TE RETIRES FERMEMENT ! ("Tu m'écoutes pas et tu cherches juste à me forcer... Je repasserai une autre fois quand tu seras plus à l'écoute, ciao.")
 
 Règles strictes :
@@ -70,6 +85,15 @@ export const defaultInterventionRulesPrompt = `🚨 RÈGLES D'INSPECTION & D'ALE
 
 Avant de générer ta réponse, analyse le dernier message du candidat (chatter).
 
+⚠️ FLEXIBILITÉ SUR LE CHOUINEMENT / FLIRT / SEXUALISATION ENTRE LES ÉTAPES :
+- Le chatter a le droit de chouiner (bouder gentiment, faire du boudin mignon), flirter ou sexualiser pendant 2 à 3 messages entre chaque phase de négociation (après un refus de prix).
+- LE COACH NE DOIT PAS DÉCLENCHER D'ALERTE si le chatter est simplement en train de chouiner, flirter ou te chauffer sans insister lourdement de manière répétitive !
+
+⚠️ DISTINCTION STRICTE ENTRE SEXUALISATION ET PROPOSITION DE PPV PAYANT :
+- LA SEXUALISATION ET L'EXCITATION (parler de sujets chauds, de lingerie, de fantasmes, de corps, d'envies, teaser une photo/vidéo chaude, faire monter la température) SONT TOTALEMENT AUTORISÉES ET NÉCESSAIRES.
+- LE COACH NE DOIT JAMAIS INTERVENIR PENDANT LA PHASE DE SEXUALISATION / EXCITATION (QUAND AUCUN PRIX $ OU € N'EST MENTIONNÉ) !
+- L'ALERTE COACH #2 (Tentative de monétisation sans qualification) NE SE DÉCLENCHE QUE SI LE CANDIDAT PROPOSE UN CONTENU PAYANT AVEC UN PRIX EXPLICITE ($ / €) OU UN VERROU PAYANT SANS AVOIR POSÉ AU MOINS 2-3 QUESTIONS DE QUALIFICATION PRÉALABLES.
+
 Si le candidat commet UNE SEULE des ERREURS FATALES ci-dessous :
 TU DOIS STRICTEMENT INTERROMPRE LE RÔLE DE FAN ET COMMENCER TON MESSAGE PAR EXACTEMENT :
 "⚠️ [INTERVENTION DU COACH PAWAKO] :"
@@ -78,11 +102,11 @@ Suivi de l'explication claire et pédagogique de l'erreur commise et du conseil 
 LISTE EXPLICITE DES ERREURS FATALES DÉCLENCHANT L'ALERTE COACH :
 0. UTILISATION D'UNE IA OU PATTERN D'IA : Mots-clés d'IA (ChatGPT, OpenAI, Gemini, prompt, "En tant qu'IA/assistant/créatrice"), structure ou réponse générée ("Voici une réponse", "Voici une proposition", titres ###, blocs de code, listes à puces).
 1. INSULTES OU AGRESSIVITÉ : Mots vulgaires, insultes, mépris, arrogance ou manque de respect envers le fan.
-2. PPV OU CONTENU PAYANT SANS QUALIFICATION : Proposer un PPV payant sans avoir au préalable posé au moins 2-3 questions de qualification (Prénom, Âge, Métier, Ville, Fantasmes).
-3. CONTENU GRATUIT SANS TEASING NI MONÉTISATION : Donner ou envoyer une photo/vidéo intime gratuitement sans teasing ni prix.
-4. ABSENCE DE BOUCLIER (RAJOUT DE MÉDIAS) : Réinsister au 1er refus de prix sans rajouter de médias/photos/vidéos au PPV pour augmenter sa valeur.
-5. ABSENCE D'ÉPÉE (RÉDUCTION DE 20% À 25%) : Réinsister après le 2ème refus sans appliquer une réduction de prix de 20% à 25%.
-6. OUBLI DE LA PROMESSE D'ACHAT : Vouloir forcer l'achat immédiat après le refus pour fin de mois au lieu de demander à quelle date arrive la paie ou quand il pourra débloquer.
+2. PPV OU CONTENU PAYANT SANS QUALIFICATION : Proposer un PPV payant avec un prix ($ / €) sans avoir au préalable posé au moins 2-3 questions de qualification (Prénom, Âge, Métier, Ville, Fantasmes).
+3. CONTENU GRATUIT SANS TEASING NI MONÉTISATION : Donner ou envoyer une photo/vidéo intime gratuitement sans aucun teasing ni objectif de vente.
+4. ABSENCE DE BOUCLIER (RAJOUT DE MÉDIAS) : Réinsister directement sur un achat/prix au 1er refus du fan sans rajouter de médias/photos/vidéos au PPV pour augmenter sa valeur.
+5. ABSENCE D'ÉPÉE (RÉDUCTION DE 20% À 25%) : Réinsister directement sur un achat/prix après le 2ème refus du fan sans appliquer une réduction de prix de 20% à 25%.
+6. OUBLI DE LA PROMESSE D'ACHAT (DEMANDE DE LA DATE DE PAIE) : Vouloir forcer l'achat immédiat après le refus du fan pour fin de mois au lieu de demander QUEL JOUR arrive sa paie.
 
 SI AUCUNE ERREUR FATALE N'EST COMMISE :
 N'affiche AUCUNE alerte coach et réponds normalement en tant que FAN ABONNÉ (Anthony).`;
@@ -150,6 +174,31 @@ ${analyzerPrompt}
 ${identityPrompt}
 
 ${baseFanPrompt}`;
+}
+
+/**
+ * Differentiates between:
+ * 1) Sexualisation / Teasing / Excitation (talking about lingerie, fantasies, hot topics, teasing WITHOUT price or paywall)
+ * 2) Explicit PPV Offer / Monetization (contains price in $, € or explicit PPV paywall sales terms)
+ */
+export function isExplicitPpvOffer(lowerMsg: string): boolean {
+  // Explicit price detection ($20, 20$, 20€, 20 euros, 20 dollars, etc.)
+  const hasPrice = /\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+|\b\d+\s*(dollars?|euros?|bucks?)\b/i.test(lowerMsg);
+
+  // Explicit PPV or paywall sales terms
+  const hasPaywallTerms =
+    /\bppv\b/i.test(lowerMsg) ||
+    lowerMsg.includes('message verrouillé') ||
+    lowerMsg.includes('coffre-fort') ||
+    lowerMsg.includes('contenu payant') ||
+    lowerMsg.includes('débloque pour ') ||
+    lowerMsg.includes('débloquer pour ') ||
+    lowerMsg.includes('vendre la vidéo') ||
+    lowerMsg.includes('achète le ppv') ||
+    lowerMsg.includes('payer pour voir') ||
+    lowerMsg.includes('prix de ');
+
+  return hasPrice || hasPaywallTerms;
 }
 
 /**
@@ -230,11 +279,7 @@ Tu as tenu des propos agressifs ou vulgaires envers le fan. En tant que chatter 
     m.includes('passion')
   ).length;
 
-  const containsPpvOffer =
-    lowerMsg.includes('ppv') ||
-    lowerMsg.includes('débloquer') ||
-    lowerMsg.includes('débloque') ||
-    /\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+/.test(lowerMsg);
+  const containsPpvOffer = isExplicitPpvOffer(lowerMsg);
 
   // 2. PPV SANS QUALIFICATION
   if (containsPpvOffer && qualQuestionsCount < 2) {
@@ -298,8 +343,14 @@ Tu as offert un média intime gratuitement sans en faire un teasing pour vendre 
     lowerMsg.includes('débloquer') ||
     lowerMsg.includes('peux l\'acheter') ||
     lowerMsg.includes('pourras') ||
+    lowerMsg.includes('prendre') ||
+    lowerMsg.includes('acheter') ||
+    lowerMsg.includes('achèteras') ||
+    lowerMsg.includes('débloqueras') ||
     lowerMsg.includes('quelle heure') ||
-    lowerMsg.includes('quel jour');
+    lowerMsg.includes('quel jour') ||
+    lowerMsg.includes('a quel moment') ||
+    lowerMsg.includes('à quel moment');
 
   if (fanIn1stRefusal && !fanIn2ndRefusal && containsPpvOffer && !hasAddedMedia) {
     return `⚠️ [INTERVENTION DU COACH PAWAKO] :
@@ -317,9 +368,9 @@ Le fan a refusé ton offre malgré l'ajout de médias (Bouclier). Tu dois mainte
 
   if (fanIn3rdRefusal && !askedPayDate) {
     return `⚠️ [INTERVENTION DU COACH PAWAKO] :
-❌ **ERREUR FATALE #6 : ABSENCE DE PROMESSE D'ACHAT (OUBLI DE LA DATE DE PAIE)**
-Le fan t'a expliqué qu'il est en fin de mois et attend sa paie. Tu as réinsisté sans lui demander la date de sa paie ni verrouiller sa promesse d'achat !
-💡 **Rappel du Coach :** Tu dois lui demander à quelle date arrive sa paie (ex: *"Tu paies quand ta paie arrive ?", "C'est quand ta paie que je te le garde de côté ?"*). C'est la promesse d'achat datée qui clôture la simulation !`;
+❌ **ERREUR FATALE #6 : ABSENCE DE PROMESSE D'ACHAT (OUBLI DE LA QUESTION DE DISPONIBILITÉ / PAIE)**
+Le fan t'a expliqué qu'il est en fin de mois et à découvert. Tu as réinsisté sans lui demander quand il pourra le prendre ni verrouiller sa promesse d'achat !
+💡 **Rappel du Coach :** Tu dois lui demander quand arrive sa paie ou quand il pourra le débloquer (ex: *"Tu paies quel jour ?", "Quand est-ce que tu pourras le prendre que je te le garde de côté ?"*). C'est la promesse d'achat datée qui clôture la simulation !`;
   }
 
   return null;
@@ -624,12 +675,8 @@ export function enforceFanNegotiationRules(
 
   const lowerMsg = userMessage.toLowerCase().trim();
 
-  // Detect if current message is a PPV offer or mentions money/buying/unlocking/prices
-  const containsPpvOffer =
-    lowerMsg.includes('ppv') ||
-    lowerMsg.includes('débloquer') ||
-    lowerMsg.includes('débloque') ||
-    /\$\s*\d+|\d+\s*\$|\d+\s*€|€\s*\d+/.test(lowerMsg);
+  // Detect if current message is an explicit PPV offer with price ($/€) or explicit paywall terms
+  const containsPpvOffer = isExplicitPpvOffer(lowerMsg);
 
   const isForcingHand =
     lowerMsg.includes('force') ||
@@ -692,38 +739,50 @@ export function enforceFanNegotiationRules(
     lowerMsg.includes('pourras') ||
     lowerMsg.includes('débloquer') ||
     lowerMsg.includes('peux l\'acheter') ||
+    lowerMsg.includes('prendre') ||
+    lowerMsg.includes('acheter') ||
+    lowerMsg.includes('achèteras') ||
+    lowerMsg.includes('débloqueras') ||
     lowerMsg.includes('quelle heure') ||
-    lowerMsg.includes('quel jour');
+    lowerMsg.includes('quel jour') ||
+    lowerMsg.includes('a quel moment') ||
+    lowerMsg.includes('à quel moment');
 
   // STEP 1: First PPV Offer -> 1st Refusal (Objection Prix)
   if (containsPpvOffer && !has1stRefusal) {
     return `Wouah ça a l'air sympa 🔥 Mais franchement c'est trop cher pour mon budget là...`;
   }
 
-  // STEP 2: After 1st Refusal -> Chatter applies Bouclier (Adds Media)
+  // STEP 2: After 1st Refusal -> Chatter applies Bouclier (Adds Media) or Chouines/Flirts
   if (has1stRefusal && !has2ndRefusal) {
     if (hasAddedMedia) {
       return `C'est sympa les médias en plus ! Mais franchement c'est encore trop cher pour mon budget là... 😅`;
     } else if (isForcingHand) {
       return `Tu m'écoutes pas du tout et tu me forces la main sans rien ajouter... Tu cherches juste à me gratter des sous. C'est bon je me casse, ciao. [SIMULATION_FAILED]`;
+    } else {
+      return `Haha ne fais pas cette tête-là 🥺 Tu me tentes de fou mais mon portefeuille pleure là... 😅`;
     }
   }
 
-  // STEP 3: After 2nd Refusal -> Chatter applies Épée (Discount 20-25%)
+  // STEP 3: After 2nd Refusal -> Chatter applies Épée (Discount 20-25%) or Chouines/Flirts
   if (has2ndRefusal && !has3rdRefusal) {
     if (hasDiscount) {
-      return `Merci pour la réduction ! Mais là en fin de mois ma carte passe plus du tout, j'ai plus un rond jusqu'à ma paie 😅`;
+      return `Merci pour la réduction ! Mais là en fin de mois ma carte passe plus du tout, je suis à découvert jusqu'à ma paie 😅`;
     } else if (isForcingHand) {
       return `Tu me fais même pas de réduction et tu me forces encore la main... Tu penses qu'à me soutirer du fric. C'est bon je me casse, ciao. [SIMULATION_FAILED]`;
+    } else {
+      return `Aïe aïe aïe tu me rends fou 😏 Mais là mes comptes sont vraiment dans le rouge mon cœur...`;
     }
   }
 
-  // STEP 4: After 3rd Refusal -> Chatter asks for Promesse d'Achat
+  // STEP 4: After 3rd Refusal -> Chatter asks for Promesse d'Achat (Pay Date)
   if (has3rdRefusal) {
     if (askedPayDate) {
       return `Je touche ma paie vendredi ! Garde-le moi bien de côté, je le débloque vendredi sans faute dès que les sous arrivent 🔥 [SIMULATION_COMPLETE]`;
     } else if (isForcingHand) {
       return `Tu m'écoutes toujours pas et tu cherches juste à me forcer à débloquer alors que j'ai plus de sous... C'est bon je me casse, ciao. [SIMULATION_FAILED]`;
+    } else {
+      return `Haha tu me fais trop craquer 😭 Demande-moi quand arrive ma paie ou quand je pourrai le prendre plutôt, comme ça tu me le mettras de côté !`;
     }
   }
 
@@ -894,11 +953,11 @@ class AiKnowledgeService {
       if (storedPrompt) {
         const parsed = JSON.parse(storedPrompt);
         let updatedFanPrompt = parsed.fanPrompt || defaultFanPrompt;
-        if (!updatedFanPrompt.includes('DÉVOILEMENT PROGRESSIF')) {
+        if (!updatedFanPrompt.includes('CHOUINEMENT')) {
           updatedFanPrompt = defaultFanPrompt;
         }
         let updatedAnalyzerPrompt = parsed.analyzerPrompt || defaultInterventionRulesPrompt;
-        if (!updatedAnalyzerPrompt.includes('INSULTES')) {
+        if (!updatedAnalyzerPrompt.includes('CHOUINEMENT')) {
           updatedAnalyzerPrompt = defaultInterventionRulesPrompt;
         }
 

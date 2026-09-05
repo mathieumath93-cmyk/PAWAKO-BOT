@@ -25,7 +25,7 @@ const TEMPLATES = [
   {
     name: '📢 Nouveau Module Disponible',
     title: '📚 NOUVEAU MODULE DISPONIBLE SUR LA PLATEFORME !',
-    content: `Bonjour à tous les candidats ! 🚀\n\nUn nouveau module de formation vient d'être publié. Vous pouvez désormais y accéder dans votre salon privé ou via la commande \`!formation\`.\n\n🎯 **Objectif :** Compléter la lecture et passer le quiz de validation.\n\nBon courage à toutes et à tous ! ✨`,
+    content: `Bonjour à tous les candidats ! 🚀\n\nUn nouveau module de formation vient d'être publié. Vous pouvez désormais y accéder directement dans votre salon privé de formation.\n\n🎯 **Objectif :** Compléter la lecture et passer le quiz de validation.\n\nBon courage à toutes et à tous ! ✨`,
     colorHex: '#6366f1',
     mentionType: '@candidat' as const,
   },

@@ -1205,8 +1205,8 @@ export const DiscordSyncView: React.FC = () => {
                       <div className="text-slate-400 text-[11px]">Analyse, corrige et reformule en style sexy & vendeur.</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                      <div className="font-mono text-indigo-400 font-bold mb-1">!musique / !son</div>
-                      <div className="text-slate-400 text-[11px]">Partage une playlist Spotify de travail avec citation inspirante.</div>
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!playlist / !musique [genre]</div>
+                      <div className="text-slate-400 text-[11px]">Playlists Spotify certifiées avec bouton direct (ex: !playlist rap, lofi, house, liste).</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!jeu / !challenge</div>

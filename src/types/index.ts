@@ -550,6 +550,15 @@ export interface AiCmResourceLink {
   url: string;
 }
 
+export interface AiCmPlaylist {
+  id: string;
+  title: string;
+  url: string;
+  genre?: string;
+  description?: string;
+  quote?: string;
+}
+
 export interface AiCmConfig {
   tone: 'dynamique' | 'bienveillant' | 'strict_performance' | 'cool' | 'grand_frere';
   postFrequency: 'daily' | 'twice_daily' | 'weekly' | 'manual';
@@ -559,6 +568,7 @@ export interface AiCmConfig {
   enableAutoQA: boolean;
   customCmInstructions: string;
   resourceLinks: AiCmResourceLink[];
+  playlists?: AiCmPlaylist[];
 }
 
 export interface AiPromptConfig {

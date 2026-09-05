@@ -32,6 +32,9 @@ import {
   Lightbulb,
   Zap,
   Settings2,
+  Headphones,
+  ExternalLink,
+  Music,
 } from 'lucide-react';
 import {
   aiKnowledgeService,
@@ -40,8 +43,9 @@ import {
   evaluateSimulationSession,
   defaultValidationGridPrompt,
   defaultCmConfig,
+  DEFAULT_WORK_PLAYLISTS,
 } from '../services/aiKnowledgeService';
-import { AiPromptConfig, SimulationEvaluationResult, AiCmConfig } from '../types';
+import { AiPromptConfig, SimulationEvaluationResult, AiCmConfig, AiCmPlaylist } from '../types';
 
 interface AIKnowledgeConfiguratorProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
@@ -85,6 +89,42 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
     updateCmConfig({
       resourceLinks: currentLinks.filter((l) => l.id !== id),
     });
+  };
+
+  const handleAddPlaylist = () => {
+    const currentPlaylists = promptCfg.cmConfig?.playlists || defaultCmConfig.playlists || DEFAULT_WORK_PLAYLISTS;
+    const newPlaylist: AiCmPlaylist = {
+      id: 'pl-' + Date.now().toString(),
+      title: '🎵 Nouvelle Playlist Focus',
+      url: 'https://open.spotify.com/playlist/',
+      genre: 'focus',
+      description: 'Ambiance de travail pour booster la concentration.',
+      quote: '⚡ "La régularité bat le talent."',
+    };
+    updateCmConfig({
+      playlists: [...currentPlaylists, newPlaylist],
+    });
+  };
+
+  const handleUpdatePlaylist = (id: string, fields: Partial<AiCmPlaylist>) => {
+    const currentPlaylists = promptCfg.cmConfig?.playlists || defaultCmConfig.playlists || DEFAULT_WORK_PLAYLISTS;
+    updateCmConfig({
+      playlists: currentPlaylists.map((p) => (p.id === id ? { ...p, ...fields } : p)),
+    });
+  };
+
+  const handleRemovePlaylist = (id: string) => {
+    const currentPlaylists = promptCfg.cmConfig?.playlists || defaultCmConfig.playlists || DEFAULT_WORK_PLAYLISTS;
+    updateCmConfig({
+      playlists: currentPlaylists.filter((p) => p.id !== id),
+    });
+  };
+
+  const handleResetPlaylists = () => {
+    updateCmConfig({
+      playlists: DEFAULT_WORK_PLAYLISTS,
+    });
+    onShowToast('Playlists Réinitialisées', 'Les 10 sélections Spotify certifiées ont été restaurées.', 'info');
   };
 
   // Sandbox testing state
@@ -650,6 +690,132 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 5: Playlists & Sons de Travail (Spotify / YouTube) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                  <Headphones className="w-4 h-4 text-emerald-400" />
+                  <span>Playlists Focus & Motivation (Discord `!playlist` & Post Quotidien)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Ces vraies playlists Spotify sont recommandées quotidiennement par le CM IA et accessibles avec filtres de style via <code className="text-emerald-300">!playlist</code> sur Discord.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResetPlaylists}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-all flex items-center gap-1.5"
+                  title="Restaurer les 10 playlists Spotify officielles"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restaurer par défaut</span>
+                </button>
+                <button
+                  onClick={handleAddPlaylist}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-600/20"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ajouter une playlist</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3.5">
+              {(promptCfg.cmConfig?.playlists || defaultCmConfig.playlists || DEFAULT_WORK_PLAYLISTS).map((pl) => (
+                <div key={pl.id} className="bg-slate-950/80 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                  <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+                    <div className="w-full md:w-1/3">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                        Titre / Nom de la playlist
+                      </label>
+                      <input
+                        type="text"
+                        value={pl.title}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { title: e.target.value })}
+                        placeholder="Titre de la playlist"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="w-full md:w-1/4">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                        Genre / Tag (ex: rap, lofi, house)
+                      </label>
+                      <input
+                        type="text"
+                        value={pl.genre || ''}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { genre: e.target.value })}
+                        placeholder="Genre (ex: lofi, rap, house)"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="flex-1 w-full">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                        Lien Spotify ou YouTube (Vérifié)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={pl.url}
+                          onChange={(e) => handleUpdatePlaylist(pl.id, { url: e.target.value })}
+                          placeholder="https://open.spotify.com/playlist/..."
+                          className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                        {pl.url && (
+                          <a
+                            href={pl.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+                            title="Tester le lien"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleRemovePlaylist(pl.id)}
+                          className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                          title="Supprimer cette playlist"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-slate-900">
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Description de l'ambiance
+                      </label>
+                      <input
+                        type="text"
+                        value={pl.description || ''}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { description: e.target.value })}
+                        placeholder="Ex: Concentration maximale sans distraction pour réviser..."
+                        className="w-full bg-slate-900/60 border border-slate-800/80 rounded-lg px-3 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Citation inspirante de coach
+                      </label>
+                      <input
+                        type="text"
+                        value={pl.quote || ''}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { quote: e.target.value })}
+                        placeholder='Ex: ⚡ "La régularité bat le talent..."'
+                        className="w-full bg-slate-900/60 border border-slate-800/80 rounded-lg px-3 py-1 text-[11px] text-slate-300 italic focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

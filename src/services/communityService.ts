@@ -1,6 +1,7 @@
 import { Member, TrainingModule } from '../types';
 import { store } from './store';
-import { aiKnowledgeService, getDefaultOpenRouterApiKey } from './aiKnowledgeService';
+import { onboardingService } from './onboardingService';
+import { aiKnowledgeService, getDefaultOpenRouterApiKey, DEFAULT_WORK_PLAYLISTS } from './aiKnowledgeService';
 import { GoogleGenAI } from '@google/genai';
 
 // Shared Gemini instance server-side as backup
@@ -102,26 +103,7 @@ export interface MiniGameChallenge {
   options: { label: string; isCorrect: boolean; explanation: string }[];
 }
 
-export const CURATED_PLAYLISTS = [
-  {
-    title: '🎵 Lo-Fi Beats pour Charbonner',
-    url: 'https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i',
-    description: 'Concentration maximale et chill pour passer tes modules et chatter au calme.',
-    quote: '⚡ "La régularité bat le talent quand le talent ne charbonne pas." - Coach Pawako',
-  },
-  {
-    title: '🔥 Hip-Hop & Deep Focus Energy',
-    url: 'https://open.spotify.com/playlist/37i9dQZF1DX10zPhA1A2S6',
-    description: 'Grosse énergie pour cartonner tes ventes PPV et garder le rythme !',
-    quote: '🚀 "Chaque message envoyé avec intention est un pas de plus vers ton objectif." - Pawako CM',
-  },
-  {
-    title: '🎧 Chillout & Deep Work Synthwave',
-    url: 'https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i',
-    description: 'Mode sous-marin activé pour enchaîner tes formations sans distraction.',
-    quote: '💡 "Un bon chatter écoute, qualifie et clôture avec élégance." - Pawako CM',
-  },
-];
+export const CURATED_PLAYLISTS = DEFAULT_WORK_PLAYLISTS;
 
 export const FRENCH_CHATTING_TIPS = [
   {
@@ -268,12 +250,14 @@ Réponds strict sous ce format JSON :
       return `Salut ! 👋 Le service de réponses automatiques du CM est actuellement désactivé. Merci de contacter le Staff Pawako !`;
     }
 
-    const systemPrompt = `${getCmSystemPromptContext()}\nTu réponds aux candidats dans les salons de communauté Discord (HORS SIMULATION).
+    const systemPrompt = `${getCmSystemPromptContext()}
+Tu réponds aux candidats dans les salons de communauté Discord (HORS SIMULATION).
         
 Règles :
 - Domaine : Formation Pawako, chatting OnlyFans, modules, quiz, astuces de vente, règles de l'agence, organisation, outils (InFlow, Telegram).
 - Sois clair, concis (maximum 2-3 paragraphes), utilise des emojis.
-- Si le candidat pose une question sur un module ou un quiz, guide-le sans lui donner directement les réponses des quiz.`;
+- Si le candidat pose une question sur un module ou un quiz, guide-le sans lui donner directement les réponses des quiz.
+- La formation se fait dans son salon privé via des boutons interactifs (ne jamais inventer d'URL externe ni mentionner la commande !formation).`;
 
     const userPrompt = `Question du candidat (${memberUsername || 'Candidat'}) : "${question}"`;
 
@@ -282,67 +266,144 @@ Règles :
       return text.trim();
     }
 
-    return `Salut ! 👋 Je suis Alex, ton Coach CM Pawako. Pour toutes tes questions sur les modules, utilise la commande \`!formation\` ou demande directement au staff ! On est là pour t'aider à réussir. 🚀`;
+    return `Salut ! 👋 Je suis Alex, ton Coach CM Pawako. Pour toutes tes questions sur ton parcours ou tes modules, rends-toi dans ton salon privé de formation ou interpelle directement le staff ! On est là pour t'aider à réussir. 🚀`;
   }
 
   /**
    * Generates a fully AI-crafted personalized follow-up message via OpenRouter.
+   * Accurately analyzes the candidate's real journey step:
+   * - 0. Onboarding / New (invite to open private channel and click welcome button)
+   * - 1. Modules 1 to 5 (study materials, quiz status, cooldown)
+   * - 2. Simulation IA (triggered after Module 5 validated - NO MODULE 6!)
+   * - 3. Formation Outils (triggered after Simulation validated - InFlow, Telegram, Meet)
+   * - 4. Formation Terminée (fully validated and ready for agency shift)
+   *
+   * Strictly forbids hallucinating fake web links and strictly forbids referencing `!formation`.
    */
   public async generatePersonalizedFollowup(
     member: Member,
     modules: TrainingModule[]
   ): Promise<string> {
     const cfg = aiKnowledgeService.getPromptConfig();
-    if (cfg.cmConfig?.enableCandidateFollowups === false) {
-      return `Hey <@${member.discordId || member.id}> ! N'hésite pas à taper \`!formation\` pour continuer ton parcours ! 🚀`;
-    }
-
+    const chanMention = member.personalChannelId ? `<#${member.personalChannelId}>` : 'ton salon privé de formation';
+    const onboardingCfg = onboardingService.getConfig();
     const totalModules = modules.length || 5;
+
+    // Calculate number of theoretical modules validated (1 to 5)
     const validatedCount = Object.values(member.progress || {}).filter(
       (p) => p.status === 'valide'
     ).length;
 
-    const nextUnvalidated = modules.find(
-      (mod) => member.progress?.[mod.id]?.status !== 'valide'
-    );
-    const nextTitle = nextUnvalidated ? nextUnvalidated.title : `Module ${validatedCount + 1}`;
+    // Detect exact training step:
+    let stageDescription = '';
+    let actionInstructions = '';
+    let fallbackMessage = '';
 
-    const systemPrompt = getCmSystemPromptContext();
-    const userPrompt = `Rédige un message de relance/motivation hyper personnalisé pour un candidat sur Discord.
+    if (member.candidateState === 'formation_terminee') {
+      stageDescription = 'Formation intégrale 100% validée (Modules 1 à 5 + Simulation IA + Outils Agence). Prêt pour le shift en agence !';
+      actionInstructions = `Félicite chaleureusement le candidat pour avoir validé TOUT son parcours. Dis-lui qu'il est officiellement prêt pour ses créneaux de chatting et qu'un membre du management Pawako prendra contact avec lui dans ${chanMention}.`;
+      fallbackMessage =
+        `🎓 **Félicitations <@${member.discordId || member.id}> !**\n\n` +
+        `Tu as validé l'intégralité de ton parcours Pawako avec succès (Modules 1 à 5, Simulation et Outils) ! 🏆\n` +
+        `Tu es désormais fin prêt pour tes shifts en agence. Reste attentif à ${chanMention}, le management arrive très vite pour ton planning ! 🚀`;
+    } else if (
+      member.candidateState === 'formation_outils' ||
+      (member.simulationValidatedAt && member.candidateState !== 'simulation')
+    ) {
+      const meetUrl = onboardingCfg.toolsFormationMeetUrl || '';
+      stageDescription = `Simulation IA validée avec succès ! Le candidat est à l'Étape Outils & Intégration (InFlow, Telegram, organisation opérationnelle).${meetUrl ? ` Lien Google Meet officiel de formation : ${meetUrl}` : ''}`;
+      actionInstructions = `Félicite le candidat pour sa simulation validée avec brio ! Indique-lui que la prochaine étape obligatoire est la prise en main des **Outils de l'Agence** (InFlow, Telegram, organisation des shifts). Invite-le à consulter les instructions et boutons dans ${chanMention}.${meetUrl ? ` Mentionne le lien visio Meet officiel : ${meetUrl}` : ''}`;
+      fallbackMessage =
+        `🛠️ **Étape Suivante : Formation Outils & Intégration !**\n\n` +
+        `Bravo <@${member.discordId || member.id}> ! Ta simulation de chatting est validée avec brio. 👏\n\n` +
+        `Tu passes maintenant à la configuration de tes **outils opérationnels** (InFlow, Telegram, accès agence).\n` +
+        `📍 Rends-toi dans ${chanMention} pour suivre les consignes du staff et finaliser ton intégration ! 🚀` +
+        (meetUrl ? `\n🔗 *Lien Visio Outils :* ${meetUrl}` : '');
+    } else if (
+      member.candidateState === 'simulation' ||
+      validatedCount >= totalModules ||
+      member.progress?.['mod-5']?.status === 'valide' ||
+      member.progress?.['module-5']?.status === 'valide'
+    ) {
+      stageDescription = `L'ensemble des 5 modules théoriques est validé (${validatedCount}/${totalModules}) ! ATTENTION ABSOLUE : IL N'Y A AUCUN MODULE 6 ! Le candidat est actuellement en phase de SIMULATION IA DE CHATTING avec Anthony directement dans son salon privé.`;
+      actionInstructions = `Félicite le candidat pour avoir validé tous ses modules théoriques (1 à 5). NE MENTIONNE SURTOUT PAS DE MODULE 6 (qui n'existe pas !). Indique-lui que sa prochaine étape cruciale est la **Simulation de Chatting IA** (mise en situation avec Anthony / le fan) directement dans ${chanMention}. Dis-lui de cliquer sur le bouton **"🚀 Lancer la Simulation"** (ou de continuer son échange en cours) dans son salon privé.`;
+      fallbackMessage =
+        `🎭 **Félicitations <@${member.discordId || member.id}> ! Tes 5 modules sont validés !** 🏆\n\n` +
+        `Tu passes désormais à l'épreuve pratique : la **Simulation de Chatting IA** avec Anthony !\n\n` +
+        `📍 Rends-toi dans ${chanMention} et clique sur le bouton **"🚀 Lancer la Simulation"** pour démarrer ta session en direct. Montre ce que tu sais faire ! 🔥`;
+    } else if (
+      member.candidateState === 'nouveau' ||
+      member.candidateState === 'bienvenue_validee' ||
+      (!member.candidateState && validatedCount === 0)
+    ) {
+      stageDescription = `Le candidat vient d'arriver sur le serveur ou n'a pas encore lancé son Module 1 (0/${totalModules} validés).`;
+      actionInstructions = `Encourage le candidat avec enthousiasme. Indique-lui de se rendre dans ${chanMention} et de cliquer sur le bouton pour lancer sa formation et débloquer son **Module 1** dès maintenant.`;
+      fallbackMessage =
+        `👋 **Bienvenue <@${member.discordId || member.id}> chez Pawako !**\n\n` +
+        `Ton salon privé de formation ${chanMention} est prêt. 🎯\n` +
+        `Rends-toi dedans et clique sur le bouton pour lancer ton **Module 1** et débuter l'aventure ! 🚀`;
+    } else {
+      // Theoretical stage (Modules 1 to 5)
+      const nextUnvalidated = modules.find(
+        (mod) => member.progress?.[mod.id]?.status !== 'valide'
+      ) || modules[validatedCount] || modules[0];
+      const nextTitle = nextUnvalidated ? nextUnvalidated.title : `Module ${validatedCount + 1}`;
 
-Informations du candidat :
+      const isCooldown = Boolean(
+        member.cooldownUntilTimestamp && member.cooldownUntilTimestamp > Date.now()
+      );
+      const cooldownMinsLeft = isCooldown
+        ? Math.ceil((member.cooldownUntilTimestamp! - Date.now()) / 60000)
+        : 0;
+
+      stageDescription = `Modules validés : ${validatedCount} / ${totalModules}. Module actuel à passer : "${nextTitle}". ${isCooldown ? `Cooldown actif sur le quiz (reste environ ${cooldownMinsLeft} min avant de retenter).` : 'Quiz disponible ou cours à étudier.'}`;
+      actionInstructions = `Motive le candidat à avancer sur son module actuel : **${nextTitle}**. ${
+        isCooldown
+          ? `Comme un délai de cooldown est en cours (${cooldownMinsLeft} min restantes), conseille-lui de relire posément son support de cours sans stresser dans ${chanMention} avant de retenter son quiz.`
+          : `Dis-lui d'aller dans ${chanMention}, de lire le support de cours puis de cliquer sur le bouton pour passer son quiz de validation.`
+      } Rappelle qu'il a déjà ${validatedCount} module(s) validé(s) sur ${totalModules}.`;
+
+      fallbackMessage =
+        `🔥 **Hey <@${member.discordId || member.id}> !**\n\n` +
+        `Tu as validé **${validatedCount} sur ${totalModules} modules** ! Bravo pour ton rythme. 👏\n\n` +
+        `🎯 **Étape en cours :** *${nextTitle}*\n` +
+        (isCooldown
+          ? `⏳ *Un cooldown est actif (${cooldownMinsLeft} min restantes).* Profites-en pour relire tes fiches dans ${chanMention} avant de retenter ton quiz ! 📚`
+          : `💡 Rends-toi dans ${chanMention} pour lire ton cours et cliquer sur le bouton de passage du quiz ! 🚀`);
+    }
+
+    if (cfg.cmConfig?.enableCandidateFollowups === false) {
+      return fallbackMessage;
+    }
+
+    const systemPrompt = `${getCmSystemPromptContext()}
+Tu rédiges des messages de suivi et de relance personnalisés envoyés aux candidats dans leur salon privé Discord.
+
+CONSIGNES STRICTES DE FIABILITÉ :
+1. INTERDICTION FORMELLE D'INVENTER DES LIENS WEB (pas d'URL externe http/https, pas de faux domaines ni de fausses plateformes). La formation se passe exclusivement sur Discord dans le salon privé du candidat via des embeds et des boutons interactifs.
+2. INTERDICTION FORMELLE DE CITER LA COMMANDE "!formation" (cette commande est obsolète pour les candidats, toute la progression se fait par les boutons interactifs du salon).
+3. INTERDICTION FORMELLE DE PARLER D'UN "MODULE 6" (le parcours théorique comprend strictement 5 modules. Après le Module 5, c'est obligatoirement la Simulation IA de Chatting, puis la Formation Outils).
+4. Pour désigner l'endroit où le candidat doit agir, utilise impérativement la mention de son salon privé : ${chanMention}.
+5. Utilise un style Markdown Discord propre, fluide, motivant et dynamique avec des emojis adaptés (longueur max 120-150 mots).`;
+
+    const userPrompt = `Rédige un message de relance/motivation hyper personnalisé pour ce candidat :
+
+Candidat :
 - Nom : ${member.username || 'Candidat'}
 - Mention Discord : <@${member.discordId || member.id}>
-- Modules validés : ${validatedCount} / ${totalModules}
-- Statut actuel : ${member.candidateState || 'nouveau'}
-- Prochain module à passer : ${nextTitle}
+- Salon privé dédié : ${chanMention}
+- Étape actuelle analysée : ${stageDescription}
+- Consigne spécifique pour cette étape : ${actionInstructions}
 - Badges débloqués : ${member.badges?.length || 0}
 
-Règles de rédaction :
-- Format : Markdown Discord lisible avec emojis, structuré et court (max 120-150 mots).
-- Objectif : Inciter gentiment le candidat à lancer son prochain module avec la commande !formation sans lui mettre de mauvaise pression.
-- N'invente pas de faux liens, indique d'utiliser la commande !formation.`;
+Rédige directement le message en Markdown Discord adressé au candidat.`;
 
     const text = await callOpenRouterOrGemini(systemPrompt, userPrompt);
     if (text) {
       return text.trim();
     }
 
-    // Fallback template
-    if (member.candidateState === 'formation_terminee' || validatedCount >= totalModules) {
-      return (
-        `🎓 **Félicitations <@${member.discordId || member.id}> !**\n` +
-        `Tu as validé l'intégralité de tes modules de formation théorique. 🏆\n` +
-        `Prépare-toi pour ton intégration finale ou sollicite le staff en cas de question !`
-      );
-    }
-
-    return (
-      `🔥 **Hey <@${member.discordId || member.id}> !**\n` +
-      `Tu as déjà validé **${validatedCount} sur ${totalModules}** modules ! Bravo pour ton rythme. 👏\n` +
-      `🎯 **Prochaine étape :** *${nextTitle}*\n` +
-      `💡 Tape \`!formation\` pour continuer ton parcours et débloquer tes prochains badges ! 🚀`
-    );
+    return fallbackMessage;
   }
 
   /**
@@ -361,13 +422,20 @@ Règles de rédaction :
     musicQuote: string;
     miniGame: MiniGameChallenge;
   }> {
+    const cfg = aiKnowledgeService.getPromptConfig();
+    const availablePlaylists = (cfg.cmConfig?.playlists && cfg.cmConfig.playlists.length > 0)
+      ? cfg.cmConfig.playlists
+      : CURATED_PLAYLISTS;
+    const dayIndex = new Date().getDate() % availablePlaylists.length;
+    const verifiedPlaylist = availablePlaylists[dayIndex] || availablePlaylists[0];
+
     const systemPrompt = getCmSystemPromptContext();
     const userPrompt = `Génère le contenu complet d'animation communautaire du jour pour le serveur Discord.
 
 Inclus :
 1. Une astuce de chatting OnlyFans / Vente par message inédite, percutante et concrète (méthode de qualification, teasing, relance, bouclier tarifaire, etc.).
 2. Une règle d'orthographe ou de style indispensable en chatting (ex: ça/sa, c'est/s'est, majuscules, ton chaleureux).
-3. Une recommandation musicale motivante (titre de playlist, ambiance, citation de coach).
+3. Une citation motivante et percutante de coach pour accompagner la playlist musicale du jour : "${verifiedPlaylist.title}" (${verifiedPlaylist.genre || 'Focus'}, description : "${verifiedPlaylist.description}").
 4. Un mini-jeu / challenge de mise en situation avec scenario et 3 options (A, B, C) dont une seule est la réponse parfaite selon les méthodes Pawako.
 
 Réponds strict sous ce format JSON :
@@ -378,10 +446,7 @@ Réponds strict sous ce format JSON :
   "frenchBad": "Exemple avec faute",
   "frenchGood": "Exemple corrigé idéal",
   "frenchTip": "Explication rapide",
-  "musicTitle": "🎵 Titre de la playlist ou genre",
-  "musicUrl": "https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i",
-  "musicDesc": "Brève description de l'ambiance de travail",
-  "musicQuote": "Citation motivante de coach",
+  "musicQuote": "Citation motivante de coach adaptée à ce style...",
   "miniGame": {
     "id": "game_ai_1",
     "title": "🧩 Challenge Chatting du Jour",
@@ -400,7 +465,13 @@ Réponds strict sous ce format JSON :
         const cleanJson = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
         const parsed = JSON.parse(cleanJson);
         if (parsed.tipTitle && parsed.miniGame) {
-          return parsed;
+          return {
+            ...parsed,
+            musicTitle: verifiedPlaylist.title,
+            musicUrl: verifiedPlaylist.url,
+            musicDesc: verifiedPlaylist.description || 'Ambiance de travail sélectionnée par le Coach Pawako.',
+            musicQuote: parsed.musicQuote || verifiedPlaylist.quote || '⚡ "La régularité bat le talent."',
+          };
         }
       } catch (err) {
         console.warn('OpenRouter daily community content parse error:', err);
@@ -410,7 +481,6 @@ Réponds strict sous ce format JSON :
     // Fallback static
     const tip = await this.getDailyTip();
     const french = FRENCH_CHATTING_TIPS[Math.floor(Math.random() * FRENCH_CHATTING_TIPS.length)];
-    const music = CURATED_PLAYLISTS[Math.floor(Math.random() * CURATED_PLAYLISTS.length)];
     const game = this.getRandomMiniGame();
 
     return {
@@ -420,10 +490,10 @@ Réponds strict sous ce format JSON :
       frenchBad: french.bad,
       frenchGood: french.good,
       frenchTip: french.tip,
-      musicTitle: music.title,
-      musicUrl: music.url,
-      musicDesc: music.description,
-      musicQuote: music.quote,
+      musicTitle: verifiedPlaylist.title,
+      musicUrl: verifiedPlaylist.url,
+      musicDesc: verifiedPlaylist.description || 'Ambiance de travail sélectionnée par le Coach Pawako.',
+      musicQuote: verifiedPlaylist.quote || '⚡ "La régularité bat le talent."',
       miniGame: game,
     };
   }

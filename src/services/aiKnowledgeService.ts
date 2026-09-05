@@ -1,5 +1,88 @@
 import { GoogleGenAI } from '@google/genai';
-import { AiPromptConfig, AiCmConfig } from '../types';
+import { AiPromptConfig, AiCmConfig, AiCmPlaylist } from '../types';
+
+export const DEFAULT_WORK_PLAYLISTS: AiCmPlaylist[] = [
+  {
+    id: 'pl-1',
+    title: '☕ Lo-Fi Beats & Deep Focus',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i',
+    genre: 'lofi',
+    description: 'Batteuse douce et mélodies chill sans paroles pour étudier tes cours et passer tes quiz au calme.',
+    quote: '⚡ "La régularité bat le talent quand le talent ne travaille pas." - Coach Pawako',
+  },
+  {
+    id: 'pl-2',
+    title: '🔥 Rap Français & Banger Energy',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DX10zPhA1A2S6',
+    genre: 'rap',
+    description: 'Grosse motivation et textes percutants pour garder l\'esprit conquérant et booster tes ventes PPV.',
+    quote: '🚀 "Chaque message envoyé avec intention te rapproche de ton objectif."',
+  },
+  {
+    id: 'pl-3',
+    title: '🧠 Deep Focus Instrumental (No Lyrics)',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DWZeKCadgRdKQ',
+    genre: 'focus',
+    description: 'Zéro distraction, concentration maximale pour enchaîner les conversations sans faillir.',
+    quote: '💡 "Un bon chatter écoute avec attention, qualifie le besoin et conclut avec élégance."',
+  },
+  {
+    id: 'pl-4',
+    title: '⚡ Tech House & Shift de Nuit',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DX6J5tP9KWwBe',
+    genre: 'house',
+    description: 'Rythme électronique captivant pour maintenir un flow inarrêtable pendant les rushs du soir et du week-end.',
+    quote: '🎯 "Reste dans ton flow, la constance et la rapidité font la différence."',
+  },
+  {
+    id: 'pl-5',
+    title: '🌌 Synthwave & Cyberpunk Night Drive',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DXd9rSDyQguIk',
+    genre: 'synthwave',
+    description: 'Ambiance néon 80s rétro-futuriste pour chatter dans sa bulle et rester focus toute la session.',
+    quote: '✨ "Crée ton propre univers et emmène ton interlocuteur dedans."',
+  },
+  {
+    id: 'pl-6',
+    title: '🌴 Afro Hits & Good Vibes',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DX5q67ZpWyRrZ',
+    genre: 'afro',
+    description: 'Sourire, chaleur et énergie communicative pour des échanges toujours engageants et naturels.',
+    quote: '☀️ "Une énergie solaire et positive se transmet à travers chaque ligne de texte."',
+  },
+  {
+    id: 'pl-7',
+    title: '🎧 Brain Food (Electronic Focus)',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DX24KhEZmOstX',
+    genre: 'electro',
+    description: 'Musique électronique hypnotique et stimulante pour travailler avec une clarté d\'esprit totale.',
+    quote: '🔥 "La discipline quotidienne transforme une opportunité en vraie réussite."',
+  },
+  {
+    id: 'pl-8',
+    title: '💪 Beast Mode & Motivation Pure',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP',
+    genre: 'workout',
+    description: 'Grosse basse et bangers percutants pour relancer la machine quand la fatigue pointe le bout de son nez.',
+    quote: '💥 "Les meilleurs continuent d\'avancer quand les autres ralentissent."',
+  },
+  {
+    id: 'pl-9',
+    title: '🎹 Peaceful Piano (Zéro Stress)',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO',
+    genre: 'piano',
+    description: 'Mélodies douces et apaisantes pour relire ses fiches de formation avec un esprit serein.',
+    quote: '📚 "Bien assimiler les fondamentaux, c’est s’assurer de réussir sans forcer."',
+  },
+  {
+    id: 'pl-10',
+    title: '☕ Coffee Table Jazz (Ambiance Lounge)',
+    url: 'https://open.spotify.com/playlist/37i9dQZF1DXbITWG1ZJKYt',
+    genre: 'jazz',
+    description: 'Ambiance lounge new-yorkaise pour travailler détendu et soigner son orthographe et ses tournures.',
+    quote: '🎩 "L’élégance commence par la patience et le choix des bons mots."',
+  },
+];
 
 export const defaultCmConfig: AiCmConfig = {
   tone: 'dynamique',
@@ -10,10 +93,10 @@ export const defaultCmConfig: AiCmConfig = {
   enableAutoQA: true,
   customCmInstructions: 'Sois dynamique, bienveillant, motivant et axé sur la performance des chatters Pawako. Utilise un ton professionnel mais accessible avec des emojis adaptés.',
   resourceLinks: [
-    { id: '1', label: 'Playlist Spotify Lo-Fi Focus', url: 'https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i' },
-    { id: '2', label: 'Guide de Vente OnlyFans Pawako', url: 'https://pawako-agency.com' },
-    { id: '3', label: 'Règles du Serveur Discord', url: 'https://discord.gg/pawako' },
+    { id: '1', label: 'Guide de Vente OnlyFans Pawako', url: 'https://pawako-agency.com' },
+    { id: '2', label: 'Règles du Serveur Discord', url: 'https://discord.gg/pawako' },
   ],
+  playlists: DEFAULT_WORK_PLAYLISTS,
 };
 
 export interface FanProfile {
@@ -993,6 +1076,7 @@ class AiKnowledgeService {
           ...defaultCmConfig,
           ...(parsed.cmConfig || {}),
           resourceLinks: parsed.cmConfig?.resourceLinks || defaultCmConfig.resourceLinks,
+          playlists: parsed.cmConfig?.playlists?.length ? parsed.cmConfig.playlists : defaultCmConfig.playlists,
         };
 
         this.promptConfig = {

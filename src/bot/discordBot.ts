@@ -32,6 +32,7 @@ import {
   sanitizeFanOutput,
   checkCandidateMessageForCoachIntervention,
   enforceFanNegotiationRules,
+  aiKnowledgeService,
 } from '../services/aiKnowledgeService';
 import {
   communityService,
@@ -497,7 +498,7 @@ export class PawakoBotRunner {
             .setDescription(cfg.welcomeRulesMessage || branding.description)
             .setColor(0x6366f1)
             .addFields(
-              { name: '📚 Formation', value: 'Utilise `!formation` pour voir tes modules.' },
+              { name: '📚 Formation', value: 'Rends-toi dans ton salon privé pour accéder à tes cours et quiz.' },
               { name: '👤 Profil', value: 'Utilise `!profile` pour consulter ton statut.' },
               { name: '🎫 Support', value: 'Utilise `!ticket` pour ouvrir une demande d\'aide.' }
             )
@@ -561,18 +562,68 @@ export class PawakoBotRunner {
           return;
         }
 
-        if (content === '!musique' || content === '!son' || content === '!playlist') {
-          const randomPlaylist = CURATED_PLAYLISTS[Math.floor(Math.random() * CURATED_PLAYLISTS.length)];
+        if (
+          content === '!musique' ||
+          content === '!son' ||
+          content === '!playlist' ||
+          content.startsWith('!playlist ') ||
+          content.startsWith('!musique ') ||
+          content.startsWith('!son ')
+        ) {
+          const cfg = aiKnowledgeService.getPromptConfig();
+          const availablePlaylists = (cfg.cmConfig?.playlists && cfg.cmConfig.playlists.length > 0)
+            ? cfg.cmConfig.playlists
+            : CURATED_PLAYLISTS;
+
+          const query = content.replace(/^!(playlist|musique|son)\s*/i, '').toLowerCase().trim();
+
+          if (query === 'list' || query === 'liste' || query === 'genres' || query === 'aide') {
+            const listEmbed = new EmbedBuilder()
+              .setTitle('🎧 SÉLECTION MUSICALE & PLAYLISTS PAWAKO')
+              .setDescription(
+                `Voici les ambiances de travail disponibles pour rester focus pendant tes sessions de formation et de chatting :\n\n` +
+                availablePlaylists.map((p) => `• **${p.title}** ${p.genre ? `(\`${p.genre}\`)` : ''}\n  _${p.description || ''}_\n  [Écouter sur Spotify](${p.url})`).join('\n\n') +
+                `\n\n💡 *Exemple d'utilisation rapide :* \`!playlist rap\`, \`!playlist lofi\`, \`!playlist house\`, \`!playlist piano\`, \`!playlist focus\`...`
+              )
+              .setColor(0x10b981)
+              .setFooter({ text: '🎧 Pawako Focus Radio • Sélection certifiée Spotify' });
+
+            await message.reply({ embeds: [listEmbed] }).catch(() => {});
+            return;
+          }
+
+          let picked = availablePlaylists[Math.floor(Math.random() * availablePlaylists.length)];
+          if (query) {
+            const matches = availablePlaylists.filter(
+              (p) =>
+                (p.genre && p.genre.toLowerCase().includes(query)) ||
+                p.title.toLowerCase().includes(query) ||
+                (p.description && p.description.toLowerCase().includes(query))
+            );
+            if (matches.length > 0) {
+              picked = matches[Math.floor(Math.random() * matches.length)];
+            }
+          }
+
           const embed = new EmbedBuilder()
-            .setTitle(randomPlaylist.title)
+            .setTitle(picked.title)
             .setDescription(
-              `${randomPlaylist.description}\n\n` +
-              `🎧 **Écouter la playlist :** [Cliquez ici pour lancer sur Spotify](${randomPlaylist.url})\n\n` +
-              `_${randomPlaylist.quote}_`
+              `${picked.description || 'Ambiance de travail sélectionnée par le Coach Pawako.'}\n\n` +
+              `🎧 **Lien direct :** [Écouter la playlist sur Spotify](${picked.url})\n\n` +
+              (picked.quote ? `_${picked.quote}_\n\n` : '') +
+              `💡 *Astuce : Tape \`!playlist liste\` pour voir tous les styles ou \`!playlist rap\`, \`!playlist lofi\`, \`!playlist house\` pour cibler ton mood.*`
             )
             .setColor(0x10b981)
-            .setFooter({ text: '🎧 Pawako Radio & Motivation' });
-          await message.reply({ embeds: [embed] }).catch(() => {});
+            .setFooter({ text: '🎧 Pawako Radio & Motivation • Clique sur le bouton ci-dessous' });
+
+          const musicRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel('🎧 Lancer sur Spotify')
+              .setStyle(ButtonStyle.Link)
+              .setURL(picked.url)
+          );
+
+          await message.reply({ embeds: [embed], components: [musicRow] }).catch(() => {});
           return;
         }
 
@@ -4259,14 +4310,39 @@ export class PawakoBotRunner {
 
         const followupMsg = await communityService.generatePersonalizedFollowup(m, modules);
         if (followupMsg) {
+          const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+          const isSimu = m.candidateState === 'simulation' || validatedCount >= (modules.length || 5);
+          const isOnboarding = m.candidateState === 'nouveau' || m.candidateState === 'bienvenue_validee' || (!m.candidateState && validatedCount === 0);
+
+          const components: any[] = [];
+          if (isSimu) {
+            components.push(
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`launch_simu_${m.id}`)
+                  .setLabel('🚀 Lancer la Simulation IA')
+                  .setStyle(ButtonStyle.Primary)
+              )
+            );
+          } else if (isOnboarding) {
+            components.push(
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId('start_training_module_1')
+                  .setLabel('🚀 Commencer la formation')
+                  .setStyle(ButtonStyle.Success)
+              )
+            );
+          }
+
           const followupEmbed = new EmbedBuilder()
             .setTitle('🎯 SUIVI DE PARCOURS & FORMATION PAWAKO')
             .setDescription(followupMsg)
-            .setColor(0x8b5cf6)
+            .setColor(isSimu ? 0x3b82f6 : 0x8b5cf6)
             .setFooter({ text: '💬 Alex, Pawako Community Coach • On avance ensemble !' })
             .setTimestamp();
 
-          await (channel as any).send({ embeds: [followupEmbed] }).catch(() => {});
+          await (channel as any).send({ embeds: [followupEmbed], components }).catch(() => {});
           count++;
         }
       } catch (err) {
@@ -4333,7 +4409,22 @@ export class PawakoBotRunner {
         );
       });
 
-      await channel.send({ embeds: [dailyEmbed], components: [row] }).catch(() => {});
+      const components: any[] = [];
+      if (daily.miniGame.options.length > 0) {
+        components.push(row);
+      }
+      if (daily.musicUrl) {
+        components.push(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel('🎧 Écouter la Playlist du Jour')
+              .setStyle(ButtonStyle.Link)
+              .setURL(daily.musicUrl)
+          )
+        );
+      }
+
+      await channel.send({ embeds: [dailyEmbed], components }).catch(() => {});
       return true;
     } catch (err) {
       console.warn('[publishDailyCommunityPost Error]', err);

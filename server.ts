@@ -1661,6 +1661,26 @@ async function startServer() {
     }
   });
 
+  // Trigger manual candidate followups via CM bot
+  app.post('/api/discord/cm-relancer', async (req: Request, res: Response) => {
+    try {
+      const count = await pawakoBot.triggerPersonalizedCandidateFollowups();
+      res.json({ success: true, count, message: `${count} relances candidats effectuées.` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors des relances candidats' });
+    }
+  });
+
+  // Trigger manual daily community post via CM bot
+  app.post('/api/discord/cm-daily', async (req: Request, res: Response) => {
+    try {
+      const ok = await pawakoBot.publishDailyCommunityPost();
+      res.json({ success: ok, message: ok ? 'Post communautaire publié !' : 'Salon non trouvé ou bot déconnecté.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la publication CM' });
+    }
+  });
+
   // Firebase Database Status
   app.get('/api/firebase/status', (req: Request, res: Response) => {
     res.json({

@@ -23,6 +23,15 @@ import {
   BarChart3,
   RefreshCw,
   X,
+  MessageSquare,
+  Plus,
+  Trash2,
+  Link2,
+  Radio,
+  Gamepad2,
+  Lightbulb,
+  Zap,
+  Settings2,
 } from 'lucide-react';
 import {
   aiKnowledgeService,
@@ -30,8 +39,9 @@ import {
   generateAIResponse,
   evaluateSimulationSession,
   defaultValidationGridPrompt,
+  defaultCmConfig,
 } from '../services/aiKnowledgeService';
-import { AiPromptConfig, SimulationEvaluationResult } from '../types';
+import { AiPromptConfig, SimulationEvaluationResult, AiCmConfig } from '../types';
 
 interface AIKnowledgeConfiguratorProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
@@ -39,7 +49,43 @@ interface AIKnowledgeConfiguratorProps {
 
 export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = ({ onShowToast }) => {
   const [promptCfg, setPromptCfg] = useState<AiPromptConfig>(aiKnowledgeService.getPromptConfig());
-  const [activeTab, setActiveTab] = useState<'prompt' | 'criteria' | 'sandbox'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'cm' | 'criteria' | 'sandbox'>('prompt');
+
+  // Helpers for CM Config
+  const updateCmConfig = (fields: Partial<AiCmConfig>) => {
+    setPromptCfg((prev) => ({
+      ...prev,
+      cmConfig: {
+        ...defaultCmConfig,
+        ...(prev.cmConfig || {}),
+        ...fields,
+      },
+    }));
+  };
+
+  const handleAddResourceLink = () => {
+    const currentLinks = promptCfg.cmConfig?.resourceLinks || defaultCmConfig.resourceLinks;
+    updateCmConfig({
+      resourceLinks: [
+        ...currentLinks,
+        { id: Date.now().toString(), label: 'Nouveau lien', url: 'https://' },
+      ],
+    });
+  };
+
+  const handleUpdateResourceLink = (id: string, label: string, url: string) => {
+    const currentLinks = promptCfg.cmConfig?.resourceLinks || defaultCmConfig.resourceLinks;
+    updateCmConfig({
+      resourceLinks: currentLinks.map((l) => (l.id === id ? { ...l, label, url } : l)),
+    });
+  };
+
+  const handleRemoveResourceLink = (id: string) => {
+    const currentLinks = promptCfg.cmConfig?.resourceLinks || defaultCmConfig.resourceLinks;
+    updateCmConfig({
+      resourceLinks: currentLinks.filter((l) => l.id !== id),
+    });
+  };
 
   // Sandbox testing state
   const [chatHistory, setChatHistory] = useState<Array<{ sender: 'user' | 'grok'; text: string }>>([
@@ -201,6 +247,18 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
         </button>
 
         <button
+          onClick={() => setActiveTab('cm')}
+          className={`px-4 py-3 font-bold text-xs rounded-t-xl flex items-center gap-2 transition-all ${
+            activeTab === 'cm'
+              ? 'bg-purple-600/20 text-purple-300 border-t border-x border-purple-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
+          }`}
+        >
+          <Bot className="w-4 h-4 text-purple-400" />
+          <span>🤖 Community Manager IA (Discord)</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('criteria')}
           className={`px-4 py-3 font-bold text-xs rounded-t-xl flex items-center gap-2 transition-all ${
             activeTab === 'criteria'
@@ -326,7 +384,280 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
         </div>
       )}
 
-      {/* TAB 2: CRITERIA & VALIDATION LIMITS */}
+      {/* TAB 2: COMMUNITY MANAGER IA CONFIG (DISCORD) */}
+      {activeTab === 'cm' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+              <Bot className="w-32 h-32 text-purple-400" />
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-inner">
+                  <Bot className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-white">Comportement du Community Manager IA (Alex)</h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold uppercase tracking-wider">
+                      Service Autonome Discord (OpenRouter)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                    Configure le ton, la fréquence d'animation, les fonctionnalités actives et les ressources partagées par l'IA CM. Ce service opère de manière <strong className="text-purple-300">indépendante des modules de formation</strong> sur le serveur Discord Pawako.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span className="text-xs text-slate-300 font-semibold">Statut : Operational on Discord</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 1: Tone & Frequency */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tone Selector */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3 shadow-xl">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-purple-400" />
+                <span>Ton de Communication du CM</span>
+              </label>
+              <p className="text-xs text-slate-400">
+                Définit le style relationnel et le langage employé par le CM dans ses posts et réponses.
+              </p>
+              <select
+                value={promptCfg.cmConfig?.tone || 'dynamique'}
+                onChange={(e) => updateCmConfig({ tone: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-purple-500"
+              >
+                <option value="dynamique">⚡ Dynamique, Motivant & Vendeur (Recommandé Pawako)</option>
+                <option value="bienveillant">💛 Chaleureux, Bienveillant & Pédagoge</option>
+                <option value="strict_performance">🎯 Exigeant & Axé Performance / Métriques Vente</option>
+                <option value="cool">😎 Décontracté, Fun & Style Membre Communauté</option>
+                <option value="grand_frere">🤝 Grand Frère Coach & Inspirant</option>
+              </select>
+            </div>
+
+            {/* Post Frequency Selector */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3 shadow-xl">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span>Fréquence d'Animation Automatique</span>
+              </label>
+              <p className="text-xs text-slate-400">
+                Rythme de publication automatique du contenu quotidien (astuces, quiz, playlists) sur Discord.
+              </p>
+              <select
+                value={promptCfg.cmConfig?.postFrequency || 'daily'}
+                onChange={(e) => updateCmConfig({ postFrequency: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-amber-500"
+              >
+                <option value="daily">📅 Quotidien (1 fois par jour à 09h00)</option>
+                <option value="twice_daily">⚡ Biquotidien (Matin 09h00 & Soir 18h00)</option>
+                <option value="weekly">🗓️ Hebdomadaire (Chaque Lundi matin)</option>
+                <option value="manual">🛑 Sur Demande / Manuel uniquement (!post)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Section 2: Feature Toggles */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-indigo-400" />
+              <span>Activation & Désactivation des Services CM</span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Mini Games Toggle */}
+              <div
+                onClick={() => updateCmConfig({ enableMiniGames: !(promptCfg.cmConfig?.enableMiniGames ?? true) })}
+                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                  (promptCfg.cmConfig?.enableMiniGames ?? true)
+                    ? 'bg-purple-950/20 border-purple-500/40 text-purple-200'
+                    : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${ (promptCfg.cmConfig?.enableMiniGames ?? true) ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-800 text-slate-500' }`}>
+                  <Gamepad2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Jeux & Challenges Flash (!jeu)</span>
+                    <input
+                      type="checkbox"
+                      checked={promptCfg.cmConfig?.enableMiniGames ?? true}
+                      onChange={() => {}}
+                      className="rounded border-slate-700 text-purple-600 focus:ring-purple-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    L'IA génère et propose des cas pratiques de chatting avec options A, B, C et correction immédiate.
+                  </p>
+                </div>
+              </div>
+
+              {/* Daily Tips Toggle */}
+              <div
+                onClick={() => updateCmConfig({ enableDailyTips: !(promptCfg.cmConfig?.enableDailyTips ?? true) })}
+                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                  (promptCfg.cmConfig?.enableDailyTips ?? true)
+                    ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                    : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${ (promptCfg.cmConfig?.enableDailyTips ?? true) ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-slate-500' }`}>
+                  <Lightbulb className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Astuces & Hacks Chatting du Jour</span>
+                    <input
+                      type="checkbox"
+                      checked={promptCfg.cmConfig?.enableDailyTips ?? true}
+                      onChange={() => {}}
+                      className="rounded border-slate-700 text-amber-600 focus:ring-amber-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Publication d'astuces de vente, boucliers tarifaires et conseils d'orthographe française.
+                  </p>
+                </div>
+              </div>
+
+              {/* Candidate Followups Toggle */}
+              <div
+                onClick={() => updateCmConfig({ enableCandidateFollowups: !(promptCfg.cmConfig?.enableCandidateFollowups ?? true) })}
+                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                  (promptCfg.cmConfig?.enableCandidateFollowups ?? true)
+                    ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-200'
+                    : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${ (promptCfg.cmConfig?.enableCandidateFollowups ?? true) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-500' }`}>
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Relances Candidats Personnalisées</span>
+                    <input
+                      type="checkbox"
+                      checked={promptCfg.cmConfig?.enableCandidateFollowups ?? true}
+                      onChange={() => {}}
+                      className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Motivation individuelle selon l'avancement des modules et les badges débloqués du candidat.
+                  </p>
+                </div>
+              </div>
+
+              {/* Auto QA Toggle */}
+              <div
+                onClick={() => updateCmConfig({ enableAutoQA: !(promptCfg.cmConfig?.enableAutoQA ?? true) })}
+                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                  (promptCfg.cmConfig?.enableAutoQA ?? true)
+                    ? 'bg-blue-950/20 border-blue-500/40 text-blue-200'
+                    : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${ (promptCfg.cmConfig?.enableAutoQA ?? true) ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-800 text-slate-500' }`}>
+                  <Bot className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Réponses Automatiques Q&A Discord</span>
+                    <input
+                      type="checkbox"
+                      checked={promptCfg.cmConfig?.enableAutoQA ?? true}
+                      onChange={() => {}}
+                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Répond de façon autonome aux questions posées par les candidats dans les salons d'entraide.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Custom Prompt & Persona Instructions */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3 shadow-xl">
+            <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-purple-400" />
+              <span>Consignes Spécifiques & Persona du CM IA</span>
+            </label>
+            <p className="text-xs text-slate-400">
+              Ces instructions complètent le prompt système transmis à OpenRouter AI pour façonner la personnalité du CM.
+            </p>
+            <textarea
+              rows={3}
+              value={promptCfg.cmConfig?.customCmInstructions || ''}
+              onChange={(e) => updateCmConfig({ customCmInstructions: e.target.value })}
+              placeholder="Ex: Sois très énergique, utilise un vocabulaire orienté chiffre d'affaires, salue la communauté avec des emojis de fusée..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-purple-500"
+            />
+          </div>
+
+          {/* Section 4: Useful Resource Links Manager */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-indigo-400" />
+                  <span>Liens de Ressources Utiles (Injectés sur Discord)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Ces liens (guides, playlists, règles) sont transmis au CM IA pour qu'il puisse les partager automatiquement aux membres.
+                </p>
+              </div>
+              <button
+                onClick={handleAddResourceLink}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Ajouter un lien</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {(promptCfg.cmConfig?.resourceLinks || defaultCmConfig.resourceLinks).map((link) => (
+                <div key={link.id} className="flex items-center gap-3 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      value={link.label}
+                      onChange={(e) => handleUpdateResourceLink(link.id, e.target.value, link.url)}
+                      placeholder="Nom du lien (ex: Playlist Focus Spotify)"
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                    />
+                    <input
+                      type="text"
+                      value={link.url}
+                      onChange={(e) => handleUpdateResourceLink(link.id, link.label, e.target.value)}
+                      placeholder="URL (https://...)"
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-indigo-300 focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleRemoveResourceLink(link.id)}
+                    className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                    title="Supprimer ce lien"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: CRITERIA & VALIDATION LIMITS */}
       {activeTab === 'criteria' && (
         <div className="space-y-6 animate-in fade-in">
           {/* Threshold Card */}

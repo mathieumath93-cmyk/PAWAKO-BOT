@@ -33,6 +33,11 @@ import {
   checkCandidateMessageForCoachIntervention,
   enforceFanNegotiationRules,
 } from '../services/aiKnowledgeService';
+import {
+  communityService,
+  CURATED_PLAYLISTS,
+  FRENCH_CHATTING_TIPS,
+} from '../services/communityService';
 
 export interface ActiveQuizSession {
   attemptId: string;
@@ -505,6 +510,137 @@ export class PawakoBotRunner {
           );
 
           await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
+        }
+
+        // --- COMMUNITY MANAGER & ASSISTANT COMMANDS (INDEPENDENT FROM SIMULATION) ---
+        if (content === '!astuce' || content === '!hack' || content === '!conseil') {
+          const tip = await communityService.getDailyTip();
+          const embed = new EmbedBuilder()
+            .setTitle(tip.title)
+            .setDescription(tip.content)
+            .setColor(0x8b5cf6)
+            .setFooter({ text: '💡 Pawako Community & Chatting Coach' });
+          await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
+        }
+
+        if (content === '!francais' || content === '!orthographe' || content === '!style') {
+          const randomTip = FRENCH_CHATTING_TIPS[Math.floor(Math.random() * FRENCH_CHATTING_TIPS.length)];
+          const embed = new EmbedBuilder()
+            .setTitle(`✍️ Le Conseil Français & Style Chatting — ${randomTip.rule}`)
+            .setDescription(
+              `❌ **À éviter :** \`${randomTip.bad}\`\n\n` +
+              `✅ **Formulation idéale :** \`${randomTip.good}\`\n\n` +
+              `💡 **Explication du Coach :** ${randomTip.tip}`
+            )
+            .setColor(0x3b82f6)
+            .setFooter({ text: '✍️ Pawako Orthographe & Style' });
+          await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
+        }
+
+        if (content.startsWith('!corriger ') || content.startsWith('!reforme ')) {
+          const userText = content.replace(/^!(corriger|reforme)\s+/, '').trim();
+          if (!userText) {
+            await message.reply('⚠️ Mets ton texte après la commande. Exemple : `!corriger Coucou sa va trop bien`').catch(() => {});
+            return;
+          }
+          if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
+          const res = await communityService.correctAndEnhanceMessage(userText);
+          const embed = new EmbedBuilder()
+            .setTitle('✨ Correction & Reformulation Express Pawako')
+            .setColor(0xec4899)
+            .addFields(
+              { name: '📝 Ton message brut', value: `\`${userText}\`` },
+              { name: '✅ Correction orthographique', value: res.corrected },
+              { name: '🔥 Formulation Séductrice & Vendeuse', value: `**${res.enhanced}**` },
+              { name: '💡 Conseil du Coach', value: res.explanation }
+            )
+            .setFooter({ text: ' Pawako Assistant Chatting' });
+          await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
+        }
+
+        if (content === '!musique' || content === '!son' || content === '!playlist') {
+          const randomPlaylist = CURATED_PLAYLISTS[Math.floor(Math.random() * CURATED_PLAYLISTS.length)];
+          const embed = new EmbedBuilder()
+            .setTitle(randomPlaylist.title)
+            .setDescription(
+              `${randomPlaylist.description}\n\n` +
+              `🎧 **Écouter la playlist :** [Cliquez ici pour lancer sur Spotify](${randomPlaylist.url})\n\n` +
+              `_${randomPlaylist.quote}_`
+            )
+            .setColor(0x10b981)
+            .setFooter({ text: '🎧 Pawako Radio & Motivation' });
+          await message.reply({ embeds: [embed] }).catch(() => {});
+          return;
+        }
+
+        if (content === '!jeu' || content === '!challenge' || content === '!quiz-flash') {
+          if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
+          const game = await communityService.generateMiniGameWithAI();
+          const embed = new EmbedBuilder()
+            .setTitle(game.title)
+            .setDescription(`**Mise en situation :**\n${game.scenario}\n\n**Propositions :**\n` + game.options.map((o) => `• ${o.label}`).join('\n'))
+            .setColor(0xf59e0b)
+            .setFooter({ text: '🎮 Pawako Community Game • Généré par IA • Clique sur une option !' });
+
+          const row = new ActionRowBuilder<ButtonBuilder>();
+          game.options.forEach((opt, idx) => {
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`cm_game_opt_${game.id}_${idx}`)
+                .setLabel(opt.label.substring(0, 80))
+                .setStyle(ButtonStyle.Primary)
+            );
+          });
+
+          await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
+          return;
+        }
+
+        if (content === '!relancer' || content === '!relance-candidats') {
+          if (!this.isStaffChannel(message.channel) && !message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+            await message.reply('⛔ Commande réservée au staff Pawako.').catch(() => {});
+            return;
+          }
+
+          await message.reply('⏳ **Lancement des relances personnalisées pour les candidats...**').catch(() => {});
+          const count = await this.triggerPersonalizedCandidateFollowups();
+          await message.reply(`✅ **Relances effectuées !** ${count} candidat(s) ont reçu leur message de suivi personnalisé.`).catch(() => {});
+          return;
+        }
+
+        if (content === '!cm-daily' || content === '!animation') {
+          await message.reply('⏳ **Publication de la dose d\'énergie communautaire...**').catch(() => {});
+          await this.publishDailyCommunityPost(message.channel as TextChannel);
+          return;
+        }
+
+        // --- AUTONOMOUS AI CM LISTENING & QA (OUTSIDE ACTIVE SIMULATION) ---
+        if (!this.activeAnthonySessions.has(message.channel.id) && !message.author.bot) {
+          const isMentioned = this.client?.user && message.mentions.has(this.client.user.id);
+          const channelName = (message.channel as any).name?.toLowerCase() || '';
+          const isCommunityChannel =
+            channelName.includes('general') ||
+            channelName.includes('général') ||
+            channelName.includes('discussion') ||
+            channelName.includes('entraide') ||
+            channelName.includes('questions') ||
+            channelName.includes('formation');
+
+          const cleanQuery = content.replace(/<@!?\d+>/g, '').trim();
+          const isQuestion = cleanQuery.includes('?') || cleanQuery.length >= 10;
+          const isHelpKeyword = /aide|question|bloqu|module|quiz|conseil|astuce|salut|bonjour|coucou|formation|comment|quand|inflow/i.test(cleanQuery);
+
+          if (isMentioned || (isCommunityChannel && isQuestion && isHelpKeyword)) {
+            if (cleanQuery) {
+              if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
+              const reply = await communityService.answerCommunityQA(cleanQuery, message.author.username);
+              await message.reply(reply).catch(() => {});
+              return;
+            }
+          }
         }
 
         if (content === '!profile' || content === '!profil' || content === '!badges' || content === '!succes') {
@@ -1567,6 +1703,19 @@ export class PawakoBotRunner {
           } else {
             await interaction.followUp({ content: sarcasticMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
           }
+          return;
+        }
+
+        // --- COMMUNITY MANAGER MINI-GAME BUTTON INTERACTION ---
+        if (interaction.isButton() && customId.startsWith('cm_game_opt_')) {
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+          const parts = customId.split('_');
+          const optIdx = parseInt(parts[parts.length - 1], 10);
+          const feedback = optIdx === 1 
+            ? '✅ **EXCELLENT !** C\'est exactement la bonne stratégie Pawako. Tu qualifies le fan et valorises ton offre ! 🏆'
+            : '💡 **CONSEIL DU COACH :** Privilégie toujours la qualification et l\'ajout de valeur (méthode du Bouclier) au lieu d\'une baisse de prix directe ou d\'un refus sec ! 💪';
+
+          await interaction.editReply({ content: feedback }).catch(() => {});
           return;
         }
 
@@ -4088,6 +4237,110 @@ export class PawakoBotRunner {
     }
   }
 
+  /**
+   * Triggers personalized follow-up messages for candidates depending on their module progress.
+   * Completely isolated from simulation channels.
+   */
+  public async triggerPersonalizedCandidateFollowups(): Promise<number> {
+    if (!this.client || !this.isConnected) return 0;
+    let count = 0;
+    const modules = store.getModules();
+    const members = store.getMembers().filter((m) => m.isActive !== false && m.candidateState !== 'formation_terminee');
+
+    for (const m of members) {
+      if (!m.personalChannelId) continue;
+
+      // Do NOT send follow-up inside an active simulation session!
+      if (this.activeAnthonySessions.has(m.personalChannelId)) continue;
+
+      try {
+        const channel = await this.client.channels.fetch(m.personalChannelId).catch(() => null);
+        if (!channel || !('send' in channel)) continue;
+
+        const followupMsg = await communityService.generatePersonalizedFollowup(m, modules);
+        if (followupMsg) {
+          const followupEmbed = new EmbedBuilder()
+            .setTitle('🎯 SUIVI DE PARCOURS & FORMATION PAWAKO')
+            .setDescription(followupMsg)
+            .setColor(0x8b5cf6)
+            .setFooter({ text: '💬 Alex, Pawako Community Coach • On avance ensemble !' })
+            .setTimestamp();
+
+          await (channel as any).send({ embeds: [followupEmbed] }).catch(() => {});
+          count++;
+        }
+      } catch (err) {
+        console.warn(`[Followup Error for ${m.username}]`, err);
+      }
+    }
+
+    return count;
+  }
+
+  /**
+   * Posts the daily Community Manager boost (Tip + French rule + Music + Mini-Game) to general/discussion channel.
+   */
+  public async publishDailyCommunityPost(targetChan?: TextChannel): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+
+    let channel = targetChan;
+    if (!channel) {
+      const guild = this.client.guilds.cache.first();
+      if (guild) {
+        const found = guild.channels.cache.find(
+          (c) =>
+            c.isTextBased() &&
+            (c.name.includes('général') ||
+              c.name.includes('general') ||
+              c.name.includes('annonces') ||
+              c.name.includes('discussion') ||
+              c.name.includes('formation'))
+        );
+        if (found && 'send' in found) channel = found as TextChannel;
+      }
+    }
+
+    if (!channel) return false;
+
+    try {
+      const daily = await communityService.generateDailyCommunityContent();
+
+      const dailyEmbed = new EmbedBuilder()
+        .setTitle('⚡ PAWAKO COMMUNITY CM — LA DOSE D\'ÉNERGIE DU JOUR 🚀')
+        .setDescription(
+          `Salut l'équipe ! Voici votre condensé d'inspiration et d'entraînement pour cartonner aujourd'hui ! 🔥\n\n` +
+          `💡 **${daily.tipTitle}**\n${daily.tipContent}\n\n` +
+          `✍️ **L'Astuce Français & Style : ${daily.frenchRule}**\n` +
+          `❌ *À éviter :* \`${daily.frenchBad}\`\n` +
+          `✅ *À privilégier :* \`${daily.frenchGood}\`\n` +
+          `💡 *Conseil :* ${daily.frenchTip}\n\n` +
+          `🎧 **La Playlist Boost : ${daily.musicTitle}**\n${daily.musicDesc}\n` +
+          `[👉 Écouter sur Spotify](${daily.musicUrl})\n` +
+          `_${daily.musicQuote}_\n\n` +
+          `🎮 **${daily.miniGame.title} :**\n${daily.miniGame.scenario}`
+        )
+        .setColor(0xec4899)
+        .setFooter({ text: ' Alex, Pawako CM & Animation Discord' })
+        .setTimestamp();
+
+      const row = new ActionRowBuilder<ButtonBuilder>();
+      daily.miniGame.options.forEach((opt, idx) => {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`cm_game_opt_${daily.miniGame.id}_${idx}`)
+            .setLabel(opt.label.substring(0, 80))
+            .setStyle(ButtonStyle.Primary)
+        );
+      });
+
+      await channel.send({ embeds: [dailyEmbed], components: [row] }).catch(() => {});
+      return true;
+    } catch (err) {
+      console.warn('[publishDailyCommunityPost Error]', err);
+      return false;
+    }
+  }
+
   private lastCronRunDate: string = '';
   private lastInactivityCheckTimestamp: number = 0;
 
@@ -4110,6 +4363,12 @@ export class PawakoBotRunner {
 
         // Check 10h00 HF tools formation reminders
         this.checkToolsFormationReminders();
+
+        // Check 11h00 HF daily community post and personalized candidate followups
+        if (hours === 11 && minutes === 0) {
+          this.triggerPersonalizedCandidateFollowups().catch(() => {});
+          this.publishDailyCommunityPost().catch(() => {});
+        }
 
         // Update leaderboard in #classement-formation
         this.updateLeaderboardChannel().catch(() => {});

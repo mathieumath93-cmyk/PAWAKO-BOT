@@ -544,6 +544,23 @@ export interface AiKnowledgeBase {
   fanPersonas: FanPersona[];
 }
 
+export interface AiCmResourceLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export interface AiCmConfig {
+  tone: 'dynamique' | 'bienveillant' | 'strict_performance' | 'cool' | 'grand_frere';
+  postFrequency: 'daily' | 'twice_daily' | 'weekly' | 'manual';
+  enableMiniGames: boolean;
+  enableDailyTips: boolean;
+  enableCandidateFollowups: boolean;
+  enableAutoQA: boolean;
+  customCmInstructions: string;
+  resourceLinks: AiCmResourceLink[];
+}
+
 export interface AiPromptConfig {
   analyzerPrompt: string;
   fanPrompt: string;
@@ -553,6 +570,7 @@ export interface AiPromptConfig {
   openRouterApiKey: string;
   enableLiveDiscordBot: boolean;
   minPassingScore?: number;
+  cmConfig?: AiCmConfig;
 }
 
 export interface SimulationCriterionScore {

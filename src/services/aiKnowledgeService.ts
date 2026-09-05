@@ -1,5 +1,20 @@
 import { GoogleGenAI } from '@google/genai';
-import { AiPromptConfig } from '../types';
+import { AiPromptConfig, AiCmConfig } from '../types';
+
+export const defaultCmConfig: AiCmConfig = {
+  tone: 'dynamique',
+  postFrequency: 'daily',
+  enableMiniGames: true,
+  enableDailyTips: true,
+  enableCandidateFollowups: true,
+  enableAutoQA: true,
+  customCmInstructions: 'Sois dynamique, bienveillant, motivant et axé sur la performance des chatters Pawako. Utilise un ton professionnel mais accessible avec des emojis adaptés.',
+  resourceLinks: [
+    { id: '1', label: 'Playlist Spotify Lo-Fi Focus', url: 'https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i' },
+    { id: '2', label: 'Guide de Vente OnlyFans Pawako', url: 'https://pawako-agency.com' },
+    { id: '3', label: 'Règles du Serveur Discord', url: 'https://discord.gg/pawako' },
+  ],
+};
 
 export interface FanProfile {
   name: string;
@@ -941,6 +956,7 @@ class AiKnowledgeService {
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,
+      cmConfig: defaultCmConfig,
     };
 
     this.loadFromLocalStorage();
@@ -973,6 +989,12 @@ class AiKnowledgeService {
           cleanModelName = '@preset/pawako-bot';
         }
 
+        const mergedCmConfig: AiCmConfig = {
+          ...defaultCmConfig,
+          ...(parsed.cmConfig || {}),
+          resourceLinks: parsed.cmConfig?.resourceLinks || defaultCmConfig.resourceLinks,
+        };
+
         this.promptConfig = {
           ...this.promptConfig,
           ...parsed,
@@ -980,6 +1002,7 @@ class AiKnowledgeService {
           fanPrompt: updatedFanPrompt,
           modelName: cleanModelName,
           openRouterApiKey: parsed.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
+          cmConfig: mergedCmConfig,
         };
       }
     } catch (e) {
@@ -1045,6 +1068,7 @@ class AiKnowledgeService {
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,
+      cmConfig: defaultCmConfig,
     };
     this.saveToStorage();
     this.notify();

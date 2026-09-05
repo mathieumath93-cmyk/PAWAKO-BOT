@@ -50,7 +50,44 @@ export const DiscordSyncView: React.FC = () => {
   const [categories, setCategories] = useState<DiscordChannelSyncData[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [botPermissions, setBotPermissions] = useState<BotPermissionAnalysis | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'channels' | 'permissions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'channels' | 'permissions' | 'cm'>('overview');
+  const [cmStatus, setCmStatus] = useState<string | null>(null);
+  const [isRelancing, setIsRelancing] = useState<boolean>(false);
+  const [isPostingCm, setIsPostingCm] = useState<boolean>(false);
+
+  const handleTriggerRelances = async () => {
+    setIsRelancing(true);
+    setCmStatus(null);
+    try {
+      const res: any = await safeFetchJson('/api/discord/cm-relancer', { method: 'POST' });
+      if (res && res.success) {
+        setCmStatus(`✅ Relances effectuées avec succès ! ${res.count || 0} candidat(s) relancé(s).`);
+      } else {
+        setCmStatus(`⚠️ Erreur : ${res?.error || 'Échec des relances'}`);
+      }
+    } catch (e: any) {
+      setCmStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsRelancing(false);
+    }
+  };
+
+  const handleTriggerCmDaily = async () => {
+    setIsPostingCm(true);
+    setCmStatus(null);
+    try {
+      const res: any = await safeFetchJson('/api/discord/cm-daily', { method: 'POST' });
+      if (res && res.success) {
+        setCmStatus('✅ Post communautaire du jour publié avec succès sur Discord !');
+      } else {
+        setCmStatus(`⚠️ Erreur : ${res?.error || 'Salon introuvable ou bot déconnecté'}`);
+      }
+    } catch (e: any) {
+      setCmStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsPostingCm(false);
+    }
+  };
 
   // API Credentials State (Managed Securely via Backend Server)
   const [botToken, setBotToken] = useState<string>('');
@@ -805,6 +842,16 @@ export const DiscordSyncView: React.FC = () => {
           >
             <Lock className="w-4 h-4" /> Analyse Permissions Bot
           </button>
+          <button
+            onClick={() => setActiveTab('cm')}
+            className={`px-5 py-3.5 text-sm font-semibold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'cm'
+                ? 'border-purple-500 text-purple-400 bg-purple-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" /> Super CM & Animateur
+          </button>
         </div>
 
         {/* Tab Contents */}
@@ -1077,6 +1124,98 @@ export const DiscordSyncView: React.FC = () => {
                   <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-between text-xs">
                     <span className="text-slate-300">Create Private Threads (Fils privés)</span>
                     <span className="text-emerald-400 font-bold">✓ Valide</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'cm' && (
+            <div className="space-y-6">
+              <div className="bg-slate-950 border border-purple-500/30 rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-purple-400" /> Super CM, Animateur & Coach Discord
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Service autonome d'animation communautaire et de relance candidat (100% isolé des simulations Anthony/Pawako).
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 bg-purple-500/10 border border-purple-500/30 rounded-full text-purple-300 text-xs font-bold">
+                    🟢 Service Indépendant Actif
+                  </span>
+                </div>
+
+                {cmStatus && (
+                  <div className="p-3 bg-slate-900 border border-purple-500/40 rounded-lg text-xs font-medium text-slate-200">
+                    {cmStatus}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+                    <h4 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
+                      <Send className="w-4 h-4" /> Relances Personnalisées Candidats
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Analyse la progression de chaque candidat (modules validés, étape actuelle) et envoie un message de suivi personnalisé dans son salon Discord privé.
+                    </p>
+                    <button
+                      disabled={isRelancing}
+                      onClick={handleTriggerRelances}
+                      className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isRelancing ? '⏳ Relances en cours...' : '🚀 Lancer les Relances Personnalisées'}
+                    </button>
+                  </div>
+
+                  <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+                    <h4 className="font-bold text-sm text-pink-300 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" /> Post Communautaire Quotidien (CM Boost)
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Publie la dose du jour sur le salon général : Astuce Chatting, Conseil Français/Style, Playlist Spotify et Challenge interactif.
+                    </p>
+                    <button
+                      disabled={isPostingCm}
+                      onClick={handleTriggerCmDaily}
+                      className="w-full py-2.5 px-4 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isPostingCm ? '⏳ Publication en cours...' : '⚡ Publier le Post CM du Jour'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 space-y-3">
+                  <h4 className="font-bold text-xs text-slate-300 uppercase tracking-wider">
+                    📋 Commandes Discord Animateur & CM
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!astuce / !hack</div>
+                      <div className="text-slate-400 text-[11px]">Donne une astuce de chatting OnlyFans / Vente.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!francais / !style</div>
+                      <div className="text-slate-400 text-[11px]">Rappels d'orthographe et tournures pour le chatting.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!corriger &lt;texte&gt;</div>
+                      <div className="text-slate-400 text-[11px]">Analyse, corrige et reformule en style sexy & vendeur.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!musique / !son</div>
+                      <div className="text-slate-400 text-[11px]">Partage une playlist Spotify de travail avec citation inspirante.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!jeu / !challenge</div>
+                      <div className="text-slate-400 text-[11px]">Lance un mini-jeu de mise en situation interactif.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">@Pawako Bot &lt;question&gt;</div>
+                      <div className="text-slate-400 text-[11px]">Répond aux questions sur la formation hors simulation.</div>
+                    </div>
                   </div>
                 </div>
               </div>

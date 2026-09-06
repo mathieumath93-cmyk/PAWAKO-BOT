@@ -1722,7 +1722,7 @@ async function startServer() {
       if (guildId && pawakoBot.client) {
         targetGuild = await pawakoBot.client.guilds.fetch(guildId).catch(() => null);
       }
-      const broadcastResult = await pawakoBot.startRadioBroadcast(targetGuild, stationId || 'lofi');
+      const broadcastResult = await pawakoBot.startRadioBroadcast(targetGuild, stationId || 'pawako');
       const channel = broadcastResult.channel;
       const effectiveId = getEffectiveClientId();
       const botInviteUrl = `https://discord.com/oauth2/authorize?client_id=${effectiveId}&permissions=8&scope=bot%20applications.commands`;
@@ -1757,7 +1757,7 @@ async function startServer() {
       if (guildId && pawakoBot.client) {
         targetGuild = await pawakoBot.client.guilds.fetch(guildId).catch(() => null);
       }
-      const result = await pawakoBot.startRadioBroadcast(targetGuild, stationId || 'lofi');
+      const result = await pawakoBot.startRadioBroadcast(targetGuild, stationId || 'pawako');
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Erreur lors du démarrage du stream radio' });

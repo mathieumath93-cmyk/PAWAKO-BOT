@@ -3353,7 +3353,7 @@ export class PawakoBotRunner {
    */
   public async startRadioBroadcast(
     guildInput?: any,
-    stationId: string = 'lofi'
+    stationId: string = 'pawako'
   ): Promise<{ success: boolean; message: string; channel?: any; inviteUrl?: string; station: RadioStation }> {
     const radioData = await this.ensureRadioFocusVoiceChannel(guildInput);
     if (!radioData?.channel) {
@@ -3424,7 +3424,7 @@ export class PawakoBotRunner {
       for (const [_, oAuthGuild] of guilds) {
         const fullGuild = await oAuthGuild.fetch().catch(() => null);
         if (fullGuild) {
-          await this.startRadioBroadcast(fullGuild, 'lofi').catch((err) => {
+          await this.startRadioBroadcast(fullGuild, 'pawako').catch((err) => {
             console.warn(`[AutoStartRadio Error on ${fullGuild.name}]`, err?.message || err);
           });
         }

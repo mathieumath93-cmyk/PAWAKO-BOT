@@ -13,8 +13,37 @@ export default defineConfig(() => {
     },
     build: {
       rollupOptions: {
-        external: ['zlib-sync', 'erlpack', 'bufferutil', 'utf-8-validate', 'discord.js', '@discordjs/ws'],
+        external: [
+          'zlib-sync',
+          'erlpack',
+          'bufferutil',
+          'utf-8-validate',
+          'discord.js',
+          '@discordjs/ws',
+          '@discordjs/voice',
+          '@snazzah/davey',
+          '@snazzah/davey-wasm32-wasi',
+          'opusscript',
+          'prism-media',
+          'libsodium-wrappers',
+        ],
       },
+    },
+    optimizeDeps: {
+      exclude: [
+        'zlib-sync',
+        'erlpack',
+        'bufferutil',
+        'utf-8-validate',
+        'discord.js',
+        '@discordjs/ws',
+        '@discordjs/voice',
+        '@snazzah/davey',
+        '@snazzah/davey-wasm32-wasi',
+        'opusscript',
+        'prism-media',
+        'libsodium-wrappers',
+      ],
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -1139,7 +1139,8 @@ class StoreService {
         );
 
         if (typeof window === 'undefined') {
-          import('../bot/discordBot').then(({ pawakoBot }) => {
+          const botModule = '../bot/discordBot';
+          import(/* @vite-ignore */ botModule).then(({ pawakoBot }) => {
             const totalQ = quiz.questions?.length || 20;
             const finalPoints = Math.round((score / 100) * totalQ);
             pawakoBot.notifyStaffModule5Completion(member, quiz.title, finalPoints, totalQ, quiz.minScore || 16).catch(() => {});

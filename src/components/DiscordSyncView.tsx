@@ -93,6 +93,126 @@ export const DiscordSyncView: React.FC = () => {
   const [isCreatingRadio, setIsCreatingRadio] = useState<boolean>(false);
   const [radioStatus, setRadioStatus] = useState<string | null>(null);
   const [radioData, setRadioData] = useState<{ channelName?: string; inviteUrl?: string; botInviteUrl?: string } | null>(null);
+  const [radioStreamInfo, setRadioStreamInfo] = useState<{
+    isStreaming: boolean;
+    station?: { id: string; name: string; genre: string; description: string };
+    stations?: Array<{ id: string; name: string; genre: string; description: string }>;
+    channelId?: string;
+    volume?: number;
+  } | null>(null);
+  const [selectedStation, setSelectedStation] = useState<string>('pawako');
+  const [isStartingStream, setIsStartingStream] = useState<boolean>(false);
+  const [customWebradioUrl, setCustomWebradioUrl] = useState<string>('https://pawako-webradio.ai.studio');
+  const [remoteRadioStatus, setRemoteRadioStatus] = useState<any | null>(null);
+  const [isSavingUrl, setIsSavingUrl] = useState<boolean>(false);
+  const [isSkipping, setIsSkipping] = useState<boolean>(false);
+
+  const loadRadioStreamStatus = async (guildId?: string) => {
+    try {
+      const gid = guildId || selectedGuildId;
+      const res: any = await safeFetchJson(`/api/discord/radio/status${gid ? `?guildId=${gid}` : ''}`);
+      if (res && res.success) {
+        setRadioStreamInfo(res);
+        if (res.remoteStatus) setRemoteRadioStatus(res.remoteStatus);
+        if (res.customBaseUrl && !customWebradioUrl) setCustomWebradioUrl(res.customBaseUrl);
+        if (res.station?.id) setSelectedStation(res.station.id);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSaveWebradioUrl = async () => {
+    if (!customWebradioUrl.trim()) return;
+    setIsSavingUrl(true);
+    try {
+      const res: any = await safeFetchJson('/api/discord/radio/custom-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: customWebradioUrl.trim() }),
+      });
+      if (res && res.success) {
+        setRadioStatus(`📻 ${res.message || 'URL Webradio Pawako enregistrée !'}`);
+        if (res.remoteStatus) setRemoteRadioStatus(res.remoteStatus);
+        // If already streaming pawako station, reload
+        if (radioStreamInfo?.isStreaming) {
+          handleStartVoiceBroadcast('pawako');
+        } else {
+          loadRadioStreamStatus();
+        }
+      } else {
+        setRadioStatus(`⚠️ ${res?.error || 'Erreur lors de la sauvegarde de l\'URL'}`);
+      }
+    } catch (err: any) {
+      setRadioStatus(`❌ Erreur réseau : ${err?.message}`);
+    } finally {
+      setIsSavingUrl(false);
+    }
+  };
+
+  const handleSkipTrack = async () => {
+    setIsSkipping(true);
+    try {
+      const res: any = await safeFetchJson('/api/discord/radio/skip', {
+        method: 'POST',
+      });
+      if (res && res.success) {
+        setRadioStatus(`⏭️ ${res.message || 'Morceau passé avec succès !'}`);
+        if (res.nowPlaying) {
+          setRemoteRadioStatus((prev: any) => ({ ...(prev || {}), nowPlaying: res.nowPlaying }));
+        }
+        setTimeout(() => loadRadioStreamStatus(), 1000);
+      } else {
+        setRadioStatus(`⚠️ ${res?.message || res?.error || 'Impossible de passer le morceau'}`);
+      }
+    } catch (err: any) {
+      setRadioStatus(`❌ Erreur : ${err?.message}`);
+    } finally {
+      setIsSkipping(false);
+    }
+  };
+
+  const handleStartVoiceBroadcast = async (stationOverride?: string) => {
+    setIsStartingStream(true);
+    const stationToPlay = stationOverride || selectedStation || 'pawako';
+    try {
+      const res: any = await safeFetchJson('/api/discord/radio/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guildId: selectedGuildId || undefined, stationId: stationToPlay }),
+      });
+      if (res && res.success) {
+        setRadioStatus(`🟢 ${res.message || 'Diffusion vocale 24/7 lancée avec succès !'}`);
+        if (res.station?.id) setSelectedStation(res.station.id);
+        loadRadioStreamStatus();
+      } else {
+        setRadioStatus(`⚠️ ${res?.message || res?.error || 'Erreur lors du lancement de la diffusion'}`);
+      }
+    } catch (e: any) {
+      setRadioStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsStartingStream(false);
+    }
+  };
+
+  const handleStopVoiceBroadcast = async () => {
+    setIsStartingStream(true);
+    try {
+      const res: any = await safeFetchJson('/api/discord/radio/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guildId: selectedGuildId || undefined }),
+      });
+      if (res && res.success) {
+        setRadioStatus(`⏹️ ${res.message || 'Diffusion vocale arrêtée.'}`);
+        loadRadioStreamStatus();
+      }
+    } catch (e: any) {
+      setRadioStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsStartingStream(false);
+    }
+  };
 
   const handleEnsureRadioChannel = async () => {
     setIsCreatingRadio(true);
@@ -102,14 +222,15 @@ export const DiscordSyncView: React.FC = () => {
       const res: any = await safeFetchJson('/api/discord/radio-channel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guildId: selectedGuildId || undefined }),
+        body: JSON.stringify({ guildId: selectedGuildId || undefined, stationId: selectedStation }),
       });
       if (res && res.success) {
-        setRadioStatus(`✅ ${res.message || 'Salon vocal Radio Focus 24/7 actif sur Discord !'}`);
+        setRadioStatus(`✅ ${res.message || 'Salon vocal Radio Focus 24/7 actif et diffusion lancée !'}`);
         setRadioData({
           channelName: res.channelName,
           inviteUrl: res.inviteUrl,
         });
+        loadRadioStreamStatus();
         if (selectedGuildId) {
           loadGuildData(selectedGuildId);
         }
@@ -331,6 +452,7 @@ export const DiscordSyncView: React.FC = () => {
   useEffect(() => {
     fetchApiStatus();
     loadGuildsList();
+    loadRadioStreamStatus();
   }, []);
 
   const handleGuildChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -338,6 +460,7 @@ export const DiscordSyncView: React.FC = () => {
     setSelectedGuildId(newGuildId);
     discordSyncService.setActiveGuildId(newGuildId);
     loadGuildData(newGuildId);
+    loadRadioStreamStatus(newGuildId);
     setSyncSuccessMsg(null);
     setSyncError(null);
   };
@@ -1255,50 +1378,197 @@ export const DiscordSyncView: React.FC = () => {
                   </div>
 
                   <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
-                    <h4 className="font-bold text-sm text-emerald-300 flex items-center gap-2">
-                      <Headphones className="w-4 h-4" /> Salon Vocal Radio Focus 24/7
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm text-emerald-300 flex items-center gap-2">
+                        <Headphones className="w-4 h-4" /> Radio Focus 24/7 (Vocal)
+                      </h4>
+                      {radioStreamInfo?.isStreaming ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> EN DIRECT
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                          En pause
+                        </span>
+                      )}
+                    </div>
+
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Crée ou synchronise le salon vocal permanent <code className="text-emerald-400">🔊 Radio Focus 24/7</code> pour écouter ensemble et travailler en immersion.
+                      Diffuse du son lo-fi & downtempo en continu 24h/24 dans le salon vocal <code className="text-emerald-400">🔊 Radio Focus 24/7</code> pour toute la communauté.
                     </p>
-                    <button
-                      disabled={isCreatingRadio}
-                      onClick={handleEnsureRadioChannel}
-                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      {isCreatingRadio ? '⏳ Synchronisation...' : '🔊 Créer / Vérifier le Salon Vocal'}
-                    </button>
-                    {radioData?.inviteUrl && (
-                      <a
-                        href={radioData.inviteUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full py-2 px-3 bg-emerald-700/60 hover:bg-emerald-600/70 border border-emerald-500/40 text-emerald-100 font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">Ambiance sonore :</label>
+                      <select
+                        value={selectedStation}
+                        onChange={(e) => {
+                          const newSt = e.target.value;
+                          setSelectedStation(newSt);
+                          if (radioStreamInfo?.isStreaming) {
+                            handleStartVoiceBroadcast(newSt);
+                          }
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-2 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
                       >
-                        <span>🔊 Ouvrir Radio Focus 24/7 sur Discord</span>
-                      </a>
-                    )}
-                    {radioData?.botInviteUrl && (
-                      <a
-                        href={radioData.botInviteUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+                        <option value="pawako">📻 Pawako Webradio 24/7 (Officielle)</option>
+                        <option value="lofi">🎧 Lo-Fi Chillhop (Beats doux & relaxants)</option>
+                        <option value="groove">🥗 SomaFM Groove Salad (Downtempo ambient)</option>
+                        <option value="synthwave">⚡ SomaFM DEF CON (Synthwave & coding)</option>
+                        <option value="drone">🌌 SomaFM Drone Zone (Deep ambient zen)</option>
+                        <option value="chillout">☕ Chillout Lounge (Détente calme)</option>
+                      </select>
+                    </div>
+
+                    {/* Custom Webradio URL Connection */}
+                    <div className="p-3 bg-slate-950/80 rounded-lg border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                          <span>📻</span> Serveur Webradio Pawako
+                        </span>
+                        {remoteRadioStatus?.status === 'playing' ? (
+                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                            ● Connecté
+                          </span>
+                        ) : customWebradioUrl ? (
+                          <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                            En attente de signal
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="https://ais-dev-xxxx.run.app (URL de la webradio)"
+                          value={customWebradioUrl}
+                          onChange={(e) => setCustomWebradioUrl(e.target.value)}
+                          className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-emerald-500"
+                        />
+                        <button
+                          disabled={isSavingUrl || !customWebradioUrl.trim()}
+                          onClick={handleSaveWebradioUrl}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSavingUrl ? '⏳' : 'Lier'}
+                        </button>
+                      </div>
+
+                      {/* Live Now Playing Info */}
+                      {remoteRadioStatus?.nowPlaying && (
+                        <div className="mt-2 p-2.5 bg-slate-900/90 rounded border border-emerald-500/30 text-xs space-y-1.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                                Morceau en cours
+                              </div>
+                              <div className="font-bold text-slate-100 text-xs mt-0.5">
+                                {remoteRadioStatus.nowPlaying.title || 'Enthusiast (Lo-Fi Chill Edit)'}
+                              </div>
+                              <div className="text-slate-400 text-[11px]">
+                                {remoteRadioStatus.nowPlaying.artist || 'Tours'} • <span className="text-emerald-400/80">{remoteRadioStatus.nowPlaying.category || 'Chillhop'}</span>
+                              </div>
+                            </div>
+                            <button
+                              disabled={isSkipping}
+                              onClick={handleSkipTrack}
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold rounded border border-slate-700 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                              title="Passer au morceau suivant sur la webradio"
+                            >
+                              <span>⏭️</span> {isSkipping ? '...' : 'Skip'}
+                            </button>
+                          </div>
+
+                          {remoteRadioStatus.nextTrack && (
+                            <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                              Prochain : <span className="text-slate-300 font-medium">{remoteRadioStatus.nextTrack.title}</span> ({remoteRadioStatus.nextTrack.artist})
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      {radioStreamInfo?.isStreaming ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            disabled={isStartingStream}
+                            onClick={() => handleStartVoiceBroadcast()}
+                            className="py-2.5 px-3 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {isStartingStream ? '⏳' : '🔄 Changer / Relancer'}
+                          </button>
+                          <button
+                            disabled={isStartingStream}
+                            onClick={handleStopVoiceBroadcast}
+                            className="py-2.5 px-3 bg-red-600/80 hover:bg-red-600 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {isStartingStream ? '⏳' : '⏹️ Couper'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          disabled={isStartingStream}
+                          onClick={() => handleStartVoiceBroadcast()}
+                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-600/20"
+                        >
+                          {isStartingStream ? '⏳ Démarrage du flux...' : '▶️ Lancer la Diffusion 24/7 dans le Vocal'}
+                        </button>
+                      )}
+
+                      <button
+                        disabled={isCreatingRadio}
+                        onClick={handleEnsureRadioChannel}
+                        className="w-full py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-[11px] rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
-                        <span>🔗 Inviter le bot sur mon serveur Discord d'abord</span>
-                      </a>
-                    )}
+                        {isCreatingRadio ? '⏳ Vérification...' : '🔄 Vérifier le Salon Vocal sur Discord'}
+                      </button>
+
+                      {radioData?.inviteUrl && (
+                        <a
+                          href={radioData.inviteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-full py-2 px-3 bg-emerald-800/50 hover:bg-emerald-700/60 border border-emerald-500/40 text-emerald-100 font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <span>🔊 Ouvrir Radio Focus 24/7 sur Discord</span>
+                        </a>
+                      )}
+
+                      {radioData?.botInviteUrl && (
+                        <a
+                          href={radioData.botInviteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+                        >
+                          <span>🔗 Inviter le bot sur mon serveur Discord d'abord</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 space-y-3">
                   <h4 className="font-bold text-xs text-slate-300 uppercase tracking-wider">
-                    📋 Commandes Discord Animateur & CM
+                    📋 Commandes Discord Animateur & Radio 24/7
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                      <div className="font-mono text-indigo-400 font-bold mb-1">!radio / !focus-radio</div>
-                      <div className="text-slate-400 text-[11px]">Rejoindre le salon vocal 24/7 & lecteur direct intégré Discord.</div>
+                      <div className="font-mono text-emerald-400 font-bold mb-1">!radio ou !stream</div>
+                      <div className="text-slate-400 text-[11px]">Lance la diffusion continue 24/7 dans le salon vocal.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-emerald-400 font-bold mb-1">!radio np & !radio skip</div>
+                      <div className="text-slate-400 text-[11px]">Affiche le titre en cours de la webradio ou passe au morceau suivant.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-emerald-400 font-bold mb-1">!radio stations</div>
+                      <div className="text-slate-400 text-[11px]">Liste les stations & commandes (!radio station pawako, groove, synthwave...).</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-emerald-400 font-bold mb-1">!radio stop</div>
+                      <div className="text-slate-400 text-[11px]">Arrête la diffusion audio et déconnecte le bot du vocal.</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!playlist [genre]</div>

@@ -20,7 +20,7 @@ export async function safeFetchJson<T = any>(
   try {
     let fetchInput = input;
     if (typeof window === 'undefined' && typeof fetchInput === 'string' && fetchInput.startsWith('/')) {
-      const port = process.env.PORT || '3000';
+      const port = '3000';
       fetchInput = `http://127.0.0.1:${port}${fetchInput}`;
     }
 

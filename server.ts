@@ -6,12 +6,13 @@ import { createServer as createViteServer } from 'vite';
 import { store } from './src/services/store';
 import { firebaseSyncService } from './src/services/firebaseSyncService';
 import { pawakoBot } from './src/bot/discordBot';
+import { voiceRadioService, RADIO_STATIONS } from './src/services/voiceRadioService';
 import { discordService } from './src/services/discordService';
 import { memberService } from './src/services/memberService';
 
 const BOT_CONFIG_FILE = path.join(process.cwd(), 'data', 'bot_config.json');
 
-function saveServerBotConfig(config: { token?: string; clientId?: string; clientSecret?: string; webhookUrl?: string }) {
+function saveServerBotConfig(config: { token?: string; clientId?: string; clientSecret?: string; webhookUrl?: string; webradioUrl?: string }) {
   try {
     const dir = path.dirname(BOT_CONFIG_FILE);
     if (!fs.existsSync(dir)) {
@@ -46,6 +47,9 @@ function loadServerBotConfig() {
       if (data.webhookUrl) {
         process.env.DISCORD_WEBHOOK_URL = data.webhookUrl;
       }
+      if (data.webradioUrl) {
+        voiceRadioService.setCustomBaseUrl(data.webradioUrl);
+      }
       console.log('[PAWAKO BOT] Configuration d\'API Discord rechargée depuis le stockage local persistant.');
     }
   } catch (err) {
@@ -55,7 +59,7 @@ function loadServerBotConfig() {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   // Restore stored server configuration
   loadServerBotConfig();
@@ -1710,36 +1714,109 @@ async function startServer() {
     }
   });
 
-  // Create or verify Radio Focus 24/7 Voice Channel
+  // Create or verify Radio Focus 24/7 Voice Channel and auto-start broadcast
   app.post('/api/discord/radio-channel', async (req: Request, res: Response) => {
     try {
-      const { guildId } = req.body || {};
+      const { guildId, stationId } = req.body || {};
       let targetGuild: any = null;
       if (guildId && pawakoBot.client) {
         targetGuild = await pawakoBot.client.guilds.fetch(guildId).catch(() => null);
       }
-      const result = await pawakoBot.ensureRadioFocusVoiceChannel(targetGuild);
+      const broadcastResult = await pawakoBot.startRadioBroadcast(targetGuild, stationId || 'lofi');
+      const channel = broadcastResult.channel;
       const effectiveId = getEffectiveClientId();
       const botInviteUrl = `https://discord.com/oauth2/authorize?client_id=${effectiveId}&permissions=8&scope=bot%20applications.commands`;
 
-      if (result?.channel) {
+      if (channel) {
         res.json({
           success: true,
-          channelId: result.channel.id,
-          channelName: result.channel.name,
-          inviteUrl: result.inviteUrl || `https://discord.com/channels/${result.channel.guild?.id}/${result.channel.id}`,
-          guildName: result.channel.guild?.name || 'Serveur Discord',
-          message: `Salon vocal "${result.channel.name}" actif et synchronisé sur ${result.channel.guild?.name || 'le serveur'} !`,
+          channelId: channel.id,
+          channelName: channel.name,
+          inviteUrl: broadcastResult.inviteUrl || `https://discord.com/channels/${channel.guild?.id}/${channel.id}`,
+          guildName: channel.guild?.name || 'Serveur Discord',
+          station: broadcastResult.station,
+          message: `Salon vocal "${channel.name}" actif et diffusion 24/7 lancée (${broadcastResult.station.name}) !`,
         });
       } else {
         res.status(400).json({
           success: false,
-          error: result?.error || 'Le bot n\'est présent sur aucun serveur Discord. Veuillez d\'abord l\'inviter.',
+          error: broadcastResult?.message || 'Le bot n\'est présent sur aucun serveur Discord. Veuillez d\'abord l\'inviter.',
           botInviteUrl,
         });
       }
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la création du salon radio' });
+    }
+  });
+
+  // Start / Change Radio Focus 24/7 voice stream
+  app.post('/api/discord/radio/start', async (req: Request, res: Response) => {
+    try {
+      const { guildId, stationId } = req.body || {};
+      let targetGuild: any = null;
+      if (guildId && pawakoBot.client) {
+        targetGuild = await pawakoBot.client.guilds.fetch(guildId).catch(() => null);
+      }
+      const result = await pawakoBot.startRadioBroadcast(targetGuild, stationId || 'lofi');
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors du démarrage du stream radio' });
+    }
+  });
+
+  // Stop Radio Focus 24/7 voice stream
+  app.post('/api/discord/radio/stop', (req: Request, res: Response) => {
+    try {
+      const { guildId } = req.body || {};
+      const result = pawakoBot.stopRadioBroadcast(guildId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de l\'arrêt du stream radio' });
+    }
+  });
+
+  // Get Radio Focus 24/7 status + custom webradio live status
+  app.get('/api/discord/radio/status', async (req: Request, res: Response) => {
+    try {
+      const guildId = req.query.guildId as string | undefined;
+      const status = pawakoBot.getRadioBroadcastStatus(guildId);
+      const remoteStatus = await voiceRadioService.fetchRemoteStatus();
+      const customBaseUrl = voiceRadioService.getCustomBaseUrl();
+      res.json({ success: true, ...status, remoteStatus, customBaseUrl });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la récupération du statut radio' });
+    }
+  });
+
+  // Configure custom Pawako webradio URL
+  app.post('/api/discord/radio/custom-url', async (req: Request, res: Response) => {
+    try {
+      const { url } = req.body || {};
+      if (!url) {
+        return res.status(400).json({ success: false, error: 'URL requise' });
+      }
+      voiceRadioService.setCustomBaseUrl(url);
+      saveServerBotConfig({ webradioUrl: url });
+      const remoteStatus = await voiceRadioService.fetchRemoteStatus();
+      res.json({
+        success: true,
+        message: 'URL de la webradio mise à jour avec succès !',
+        customBaseUrl: voiceRadioService.getCustomBaseUrl(),
+        streamUrl: RADIO_STATIONS.pawako.url,
+        remoteStatus,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur de configuration de la webradio' });
+    }
+  });
+
+  // Skip track on custom Pawako webradio
+  app.post('/api/discord/radio/skip', async (req: Request, res: Response) => {
+    try {
+      const skipRes = await voiceRadioService.skipRemoteTrack();
+      res.json(skipRes);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors du passage au morceau suivant' });
     }
   });
 

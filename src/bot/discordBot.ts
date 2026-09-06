@@ -14,6 +14,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   MessageFlags,
+  ActivityType,
 } from 'discord.js';
 import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
@@ -22,6 +23,7 @@ import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
 import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
 import { QuizQuestion, Member, Quiz, MemberBadge } from '../types';
+import { voiceRadioService, RADIO_STATIONS, RadioStation } from '../services/voiceRadioService';
 import {
   callOpenRouterAI,
   getSimulationPrompt,
@@ -421,6 +423,7 @@ export class PawakoBotRunner {
           GatewayIntentBits.GuildMessages,
           GatewayIntentBits.MessageContent,
           GatewayIntentBits.DirectMessages,
+          GatewayIntentBits.GuildVoiceStates,
         ],
         partials: [
           Partials.Channel,
@@ -446,21 +449,21 @@ export class PawakoBotRunner {
           console.warn('[Pawako Bot Candidates Sync Error]', err?.message || err);
         });
 
-        // Ensure Radio Focus 24/7 Voice Channel exists
-        this.ensureRadioFocusVoiceChannel().catch((err) => {
-          console.warn('[Pawako Bot Radio Voice Channel Error]', err?.message || err);
+        // Ensure Radio Focus 24/7 Voice Channel exists and broadcast live audio continuously
+        this.autoStartRadioBroadcasts().catch((err) => {
+          console.warn('[Pawako Bot Radio Voice Broadcast AutoStart Error]', err?.message || err);
         });
 
         // Start 18h00 HF scheduled stats cron
         this.startScheduledCron();
       });
 
-      // Automatically ensure Radio Focus voice channel when invited to a new server
+      // Automatically ensure Radio Focus voice channel and start broadcasting when invited to a new server
       this.client.on('guildCreate', async (guild) => {
         console.log(`[PAWAKO BOT] Bot a rejoint un nouveau serveur : ${guild.name} (${guild.id})`);
         store.addLog('System Bot', `Bot a rejoint le serveur Discord "${guild.name}"`, 'system');
-        await this.ensureRadioFocusVoiceChannel(guild).catch((err) => {
-          console.warn('[Pawako Bot Radio Voice Channel Error on GuildJoin]', err?.message || err);
+        await this.startRadioBroadcast(guild).catch((err) => {
+          console.warn('[Pawako Bot Radio Voice Broadcast Error on GuildJoin]', err?.message || err);
         });
       });
 
@@ -600,6 +603,9 @@ export class PawakoBotRunner {
 
         if (
           content === '!radio' ||
+          content.startsWith('!radio ') ||
+          content === '!stream' ||
+          content.startsWith('!stream ') ||
           content === '!radio-focus' ||
           content === '!focus-radio' ||
           content === '!lofi-radio' ||
@@ -607,28 +613,128 @@ export class PawakoBotRunner {
           content === '!setup-radio'
         ) {
           if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
-          const radioData = await this.ensureRadioFocusVoiceChannel(message.guild);
-          const channel = radioData?.channel;
+
+          const args = content.split(/\s+/).slice(1);
+          const subCommand = args[0]?.toLowerCase();
+
+          // Subcommand: stop radio broadcast
+          if (subCommand === 'stop' || subCommand === 'pause' || subCommand === 'leave' || subCommand === 'quitter') {
+            const stopResult = this.stopRadioBroadcast(message.guild?.id);
+            await message.reply({
+              content: `⏹️ **Diffusion vocale arrêtée :** ${stopResult.message}`,
+            }).catch(() => {});
+            return;
+          }
+
+          // Subcommand: configure custom webradio URL
+          if (subCommand === 'url' && args[1]) {
+            const customUrl = args[1];
+            voiceRadioService.setCustomBaseUrl(customUrl);
+            await message.reply({
+              content: `📻 **URL de la Webradio Pawako mise à jour avec succès :** \`${customUrl}\`\n👉 Tape \`!radio station pawako\` pour lancer la diffusion sur cette station !`,
+            }).catch(() => {});
+            return;
+          }
+
+          // Subcommand: now playing (from custom Pawako webradio status)
+          if (subCommand === 'np' || subCommand === 'nowplaying' || subCommand === 'titre' || subCommand === 'song') {
+            const remote = await voiceRadioService.fetchRemoteStatus();
+            const currentStatus = voiceRadioService.getStatus(message.guild?.id);
+            if (remote && remote.nowPlaying) {
+              const np = remote.nowPlaying;
+              const next = remote.nextTrack;
+              const prog = remote.progress;
+              const npEmbed = new EmbedBuilder()
+                .setTitle('🎵 MORCEAU EN COURS — PAWAKO WEBRADIO 24/7')
+                .setDescription(
+                  `🎶 **Titre :** **${np.title || 'Inconnu'}**\n` +
+                  `👤 **Artiste :** ${np.artist || 'Pawako'}\n` +
+                  `🏷️ **Catégorie :** \`${np.category || 'Lo-Fi / Focus'}\`\n` +
+                  (prog ? `⏳ **Progression :** ${Math.floor(prog.elapsed || 0)}s / ${Math.floor(prog.duration || 0)}s (${prog.percentage || 0}%)\n` : '') +
+                  (next ? `⏭️ **Morceau suivant :** ${next.title} - _${next.artist}_\n` : '') +
+                  (remote.listenersCount !== undefined ? `🎧 **Auditeurs en direct :** ${remote.listenersCount}\n` : '')
+                )
+                .setColor(0x10b981)
+                .setFooter({ text: '📻 Webradio Pawako 24/7 • Tape !radio skip pour passer' })
+                .setTimestamp();
+
+              await message.reply({ embeds: [npEmbed] }).catch(() => {});
+              return;
+            } else {
+              await message.reply({
+                content: `📻 **Station active :** ${currentStatus.station.name}\n_${currentStatus.station.description}_\n\n*(Astuce : Pour la Pawako Webradio, le titre s'affiche dès que l'URL est active !)*`,
+              }).catch(() => {});
+              return;
+            }
+          }
+
+          // Subcommand: skip track
+          if (subCommand === 'skip' || subCommand === 'next' || subCommand === 'suivant') {
+            const skipRes = await voiceRadioService.skipRemoteTrack();
+            if (skipRes.success) {
+              await message.reply({
+                content: `⏭️ **Morceau passé :** ${skipRes.message} ${skipRes.nowPlaying ? `\n🎶 **Nouveau titre :** ${skipRes.nowPlaying.title} - _${skipRes.nowPlaying.artist}_` : ''}`,
+              }).catch(() => {});
+            } else {
+              await message.reply({
+                content: `⚠️ **Impossible de passer le morceau :** ${skipRes.message}`,
+              }).catch(() => {});
+            }
+            return;
+          }
+
+          // Subcommand: list available stations
+          if (subCommand === 'list' || subCommand === 'stations' || subCommand === 'radios') {
+            const allStations = voiceRadioService.getAllStations();
+            const stationsEmbed = new EmbedBuilder()
+              .setTitle('📻 STATIONS RADIO FOCUS 24/7 DISPONIBLES')
+              .setDescription(
+                'Choisis ta station pour la diffusion continue dans le salon vocal :\n\n' +
+                allStations.map(s => `• **${s.name}** (\`${s.id}\`)\n  _${s.description}_ [${s.genre}]`).join('\n\n') +
+                '\n\n👉 **Pour changer de station en direct :**\nTape `!radio station <nom>` (ex: `!radio station pawako` ou `!radio station groove`)\n' +
+                '👉 **Commandes utiles :**\n• `!radio np` : voir le morceau en direct\n• `!radio skip` : passer au morceau suivant\n• `!radio stop` : couper la diffusion'
+              )
+              .setColor(0x6366f1)
+              .setFooter({ text: '🎧 Pawako Focus Radio • Diffusion Vocale 24/7' });
+
+            await message.reply({ embeds: [stationsEmbed] }).catch(() => {});
+            return;
+          }
+
+          // Subcommand: change station
+          let targetStationId: string | undefined;
+          if (subCommand === 'station' && args[1]) {
+            targetStationId = args[1];
+          } else if (subCommand && ['pawako', 'lofi', 'groove', 'synthwave', 'drone', 'chillout'].includes(subCommand)) {
+            targetStationId = subCommand;
+          }
+
+          // Start or ensure voice broadcast
+          const broadcastResult = await this.startRadioBroadcast(message.guild, targetStationId || 'pawako');
+          const channel = broadcastResult.channel;
+          const station = broadcastResult.station;
           const guildId = message.guild?.id || '';
           const voiceUrl = channel ? `https://discord.com/channels/${guildId}/${channel.id}` : '';
           const channelMention = channel ? `<#${channel.id}>` : '`🔊 Radio Focus 24/7`';
 
           const radioEmbed = new EmbedBuilder()
-            .setTitle('🔊 RADIO FOCUS 24/7 & ESPACE COWORKING 🎧')
+            .setTitle('🔊 RADIO FOCUS 24/7 EN DIRECT DANS LE SALON VOCAL 🎧')
             .setDescription(
               channel
-                ? `Le salon vocal ${channelMention} est disponible pour travailler et chater en immersion avec toute la communauté !\n\n` +
-                  `🎧 **Comment écouter la musique directement sur Discord :**\n` +
-                  `1️⃣ **Lecteur direct ci-dessous :** Clique sur le bouton ▶️ de la vidéo sous ce message pour lancer l'audio en direct dans Discord sans ouvrir d'autre application !\n` +
-                  `2️⃣ **Rejoins le salon vocal :** Clique sur ${channelMention} ou sur le bouton ci-dessous pour te connecter au salon de coworking.\n` +
-                  `3️⃣ **Session partagée Watch Together :** Dans le salon vocal, clique sur la fusée 🚀 (Activités Discord) pour lancer YouTube Watch Together et écouter en parfaite synchronisation avec tes collègues.\n\n` +
+                ? `🟢 **Le bot Pawako est connecté et diffuse en direct 24h/24 dans ${channelMention} !**\n\n` +
+                  `🎶 **Station active :** **${station.name}** (${station.genre})\n` +
+                  `📝 _${station.description}_\n\n` +
+                  `🎧 **Comment en profiter :**\n` +
+                  `1️⃣ **Rejoins le salon vocal :** Clique sur ${channelMention} ou sur le bouton ci-dessous pour écouter en immersion avec toute l'équipe.\n` +
+                  `2️⃣ **Régler le volume :** Fais un clic droit (ou appui long sur mobile) sur le bot **Pawako Formation** dans le salon vocal pour ajuster son volume à ton niveau idéal !\n` +
+                  `3️⃣ **Changer de radio :** Tape \`!radio stations\` pour découvrir toutes les ambiances (Groove Salad, Synthwave coding, Drone zen, etc.).\n\n` +
                   `⚡ _"La régularité et le focus battent toujours le talent."_`
-                : `⚠️ **Le salon vocal n'a pas pu être créé automatiquement.**\n\n` +
-                  `Raison : ${radioData?.error || 'Permissions insuffisantes'}\n\n` +
+                : `⚠️ **Le salon vocal n'a pas pu être rejoint automatiquement.**\n\n` +
+                  `Raison : ${broadcastResult.message}\n\n` +
                   `👉 **Pour résoudre cela :**\n` +
-                  `• Vérifie que le Bot Pawako a la permission **Gérer les salons** (Manage Channels) sur ce serveur.\n` +
-                  `• Ou crée manuellement un salon vocal nommé \`🔊 Radio Focus 24/7\`.\n\n` +
-                  `🎧 **Tu peux quand même écouter la radio en direct ci-dessous avec le lecteur !**`
+                  `• Vérifie que le Bot Pawako a les permissions **Se connecter** et **Parler** sur ce serveur.\n` +
+                  `• Invite le bot avec les permissions complètes si besoin.\n\n` +
+                  `🎧 **Tu peux aussi écouter la radio ci-dessous avec le lecteur direct !**`
             )
             .setColor(channel ? 0x10b981 : 0xf59e0b)
             .setFooter({ text: '🎧 Pawako Focus Radio • Espace Coworking & Chatting 24/7' })
@@ -645,12 +751,12 @@ export class PawakoBotRunner {
             );
           }
 
-          if (radioData?.inviteUrl && radioData.inviteUrl !== voiceUrl) {
+          if (broadcastResult.inviteUrl && broadcastResult.inviteUrl !== voiceUrl) {
             buttons.push(
               new ButtonBuilder()
-                .setLabel('🔗 Invitation Salon Vocal')
+                .setLabel('🔗 Invitation Directe')
                 .setStyle(ButtonStyle.Link)
-                .setURL(radioData.inviteUrl)
+                .setURL(broadcastResult.inviteUrl)
             );
           }
 
@@ -669,10 +775,10 @@ export class PawakoBotRunner {
             components: row.components.length > 0 ? [row] : [],
           }).catch(() => {});
 
-          // 2. Envoyer le lien vidéo propre séparément afin que Discord génère automatiquement son lecteur natif interactif avec le bouton ▶️ de lecture directe !
+          // 2. Envoyer le lecteur direct de secours au casque
           if ('send' in message.channel) {
             await (message.channel as any).send({
-              content: `📻 **Lecteur direct au casque (Clique sur ▶️ ci-dessous pour lancer l'audio sans quitter Discord) :**\nhttps://www.youtube.com/watch?v=jfKfPfyJRdk`,
+              content: `📻 **Alternative au casque individuel (si tu ne veux pas rejoindre le vocal) :**\nhttps://www.youtube.com/watch?v=jfKfPfyJRdk`,
             }).catch(() => {});
           }
 
@@ -3239,6 +3345,92 @@ export class PawakoBotRunner {
     } catch (err: any) {
       console.warn('[EnsureRadioFocusVoiceChannel Error]', err);
       return { channel: null, error: err?.message || 'Erreur lors de la création du salon vocal.' };
+    }
+  }
+
+  /**
+   * Starts or ensures continuous 24/7 radio audio broadcasting in the guild's "🔊 Radio Focus 24/7" voice channel.
+   */
+  public async startRadioBroadcast(
+    guildInput?: any,
+    stationId: string = 'lofi'
+  ): Promise<{ success: boolean; message: string; channel?: any; inviteUrl?: string; station: RadioStation }> {
+    const radioData = await this.ensureRadioFocusVoiceChannel(guildInput);
+    if (!radioData?.channel) {
+      return {
+        success: false,
+        message: radioData?.error || 'Salon vocal introuvable ou permissions insuffisantes.',
+        station: voiceRadioService.getStation(stationId),
+      };
+    }
+
+    const channel = radioData.channel;
+    const guild = channel.guild;
+
+    const result = await voiceRadioService.startBroadcast(guild, channel, stationId);
+    if (result.success && this.client?.user) {
+      this.client.user.setActivity(`🔊 ${result.station.name}`, { type: ActivityType.Listening });
+      store.addLog('System Bot', `Diffusion vocale 24/7 active : "${result.station.name}" dans #${channel.name}`, 'system');
+    }
+
+    return {
+      success: result.success,
+      message: result.message,
+      channel,
+      inviteUrl: radioData.inviteUrl,
+      station: result.station,
+    };
+  }
+
+  /**
+   * Stops the active voice broadcast and disconnects the bot from the vocal channel.
+   */
+  public stopRadioBroadcast(guildId?: string): { success: boolean; message: string } {
+    const cfg = onboardingService.getConfig();
+    const effectiveGuildId = guildId || cfg.guildId || process.env.DISCORD_GUILD_ID || this.client?.guilds.cache.first()?.id;
+    if (!effectiveGuildId) {
+      return { success: false, message: 'Aucun serveur identifié pour arrêter la diffusion.' };
+    }
+    const res = voiceRadioService.stopBroadcast(effectiveGuildId);
+    if (this.client?.user) {
+      this.client.user.setActivity('Plateforme Pawako Formation 🤖', { type: ActivityType.Playing });
+    }
+    return res;
+  }
+
+  /**
+   * Returns current radio broadcast status for a guild.
+   */
+  public getRadioBroadcastStatus(guildId?: string) {
+    const cfg = onboardingService.getConfig();
+    const effectiveGuildId = guildId || cfg.guildId || process.env.DISCORD_GUILD_ID || this.client?.guilds.cache.first()?.id;
+    const status = voiceRadioService.getStatus(effectiveGuildId);
+    const stations = voiceRadioService.getAllStations();
+    return {
+      ...status,
+      stations,
+    };
+  }
+
+  /**
+   * Automatically iterates through all guilds the bot belongs to, ensures the voice channel, and starts 24/7 broadcast.
+   */
+  public async autoStartRadioBroadcasts(): Promise<void> {
+    if (!this.client || !this.isConnected) return;
+    try {
+      const guilds = await this.client.guilds.fetch().catch(() => null);
+      if (!guilds || guilds.size === 0) return;
+
+      for (const [_, oAuthGuild] of guilds) {
+        const fullGuild = await oAuthGuild.fetch().catch(() => null);
+        if (fullGuild) {
+          await this.startRadioBroadcast(fullGuild, 'lofi').catch((err) => {
+            console.warn(`[AutoStartRadio Error on ${fullGuild.name}]`, err?.message || err);
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[AutoStartRadioBroadcasts Error]', err);
     }
   }
 

@@ -163,7 +163,7 @@ class FirebaseSyncService {
         try {
           const baseUrl = typeof window !== 'undefined'
             ? window.location.origin
-            : (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : 'http://127.0.0.1:3000');
+            : 'http://127.0.0.1:3000';
 
           const apiRes = await fetch(`${baseUrl}/api/discord/send-channel-embed`, {
             method: 'POST',

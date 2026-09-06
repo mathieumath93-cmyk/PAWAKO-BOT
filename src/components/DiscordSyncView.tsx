@@ -92,19 +92,32 @@ export const DiscordSyncView: React.FC = () => {
 
   const [isCreatingRadio, setIsCreatingRadio] = useState<boolean>(false);
   const [radioStatus, setRadioStatus] = useState<string | null>(null);
+  const [radioData, setRadioData] = useState<{ channelName?: string; inviteUrl?: string; botInviteUrl?: string } | null>(null);
 
   const handleEnsureRadioChannel = async () => {
     setIsCreatingRadio(true);
     setRadioStatus(null);
+    setRadioData(null);
     try {
-      const res: any = await safeFetchJson('/api/discord/radio-channel', { method: 'POST' });
+      const res: any = await safeFetchJson('/api/discord/radio-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guildId: selectedGuildId || undefined }),
+      });
       if (res && res.success) {
         setRadioStatus(`✅ ${res.message || 'Salon vocal Radio Focus 24/7 actif sur Discord !'}`);
+        setRadioData({
+          channelName: res.channelName,
+          inviteUrl: res.inviteUrl,
+        });
         if (selectedGuildId) {
           loadGuildData(selectedGuildId);
         }
       } else {
-        setRadioStatus(`⚠️ Erreur : ${res?.error || 'Impossible de créer le salon vocal'}`);
+        setRadioStatus(`⚠️ ${res?.error || 'Impossible de créer le salon vocal'}`);
+        if (res?.botInviteUrl) {
+          setRadioData({ botInviteUrl: res.botInviteUrl });
+        }
       }
     } catch (e: any) {
       setRadioStatus(`❌ Erreur réseau : ${e?.message}`);
@@ -232,16 +245,11 @@ export const DiscordSyncView: React.FC = () => {
     }
   };
 
-  // Compute OAuth2 Invite URL dynamically
-  const inviteUrl = clientId.trim()
-    ? `https://discord.com/api/oauth2/authorize?client_id=${clientId.trim()}&permissions=${permissionsValue}&scope=bot%20applications.commands`
-    : '#';
+  // Compute OAuth2 Invite URL dynamically with fallback to real bot application ID (1532385528186405107)
+  const effectiveClientId = /^\d{17,20}$/.test(clientId.trim()) ? clientId.trim() : '1532385528186405107';
+  const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${effectiveClientId}&permissions=${permissionsValue || '8'}&scope=bot%20applications.commands`;
 
   const handleCopyInviteLink = () => {
-    if (!clientId.trim()) {
-      setSyncError('Client ID requis pour générer le lien d\'invitation OAuth2.');
-      return;
-    }
     navigator.clipboard.writeText(inviteUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -707,6 +715,36 @@ export const DiscordSyncView: React.FC = () => {
             )}
           </div>
         </div>
+
+        {guilds.length === 0 && !isLoadingGuilds && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 mt-2">
+            <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>Le bot Pawako Formation n'a pas encore rejoint votre serveur Discord</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Pour que le bot puisse créer le salon vocal <b>🔊 Radio Focus 24/7</b>, animer la communauté et synchroniser les rôles, vous devez d'abord l'inviter sur votre serveur avec les autorisations nécessaires :
+            </p>
+            <div className="pt-1 flex flex-wrap items-center gap-3">
+              <a
+                href={inviteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/25 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <span>🔗 Inviter le Bot sur mon Serveur Discord</span>
+              </a>
+              <button
+                type="button"
+                onClick={handleCopyInviteLink}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>Copier le lien d'invitation</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sync Step Progress & Notifications */}
@@ -1230,6 +1268,26 @@ export const DiscordSyncView: React.FC = () => {
                     >
                       {isCreatingRadio ? '⏳ Synchronisation...' : '🔊 Créer / Vérifier le Salon Vocal'}
                     </button>
+                    {radioData?.inviteUrl && (
+                      <a
+                        href={radioData.inviteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2 px-3 bg-emerald-700/60 hover:bg-emerald-600/70 border border-emerald-500/40 text-emerald-100 font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <span>🔊 Ouvrir Radio Focus 24/7 sur Discord</span>
+                      </a>
+                    )}
+                    {radioData?.botInviteUrl && (
+                      <a
+                        href={radioData.botInviteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+                      >
+                        <span>🔗 Inviter le bot sur mon serveur Discord d'abord</span>
+                      </a>
+                    )}
                   </div>
                 </div>
 

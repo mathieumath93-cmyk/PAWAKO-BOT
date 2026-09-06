@@ -365,7 +365,7 @@ function buildQuizButton(member: Member, quiz: Quiz | undefined, defaultTitle: s
 }
 
 export class PawakoBotRunner {
-  private client: Client | null = null;
+  public client: Client | null = null;
   private isConnected: boolean = false;
   private isConnecting: boolean = false;
   private activeQuizSessions = new Map<string, ActiveQuizSession>();
@@ -453,6 +453,15 @@ export class PawakoBotRunner {
 
         // Start 18h00 HF scheduled stats cron
         this.startScheduledCron();
+      });
+
+      // Automatically ensure Radio Focus voice channel when invited to a new server
+      this.client.on('guildCreate', async (guild) => {
+        console.log(`[PAWAKO BOT] Bot a rejoint un nouveau serveur : ${guild.name} (${guild.id})`);
+        store.addLog('System Bot', `Bot a rejoint le serveur Discord "${guild.name}"`, 'system');
+        await this.ensureRadioFocusVoiceChannel(guild).catch((err) => {
+          console.warn('[Pawako Bot Radio Voice Channel Error on GuildJoin]', err?.message || err);
+        });
       });
 
       this.client.on('guildMemberAdd', async (member) => {
@@ -600,21 +609,28 @@ export class PawakoBotRunner {
           if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
           const radioData = await this.ensureRadioFocusVoiceChannel(message.guild);
           const channel = radioData?.channel;
-          const channelMention = channel ? `<#${channel.id}>` : '`🔊 Radio Focus 24/7`';
           const guildId = message.guild?.id || '';
           const voiceUrl = channel ? `https://discord.com/channels/${guildId}/${channel.id}` : '';
+          const channelMention = channel ? `<#${channel.id}>` : '`🔊 Radio Focus 24/7`';
 
           const radioEmbed = new EmbedBuilder()
-            .setTitle('🔊 SALON VOCAL RADIO FOCUS 24/7 & COWORKING ☕')
+            .setTitle('🔊 RADIO FOCUS 24/7 & ESPACE COWORKING 🎧')
             .setDescription(
-              `Le salon vocal ${channelMention} est ouvert pour travailler et chater en immersion avec toute la communauté !\n\n` +
-              `🎧 **Comment écouter la musique directement sur Discord :**\n` +
-              `1️⃣ **Rejoins le vocal :** Clique sur ${channelMention} pour te connecter (en muet ou avec tes collègues).\n` +
-              `2️⃣ **Lecteur direct ci-dessous :** Clique sur ▶️ Lecture sur la vidéo intégrée sous ce message pour lancer l'audio en direct dans Discord sans ouvrir d'autre application !\n` +
-              `3️⃣ **Session partagée Watch Together :** Dans le salon vocal, clique sur la fusée 🚀 (Activités Discord) pour lancer YouTube Watch Together et écouter en parfaite synchronisation avec les autres membres.\n\n` +
-              `⚡ _"La régularité et le focus battent toujours le talent."_`
+              channel
+                ? `Le salon vocal ${channelMention} est disponible pour travailler et chater en immersion avec toute la communauté !\n\n` +
+                  `🎧 **Comment écouter la musique directement sur Discord :**\n` +
+                  `1️⃣ **Lecteur direct ci-dessous :** Clique sur le bouton ▶️ de la vidéo sous ce message pour lancer l'audio en direct dans Discord sans ouvrir d'autre application !\n` +
+                  `2️⃣ **Rejoins le salon vocal :** Clique sur ${channelMention} ou sur le bouton ci-dessous pour te connecter au salon de coworking.\n` +
+                  `3️⃣ **Session partagée Watch Together :** Dans le salon vocal, clique sur la fusée 🚀 (Activités Discord) pour lancer YouTube Watch Together et écouter en parfaite synchronisation avec tes collègues.\n\n` +
+                  `⚡ _"La régularité et le focus battent toujours le talent."_`
+                : `⚠️ **Le salon vocal n'a pas pu être créé automatiquement.**\n\n` +
+                  `Raison : ${radioData?.error || 'Permissions insuffisantes'}\n\n` +
+                  `👉 **Pour résoudre cela :**\n` +
+                  `• Vérifie que le Bot Pawako a la permission **Gérer les salons** (Manage Channels) sur ce serveur.\n` +
+                  `• Ou crée manuellement un salon vocal nommé \`🔊 Radio Focus 24/7\`.\n\n` +
+                  `🎧 **Tu peux quand même écouter la radio en direct ci-dessous avec le lecteur !**`
             )
-            .setColor(0x10b981)
+            .setColor(channel ? 0x10b981 : 0xf59e0b)
             .setFooter({ text: '🎧 Pawako Focus Radio • Espace Coworking & Chatting 24/7' })
             .setTimestamp();
 
@@ -629,10 +645,10 @@ export class PawakoBotRunner {
             );
           }
 
-          if (radioData?.inviteUrl) {
+          if (radioData?.inviteUrl && radioData.inviteUrl !== voiceUrl) {
             buttons.push(
               new ButtonBuilder()
-                .setLabel('🚀 Lancer Watch Together (YouTube Vocal)')
+                .setLabel('🔗 Invitation Salon Vocal')
                 .setStyle(ButtonStyle.Link)
                 .setURL(radioData.inviteUrl)
             );
@@ -647,11 +663,19 @@ export class PawakoBotRunner {
 
           const row = new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(0, 5));
 
+          // 1. Envoyer le message explicatif avec les boutons d'action
           await message.reply({
-            content: `▶️ **Radio Lofi 24/7 (Lecteur direct Discord) :** https://www.youtube.com/watch?v=jfKfPfyJRdk`,
             embeds: [radioEmbed],
-            components: [row],
+            components: row.components.length > 0 ? [row] : [],
           }).catch(() => {});
+
+          // 2. Envoyer le lien vidéo propre séparément afin que Discord génère automatiquement son lecteur natif interactif avec le bouton ▶️ de lecture directe !
+          if ('send' in message.channel) {
+            await (message.channel as any).send({
+              content: `📻 **Lecteur direct au casque (Clique sur ▶️ ci-dessous pour lancer l'audio sans quitter Discord) :**\nhttps://www.youtube.com/watch?v=jfKfPfyJRdk`,
+            }).catch(() => {});
+          }
+
           return;
         }
 
@@ -765,11 +789,18 @@ export class PawakoBotRunner {
 
           const musicRow = new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(0, 5));
 
+          // 1. Envoyer le résumé visuel avec les boutons
           await message.reply({
-            content: `▶️ **Lecteur direct Discord :** ${picked.url}`,
             embeds: [embed],
-            components: [musicRow]
+            components: musicRow.components.length > 0 ? [musicRow] : []
           }).catch(() => {});
+
+          // 2. Envoyer le lien média propre si YouTube afin que Discord génère le lecteur interactif avec bouton ▶️
+          if (picked.url && (picked.url.includes('youtube.com') || picked.url.includes('youtu.be')) && 'send' in message.channel) {
+            await (message.channel as any).send({
+              content: `▶️ **Lecteur direct au casque (Clique sur ▶️ pour lancer l'audio dans Discord) :**\n${picked.url}`,
+            }).catch(() => {});
+          }
           return;
         }
 
@@ -3091,13 +3122,34 @@ export class PawakoBotRunner {
    * Ensures the persistent Voice Channel "🔊 Radio Focus 24/7" exists on the guild.
    * Creates it with appropriate permissions for @everyone if not already present.
    */
-  public async ensureRadioFocusVoiceChannel(guildInput?: any): Promise<{ channel: any; inviteUrl?: string } | null> {
+  public async ensureRadioFocusVoiceChannel(guildInput?: any): Promise<{ channel: any; inviteUrl?: string; error?: string } | null> {
     if (!this.client) return null;
     try {
-      const cfg = onboardingService.getConfig();
-      const guildId = cfg.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
-      const guild = guildInput || (guildId ? await this.client.guilds.fetch(guildId).catch(() => null) : null) || this.client.guilds.cache.first();
-      if (!guild) return null;
+      let guild = guildInput;
+      if (!guild) {
+        const cfg = onboardingService.getConfig();
+        const guildId = cfg.guildId || process.env.DISCORD_GUILD_ID;
+        if (guildId) {
+          guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        }
+        if (!guild && this.client.guilds.cache.size > 0) {
+          guild = this.client.guilds.cache.first();
+        }
+        if (!guild) {
+          const fetchedGuilds = await this.client.guilds.fetch().catch(() => null);
+          const firstOAuth = fetchedGuilds?.first();
+          if (firstOAuth) {
+            guild = await firstOAuth.fetch().catch(() => null);
+          }
+        }
+      }
+
+      if (!guild) {
+        return {
+          channel: null,
+          error: 'Le bot n\'a rejoint aucun serveur Discord pour le moment. Invitez le bot sur votre serveur avec le lien d\'invitation OAuth2.',
+        };
+      }
 
       const channels = await guild.channels.fetch().catch(() => null);
       let radioVoice = channels
@@ -3125,26 +3177,51 @@ export class PawakoBotRunner {
         },
       ];
 
+      if (guild.members?.me) {
+        overwrites.push({
+          id: guild.members.me.id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.ManageChannels,
+          ],
+        });
+      }
+
       if (!radioVoice) {
+        // Find existing audio/vocal category if available
+        let parentCategory = channels
+          ? channels.find(
+              (c: any) =>
+                c &&
+                c.type === ChannelType.GuildCategory &&
+                (c.name.toLowerCase().includes('vocal') ||
+                  c.name.toLowerCase().includes('audio') ||
+                  c.name.toLowerCase().includes('communaut') ||
+                  c.name.toLowerCase().includes('coworking'))
+            )
+          : null;
+
+        // NOTE: Voice channels in Discord DO NOT have a topic! Do not pass 'topic' property to GuildVoice.
         radioVoice = await guild.channels.create({
           name: '🔊 Radio Focus 24/7',
           type: ChannelType.GuildVoice,
-          topic: '🎧 Espace Focus & Coworking - Écoute Lofi, Deep Focus & Productivité pour les sessions de chatting',
+          parent: parentCategory ? parentCategory.id : undefined,
           permissionOverwrites: overwrites,
+          userLimit: 0,
         });
-        console.log('[PawakoBot] Salon Vocal #Radio Focus 24/7 créé avec succès.');
-        store.addLog('System Bot', 'Salon vocal "🔊 Radio Focus 24/7" créé avec succès sur Discord', 'system');
+        console.log(`[PawakoBot] Salon Vocal "🔊 Radio Focus 24/7" créé avec succès sur le serveur "${guild.name}".`);
+        store.addLog('System Bot', `Salon vocal "🔊 Radio Focus 24/7" créé avec succès sur Discord (${guild.name})`, 'system');
       }
 
-      // Try creating a YouTube Watch Together Activity Invite if possible
+      // Generate direct invite / link to the voice channel
       let inviteUrl: string | undefined;
       try {
         const invite = await (radioVoice as any).createInvite({
           maxAge: 0,
           maxUses: 0,
-          targetType: 2, // Discord Voice Activity
-          targetApplication: '880218394199220274', // YouTube Together / Watch Together
-          reason: 'Lancement direct de YouTube Watch Together dans Radio Focus 24/7',
+          reason: 'Lien direct vers Radio Focus 24/7',
         }).catch(() => null);
 
         if (invite) {
@@ -3154,10 +3231,14 @@ export class PawakoBotRunner {
         // Voice Activity invite might not be enabled on some guilds, fallback gracefully
       }
 
+      if (!inviteUrl && radioVoice) {
+        inviteUrl = `https://discord.com/channels/${guild.id}/${radioVoice.id}`;
+      }
+
       return { channel: radioVoice, inviteUrl };
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[EnsureRadioFocusVoiceChannel Error]', err);
-      return null;
+      return { channel: null, error: err?.message || 'Erreur lors de la création du salon vocal.' };
     }
   }
 

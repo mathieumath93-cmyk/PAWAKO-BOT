@@ -1568,6 +1568,25 @@ async function startServer() {
   });
 
   // Bot Status & API Credentials Management
+  function getEffectiveClientId(): string {
+    const raw = (process.env.DISCORD_CLIENT_ID || '').trim();
+    if (/^\d{17,20}$/.test(raw)) return raw;
+    if (pawakoBot.client?.user?.id) return pawakoBot.client.user.id;
+    return '1532385528186405107';
+  }
+
+  app.get('/api/discord/invite-url', (req: Request, res: Response) => {
+    const clientId = getEffectiveClientId();
+    const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`;
+    res.json({
+      clientId,
+      inviteUrl,
+      guildCount: pawakoBot.client?.guilds?.cache?.size || 0,
+      connected: pawakoBot.getIsConnected(),
+      tag: pawakoBot.getUserTag() || 'Pawako Formation#3712',
+    });
+  });
+
   app.get('/api/bot/status', (req: Request, res: Response) => {
     const rawToken = (process.env.DISCORD_BOT_TOKEN || '').trim();
     let maskedToken = '';
@@ -1577,14 +1596,18 @@ async function startServer() {
         : '••••••••';
     }
 
+    const clientId = getEffectiveClientId();
+
     res.json({
       connected: pawakoBot.getIsConnected(),
       tag: pawakoBot.getUserTag(),
       tokenSet: Boolean(rawToken),
       maskedToken,
-      clientId: process.env.DISCORD_CLIENT_ID || '',
+      clientId,
       hasClientSecret: Boolean(process.env.DISCORD_CLIENT_SECRET),
       webhookUrl: process.env.DISCORD_WEBHOOK_URL || '',
+      guildCount: pawakoBot.client?.guilds?.cache?.size || 0,
+      inviteUrl: `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`,
     });
   });
 
@@ -1603,8 +1626,11 @@ async function startServer() {
     }
 
     if (clientId !== undefined) {
-      process.env.DISCORD_CLIENT_ID = clientId.trim();
-      saveServerBotConfig({ clientId: clientId.trim() });
+      const cleanCId = clientId.trim();
+      if (/^\d{17,20}$/.test(cleanCId)) {
+        process.env.DISCORD_CLIENT_ID = cleanCId;
+        saveServerBotConfig({ clientId: cleanCId });
+      }
     }
 
     if (clientSecret !== undefined && clientSecret !== '') {
@@ -1625,16 +1651,19 @@ async function startServer() {
         : '••••••••';
     }
 
+    const effectiveClientId = getEffectiveClientId();
+
     res.json({
       success: true,
       message: 'Identifiants API Discord mis à jour et sauvegardés de façon permanente sur le serveur.',
       tokenSet: Boolean(currentToken),
       maskedToken,
-      clientId: process.env.DISCORD_CLIENT_ID || '',
+      clientId: effectiveClientId,
       hasClientSecret: Boolean(process.env.DISCORD_CLIENT_SECRET),
       webhookUrl: process.env.DISCORD_WEBHOOK_URL || '',
       connected: pawakoBot.getIsConnected(),
       tag: pawakoBot.getUserTag(),
+      inviteUrl: `https://discord.com/oauth2/authorize?client_id=${effectiveClientId}&permissions=8&scope=bot%20applications.commands`,
     });
   });
 
@@ -1684,17 +1713,30 @@ async function startServer() {
   // Create or verify Radio Focus 24/7 Voice Channel
   app.post('/api/discord/radio-channel', async (req: Request, res: Response) => {
     try {
-      const result = await pawakoBot.ensureRadioFocusVoiceChannel();
+      const { guildId } = req.body || {};
+      let targetGuild: any = null;
+      if (guildId && pawakoBot.client) {
+        targetGuild = await pawakoBot.client.guilds.fetch(guildId).catch(() => null);
+      }
+      const result = await pawakoBot.ensureRadioFocusVoiceChannel(targetGuild);
+      const effectiveId = getEffectiveClientId();
+      const botInviteUrl = `https://discord.com/oauth2/authorize?client_id=${effectiveId}&permissions=8&scope=bot%20applications.commands`;
+
       if (result?.channel) {
         res.json({
           success: true,
           channelId: result.channel.id,
           channelName: result.channel.name,
-          inviteUrl: result.inviteUrl || null,
-          message: `Salon vocal "${result.channel.name}" synchronisé avec succès !`,
+          inviteUrl: result.inviteUrl || `https://discord.com/channels/${result.channel.guild?.id}/${result.channel.id}`,
+          guildName: result.channel.guild?.name || 'Serveur Discord',
+          message: `Salon vocal "${result.channel.name}" actif et synchronisé sur ${result.channel.guild?.name || 'le serveur'} !`,
         });
       } else {
-        res.status(400).json({ success: false, error: 'Bot Discord non connecté ou serveur introuvable.' });
+        res.status(400).json({
+          success: false,
+          error: result?.error || 'Le bot n\'est présent sur aucun serveur Discord. Veuillez d\'abord l\'inviter.',
+          botInviteUrl,
+        });
       }
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la création du salon radio' });

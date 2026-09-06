@@ -554,6 +554,8 @@ export interface AiCmPlaylist {
   id: string;
   title: string;
   url: string;
+  platform?: 'youtube' | 'spotify' | 'soundcloud' | 'apple' | 'deezer' | 'other';
+  secondaryUrl?: string;
   genre?: string;
   description?: string;
   quote?: string;

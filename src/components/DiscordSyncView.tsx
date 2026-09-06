@@ -24,6 +24,7 @@ import {
   Send,
   HelpCircle,
   Key,
+  Headphones,
 } from 'lucide-react';
 import { discordSyncService } from '../services/discordSyncService';
 import { safeFetchJson } from '../utils/apiUtils';
@@ -86,6 +87,29 @@ export const DiscordSyncView: React.FC = () => {
       setCmStatus(`❌ Erreur réseau : ${e?.message}`);
     } finally {
       setIsPostingCm(false);
+    }
+  };
+
+  const [isCreatingRadio, setIsCreatingRadio] = useState<boolean>(false);
+  const [radioStatus, setRadioStatus] = useState<string | null>(null);
+
+  const handleEnsureRadioChannel = async () => {
+    setIsCreatingRadio(true);
+    setRadioStatus(null);
+    try {
+      const res: any = await safeFetchJson('/api/discord/radio-channel', { method: 'POST' });
+      if (res && res.success) {
+        setRadioStatus(`✅ ${res.message || 'Salon vocal Radio Focus 24/7 actif sur Discord !'}`);
+        if (selectedGuildId) {
+          loadGuildData(selectedGuildId);
+        }
+      } else {
+        setRadioStatus(`⚠️ Erreur : ${res?.error || 'Impossible de créer le salon vocal'}`);
+      }
+    } catch (e: any) {
+      setRadioStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsCreatingRadio(false);
     }
   };
 
@@ -1153,36 +1177,58 @@ export const DiscordSyncView: React.FC = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {radioStatus && (
+                  <div className="p-3 bg-slate-900 border border-emerald-500/40 rounded-lg text-xs font-medium text-emerald-200">
+                    {radioStatus}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                   <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
                     <h4 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                      <Send className="w-4 h-4" /> Relances Personnalisées Candidats
+                      <Send className="w-4 h-4" /> Relances Personnalisées
                     </h4>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Analyse la progression de chaque candidat (modules validés, étape actuelle) et envoie un message de suivi personnalisé dans son salon Discord privé.
+                      Analyse la progression de chaque candidat (modules validés) et envoie un message de suivi personnalisé dans son salon Discord privé.
                     </p>
                     <button
                       disabled={isRelancing}
                       onClick={handleTriggerRelances}
                       className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                      {isRelancing ? '⏳ Relances en cours...' : '🚀 Lancer les Relances Personnalisées'}
+                      {isRelancing ? '⏳ Relances en cours...' : '🚀 Lancer les Relances'}
                     </button>
                   </div>
 
                   <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
                     <h4 className="font-bold text-sm text-pink-300 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" /> Post Communautaire Quotidien (CM Boost)
+                      <Sparkles className="w-4 h-4" /> Post Communautaire (CM)
                     </h4>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Publie la dose du jour sur le salon général : Astuce Chatting, Conseil Français/Style, Playlist Spotify et Challenge interactif.
+                      Publie la dose du jour sur le salon général : Astuce Chatting, Conseil Français/Style, Playlist YouTube/Spotify et Challenge interactif.
                     </p>
                     <button
                       disabled={isPostingCm}
                       onClick={handleTriggerCmDaily}
                       className="w-full py-2.5 px-4 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                      {isPostingCm ? '⏳ Publication en cours...' : '⚡ Publier le Post CM du Jour'}
+                      {isPostingCm ? '⏳ Publication en cours...' : '⚡ Publier le Post CM'}
+                    </button>
+                  </div>
+
+                  <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+                    <h4 className="font-bold text-sm text-emerald-300 flex items-center gap-2">
+                      <Headphones className="w-4 h-4" /> Salon Vocal Radio Focus 24/7
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Crée ou synchronise le salon vocal permanent <code className="text-emerald-400">🔊 Radio Focus 24/7</code> pour écouter ensemble et travailler en immersion.
+                    </p>
+                    <button
+                      disabled={isCreatingRadio}
+                      onClick={handleEnsureRadioChannel}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isCreatingRadio ? '⏳ Synchronisation...' : '🔊 Créer / Vérifier le Salon Vocal'}
                     </button>
                   </div>
                 </div>
@@ -1191,7 +1237,15 @@ export const DiscordSyncView: React.FC = () => {
                   <h4 className="font-bold text-xs text-slate-300 uppercase tracking-wider">
                     📋 Commandes Discord Animateur & CM
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!radio / !focus-radio</div>
+                      <div className="text-slate-400 text-[11px]">Rejoindre le salon vocal 24/7 & lecteur direct intégré Discord.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!playlist [genre]</div>
+                      <div className="text-slate-400 text-[11px]">Playlists YouTube & Spotify certifiées (100% gratuit, ex: !playlist rap, lofi, liste).</div>
+                    </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!astuce / !hack</div>
                       <div className="text-slate-400 text-[11px]">Donne une astuce de chatting OnlyFans / Vente.</div>
@@ -1205,12 +1259,12 @@ export const DiscordSyncView: React.FC = () => {
                       <div className="text-slate-400 text-[11px]">Analyse, corrige et reformule en style sexy & vendeur.</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                      <div className="font-mono text-indigo-400 font-bold mb-1">!playlist / !musique [genre]</div>
-                      <div className="text-slate-400 text-[11px]">Playlists Spotify certifiées avec bouton direct (ex: !playlist rap, lofi, house, liste).</div>
-                    </div>
-                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!jeu / !challenge</div>
                       <div className="text-slate-400 text-[11px]">Lance un mini-jeu de mise en situation interactif.</div>
+                    </div>
+                    <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                      <div className="font-mono text-indigo-400 font-bold mb-1">!creer-radio</div>
+                      <div className="text-slate-400 text-[11px]">Créer ou resynchroniser le salon vocal Radio Focus 24/7.</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">@Pawako Bot &lt;question&gt;</div>

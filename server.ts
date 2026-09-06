@@ -1681,6 +1681,26 @@ async function startServer() {
     }
   });
 
+  // Create or verify Radio Focus 24/7 Voice Channel
+  app.post('/api/discord/radio-channel', async (req: Request, res: Response) => {
+    try {
+      const result = await pawakoBot.ensureRadioFocusVoiceChannel();
+      if (result?.channel) {
+        res.json({
+          success: true,
+          channelId: result.channel.id,
+          channelName: result.channel.name,
+          inviteUrl: result.inviteUrl || null,
+          message: `Salon vocal "${result.channel.name}" synchronisé avec succès !`,
+        });
+      } else {
+        res.status(400).json({ success: false, error: 'Bot Discord non connecté ou serveur introuvable.' });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la création du salon radio' });
+    }
+  });
+
   // Firebase Database Status
   app.get('/api/firebase/status', (req: Request, res: Response) => {
     res.json({

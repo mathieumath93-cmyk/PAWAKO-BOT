@@ -418,6 +418,8 @@ Rédige directement le message en Markdown Discord adressé au candidat.`;
     frenchTip: string;
     musicTitle: string;
     musicUrl: string;
+    musicSecondaryUrl?: string;
+    musicPlatform?: string;
     musicDesc: string;
     musicQuote: string;
     miniGame: MiniGameChallenge;
@@ -469,6 +471,8 @@ Réponds strict sous ce format JSON :
             ...parsed,
             musicTitle: verifiedPlaylist.title,
             musicUrl: verifiedPlaylist.url,
+            musicSecondaryUrl: verifiedPlaylist.secondaryUrl,
+            musicPlatform: verifiedPlaylist.platform || 'youtube',
             musicDesc: verifiedPlaylist.description || 'Ambiance de travail sélectionnée par le Coach Pawako.',
             musicQuote: parsed.musicQuote || verifiedPlaylist.quote || '⚡ "La régularité bat le talent."',
           };
@@ -492,6 +496,8 @@ Réponds strict sous ce format JSON :
       frenchTip: french.tip,
       musicTitle: verifiedPlaylist.title,
       musicUrl: verifiedPlaylist.url,
+      musicSecondaryUrl: verifiedPlaylist.secondaryUrl,
+      musicPlatform: verifiedPlaylist.platform || 'youtube',
       musicDesc: verifiedPlaylist.description || 'Ambiance de travail sélectionnée par le Coach Pawako.',
       musicQuote: verifiedPlaylist.quote || '⚡ "La régularité bat le talent."',
       miniGame: game,

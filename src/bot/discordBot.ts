@@ -446,6 +446,11 @@ export class PawakoBotRunner {
           console.warn('[Pawako Bot Candidates Sync Error]', err?.message || err);
         });
 
+        // Ensure Radio Focus 24/7 Voice Channel exists
+        this.ensureRadioFocusVoiceChannel().catch((err) => {
+          console.warn('[Pawako Bot Radio Voice Channel Error]', err?.message || err);
+        });
+
         // Start 18h00 HF scheduled stats cron
         this.startScheduledCron();
       });
@@ -491,26 +496,48 @@ export class PawakoBotRunner {
         const content = message.content.trim();
         const branding = store.getBranding();
 
-        if (content === '!help' || content === '!start' || content === '!pawako') {
-          const cfg = onboardingService.getConfig();
+        if (content === '!help' || content === '!start' || content === '!pawako' || content === '!commandes') {
           const embed = new EmbedBuilder()
-            .setTitle(`🤖 ${branding.trainingName}`)
-            .setDescription(cfg.welcomeRulesMessage || branding.description)
-            .setColor(0x6366f1)
-            .addFields(
-              { name: '📚 Formation', value: 'Rends-toi dans ton salon privé pour accéder à tes cours et quiz.' },
-              { name: '👤 Profil', value: 'Utilise `!profile` pour consulter ton statut.' },
-              { name: '🎫 Support', value: 'Utilise `!ticket` pour ouvrir une demande d\'aide.' }
+            .setTitle(`🤖 PAWAKO FORMATION — Guide des Commandes`)
+            .setDescription(
+              `Voici la liste complète et à jour de toutes les commandes disponibles sur le serveur Discord de formation :\n\n` +
+              `📚 **PARCOURS & CANDIDATS**\n` +
+              `• \`!profile\` (ou \`!profil\`, \`!badges\`) : Consulter ton carnet, progression, notes et badges.\n` +
+              `• \`!formation\` : Consulter la liste et le programme des modules de formation.\n` +
+              `• \`!ticket\` : Ouvrir un ticket d'aide auprès de l'équipe.\n\n` +
+              `🎭 **SIMULATION CHATTING IA (ANTHONY)**\n` +
+              `• \`!start-simu\` (ou \`!simu\`, \`!anthony\`) : Lancer ton épreuve de simulation dans ton salon privé.\n` +
+              `• \`!stop\` (ou \`!fin-simu\`, \`!eval\`) : Arrêter la simulation et générer l'évaluation du Coach.\n` +
+              `• \`!notes\` (ou \`!mes-notes\`) : Consulter le relevé détaillé de ta dernière simulation.\n\n` +
+              `💡 **COACHING, ASSISTANT & COMMUNITY MANAGER**\n` +
+              `• \`!astuce\` : Recevoir une technique de vente / chatting OnlyFans concrète.\n` +
+              `• \`!francais\` : Règle d'orthographe ou de style essentielle avec exemple faux/bon.\n` +
+              `• \`!corriger <texte>\` : Corrige ton orthographe ET reformule en style sexy & vendeur.\n` +
+              `• \`!playlist [genre]\` (ou \`!musique\`) : Recommandation YouTube & Spotify (100% gratuit sans compte, ex: \`!playlist rap\`, \`lofi\`, \`house\`, \`liste\`).\n` +
+              `• \`!radio\` (ou \`!focus-radio\`) : Accéder au salon vocal Radio Focus 24/7 & lecteur direct Discord.\n` +
+              `• \`!jeu\` (ou \`!challenge\`) : Mini-jeu / challenge de mise en situation avec boutons interactifs.\n\n` +
+              `🛡️ **GESTION STAFF & FORMATEURS**\n` +
+              `• \`!infos @candidat\` : Dossier complet, statut, WhatsApp, email et actions rapides.\n` +
+              `• \`!creer-radio\` : Créer ou synchroniser le salon vocal Radio Focus 24/7.\n` +
+              `• \`!valider-simu @candidat\` : Valider manuellement la simulation et convoquer à la formation outils.\n` +
+              `• \`!valider-formation @candidat\` : Valider le parcours complet et envoyer le formulaire d'intégration.\n` +
+              `• \`!relancer @candidat\` : Renvoyer le formulaire d'intégration.\n` +
+              `• \`!reset-candidat @candidat\` : Réinitialiser le parcours à zéro.\n` +
+              `• \`!fermer-formation\` : Clôturer la session vocale de formation outils.\n` +
+              `• \`!sync-candidats\` : Synchroniser les statuts des candidats terminés.\n` +
+              `• \`!cm-daily\` : Publier manuellement le post d'animation du jour.`
             )
-            .setFooter({ text: 'PAWAKO FORMATION Bot • Connecté à la plateforme Web' });
+            .setColor(0x6366f1)
+            .setFooter({ text: 'PAWAKO FORMATION • Tape !help à tout moment pour revoir ce menu' });
 
           const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId('btn_formation').setLabel('📚 Ma formation').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('btn_ticket').setLabel('🎫 Mes tickets').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('btn_ticket').setLabel('🎫 Support').setStyle(ButtonStyle.Secondary)
           );
 
           await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
+          return;
         }
 
         // --- COMMUNITY MANAGER & ASSISTANT COMMANDS (INDEPENDENT FROM SIMULATION) ---
@@ -563,6 +590,72 @@ export class PawakoBotRunner {
         }
 
         if (
+          content === '!radio' ||
+          content === '!radio-focus' ||
+          content === '!focus-radio' ||
+          content === '!lofi-radio' ||
+          content === '!creer-radio' ||
+          content === '!setup-radio'
+        ) {
+          if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
+          const radioData = await this.ensureRadioFocusVoiceChannel(message.guild);
+          const channel = radioData?.channel;
+          const channelMention = channel ? `<#${channel.id}>` : '`🔊 Radio Focus 24/7`';
+          const guildId = message.guild?.id || '';
+          const voiceUrl = channel ? `https://discord.com/channels/${guildId}/${channel.id}` : '';
+
+          const radioEmbed = new EmbedBuilder()
+            .setTitle('🔊 SALON VOCAL RADIO FOCUS 24/7 & COWORKING ☕')
+            .setDescription(
+              `Le salon vocal ${channelMention} est ouvert pour travailler et chater en immersion avec toute la communauté !\n\n` +
+              `🎧 **Comment écouter la musique directement sur Discord :**\n` +
+              `1️⃣ **Rejoins le vocal :** Clique sur ${channelMention} pour te connecter (en muet ou avec tes collègues).\n` +
+              `2️⃣ **Lecteur direct ci-dessous :** Clique sur ▶️ Lecture sur la vidéo intégrée sous ce message pour lancer l'audio en direct dans Discord sans ouvrir d'autre application !\n` +
+              `3️⃣ **Session partagée Watch Together :** Dans le salon vocal, clique sur la fusée 🚀 (Activités Discord) pour lancer YouTube Watch Together et écouter en parfaite synchronisation avec les autres membres.\n\n` +
+              `⚡ _"La régularité et le focus battent toujours le talent."_`
+            )
+            .setColor(0x10b981)
+            .setFooter({ text: '🎧 Pawako Focus Radio • Espace Coworking & Chatting 24/7' })
+            .setTimestamp();
+
+          const buttons: ButtonBuilder[] = [];
+
+          if (voiceUrl) {
+            buttons.push(
+              new ButtonBuilder()
+                .setLabel('🔊 Rejoindre le Salon Vocal')
+                .setStyle(ButtonStyle.Link)
+                .setURL(voiceUrl)
+            );
+          }
+
+          if (radioData?.inviteUrl) {
+            buttons.push(
+              new ButtonBuilder()
+                .setLabel('🚀 Lancer Watch Together (YouTube Vocal)')
+                .setStyle(ButtonStyle.Link)
+                .setURL(radioData.inviteUrl)
+            );
+          }
+
+          buttons.push(
+            new ButtonBuilder()
+              .setLabel('🎧 Écouter sur Spotify')
+              .setStyle(ButtonStyle.Link)
+              .setURL('https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i')
+          );
+
+          const row = new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(0, 5));
+
+          await message.reply({
+            content: `▶️ **Radio Lofi 24/7 (Lecteur direct Discord) :** https://www.youtube.com/watch?v=jfKfPfyJRdk`,
+            embeds: [radioEmbed],
+            components: [row],
+          }).catch(() => {});
+          return;
+        }
+
+        if (
           content === '!musique' ||
           content === '!son' ||
           content === '!playlist' ||
@@ -579,14 +672,26 @@ export class PawakoBotRunner {
 
           if (query === 'list' || query === 'liste' || query === 'genres' || query === 'aide') {
             const listEmbed = new EmbedBuilder()
-              .setTitle('🎧 SÉLECTION MUSICALE & PLAYLISTS PAWAKO')
+              .setTitle('🎧 SÉLECTION MUSICALE & AMBIANCES PAWAKO (YOUTUBE & SPOTIFY)')
               .setDescription(
-                `Voici les ambiances de travail disponibles pour rester focus pendant tes sessions de formation et de chatting :\n\n` +
-                availablePlaylists.map((p) => `• **${p.title}** ${p.genre ? `(\`${p.genre}\`)` : ''}\n  _${p.description || ''}_\n  [Écouter sur Spotify](${p.url})`).join('\n\n') +
-                `\n\n💡 *Exemple d'utilisation rapide :* \`!playlist rap\`, \`!playlist lofi\`, \`!playlist house\`, \`!playlist piano\`, \`!playlist focus\`...`
+                `Voici les ambiances de travail pour rester focus pendant tes sessions de formation et de chatting.\n` +
+                `💡 **Toutes les playlists sont disponibles sur YouTube (100% gratuit, sans compte ni pub bloquante) et Spotify.**\n\n` +
+                availablePlaylists.map((p) => {
+                  const links = [];
+                  if (p.url) {
+                    const isYt = p.url.includes('youtube') || p.url.includes('youtu.be');
+                    links.push(`[${isYt ? '▶️ YouTube' : '🎧 Lien 1'}](${p.url})`);
+                  }
+                  if (p.secondaryUrl) {
+                    const isSp = p.secondaryUrl.includes('spotify');
+                    links.push(`[${isSp ? '🎧 Spotify' : '🔗 Lien 2'}](${p.secondaryUrl})`);
+                  }
+                  return `• **${p.title}** ${p.genre ? `(\`${p.genre}\`)` : ''}\n  _${p.description || ''}_\n  ${links.join('  •  ')}`;
+                }).join('\n\n') +
+                `\n\n💡 *Exemple d'utilisation :* \`!playlist rap\`, \`!playlist lofi\`, \`!playlist house\`, \`!playlist piano\`, \`!playlist focus\`...`
               )
               .setColor(0x10b981)
-              .setFooter({ text: '🎧 Pawako Focus Radio • Sélection certifiée Spotify' });
+              .setFooter({ text: '🎧 Pawako Focus Radio • Multi-plateformes (YouTube & Spotify)' });
 
             await message.reply({ embeds: [listEmbed] }).catch(() => {});
             return;
@@ -605,25 +710,66 @@ export class PawakoBotRunner {
             }
           }
 
+          const linkTexts: string[] = [];
+          const buttons: ButtonBuilder[] = [];
+
+          const formatPlatformButton = (url: string, isSecondary = false) => {
+            if (url.includes('youtube') || url.includes('youtu.be')) {
+              linkTexts.push(`[▶️ Écouter sur YouTube (100% gratuit & direct)](${url})`);
+              buttons.push(
+                new ButtonBuilder()
+                  .setLabel('▶️ Écouter sur YouTube (Sans compte)')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(url)
+              );
+            } else if (url.includes('spotify')) {
+              linkTexts.push(`[🎧 Écouter sur Spotify](${url})`);
+              buttons.push(
+                new ButtonBuilder()
+                  .setLabel('🎧 Écouter sur Spotify')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(url)
+              );
+            } else if (url.includes('soundcloud')) {
+              linkTexts.push(`[☁️ Écouter sur SoundCloud](${url})`);
+              buttons.push(
+                new ButtonBuilder()
+                  .setLabel('☁️ Écouter sur SoundCloud')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(url)
+              );
+            } else {
+              linkTexts.push(`[🔗 Écouter la playlist](${url})`);
+              buttons.push(
+                new ButtonBuilder()
+                  .setLabel(isSecondary ? '🔗 Lien secondaire' : '🎧 Écouter')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(url)
+              );
+            }
+          };
+
+          if (picked.url) formatPlatformButton(picked.url, false);
+          if (picked.secondaryUrl) formatPlatformButton(picked.secondaryUrl, true);
+
           const embed = new EmbedBuilder()
             .setTitle(picked.title)
             .setDescription(
               `${picked.description || 'Ambiance de travail sélectionnée par le Coach Pawako.'}\n\n` +
-              `🎧 **Lien direct :** [Écouter la playlist sur Spotify](${picked.url})\n\n` +
+              `🎧 **Liens d'écoute :**\n${linkTexts.join('\n')}\n\n` +
               (picked.quote ? `_${picked.quote}_\n\n` : '') +
               `💡 *Astuce : Tape \`!playlist liste\` pour voir tous les styles ou \`!playlist rap\`, \`!playlist lofi\`, \`!playlist house\` pour cibler ton mood.*`
             )
             .setColor(0x10b981)
-            .setFooter({ text: '🎧 Pawako Radio & Motivation • Clique sur le bouton ci-dessous' });
+            .setFooter({ text: '🎧 Pawako Focus Music • Choisis ta plateforme ci-dessous' });
 
-          const musicRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setLabel('🎧 Lancer sur Spotify')
-              .setStyle(ButtonStyle.Link)
-              .setURL(picked.url)
-          );
+          const musicRow = new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(0, 5));
 
-          await message.reply({ embeds: [embed], components: [musicRow] }).catch(() => {});
+          await message.reply({
+            content: `▶️ **Lecteur direct Discord :** ${picked.url}`,
+            embeds: [embed],
+            components: [musicRow]
+          }).catch(() => {});
           return;
         }
 
@@ -2942,6 +3088,80 @@ export class PawakoBotRunner {
   }
 
   /**
+   * Ensures the persistent Voice Channel "🔊 Radio Focus 24/7" exists on the guild.
+   * Creates it with appropriate permissions for @everyone if not already present.
+   */
+  public async ensureRadioFocusVoiceChannel(guildInput?: any): Promise<{ channel: any; inviteUrl?: string } | null> {
+    if (!this.client) return null;
+    try {
+      const cfg = onboardingService.getConfig();
+      const guildId = cfg.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
+      const guild = guildInput || (guildId ? await this.client.guilds.fetch(guildId).catch(() => null) : null) || this.client.guilds.cache.first();
+      if (!guild) return null;
+
+      const channels = await guild.channels.fetch().catch(() => null);
+      let radioVoice = channels
+        ? channels.find(
+            (c: any) =>
+              c &&
+              c.type === ChannelType.GuildVoice &&
+              (c.name.toLowerCase().includes('radio focus') ||
+                c.name.toLowerCase().includes('radio 24/7') ||
+                c.name.toLowerCase().includes('radio-focus') ||
+                c.name.toLowerCase().includes('focus 24/7'))
+          )
+        : null;
+
+      const overwrites: any[] = [
+        {
+          id: guild.roles.everyone.id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.Stream,
+            PermissionFlagsBits.UseVAD,
+          ],
+        },
+      ];
+
+      if (!radioVoice) {
+        radioVoice = await guild.channels.create({
+          name: '🔊 Radio Focus 24/7',
+          type: ChannelType.GuildVoice,
+          topic: '🎧 Espace Focus & Coworking - Écoute Lofi, Deep Focus & Productivité pour les sessions de chatting',
+          permissionOverwrites: overwrites,
+        });
+        console.log('[PawakoBot] Salon Vocal #Radio Focus 24/7 créé avec succès.');
+        store.addLog('System Bot', 'Salon vocal "🔊 Radio Focus 24/7" créé avec succès sur Discord', 'system');
+      }
+
+      // Try creating a YouTube Watch Together Activity Invite if possible
+      let inviteUrl: string | undefined;
+      try {
+        const invite = await (radioVoice as any).createInvite({
+          maxAge: 0,
+          maxUses: 0,
+          targetType: 2, // Discord Voice Activity
+          targetApplication: '880218394199220274', // YouTube Together / Watch Together
+          reason: 'Lancement direct de YouTube Watch Together dans Radio Focus 24/7',
+        }).catch(() => null);
+
+        if (invite) {
+          inviteUrl = invite.url;
+        }
+      } catch (e) {
+        // Voice Activity invite might not be enabled on some guilds, fallback gracefully
+      }
+
+      return { channel: radioVoice, inviteUrl };
+    } catch (err) {
+      console.warn('[EnsureRadioFocusVoiceChannel Error]', err);
+      return null;
+    }
+  }
+
+  /**
    * Sync and audit existing candidates on the server who have already completed modules.
    * Ensures candidates who completed Module 5 are enrolled in Simulation & Tools Formation
    * and that 1-click validation MP is sent to Mahsa & Mathieu.
@@ -4381,6 +4601,32 @@ export class PawakoBotRunner {
     try {
       const daily = await communityService.generateDailyCommunityContent();
 
+      const musicLinks: string[] = [];
+      const musicButtons: ButtonBuilder[] = [];
+
+      if (daily.musicUrl) {
+        const isYt = daily.musicUrl.includes('youtube') || daily.musicUrl.includes('youtu.be');
+        const isSp = daily.musicUrl.includes('spotify');
+        musicLinks.push(isYt ? `[▶️ Écouter sur YouTube (Sans compte)](${daily.musicUrl})` : isSp ? `[🎧 Écouter sur Spotify](${daily.musicUrl})` : `[🔗 Écouter](${daily.musicUrl})`);
+        musicButtons.push(
+          new ButtonBuilder()
+            .setLabel(isYt ? '▶️ Écouter sur YouTube (Gratuit)' : isSp ? '🎧 Écouter sur Spotify' : '🎧 Écouter la Playlist')
+            .setStyle(ButtonStyle.Link)
+            .setURL(daily.musicUrl)
+        );
+      }
+      if (daily.musicSecondaryUrl) {
+        const isSp = daily.musicSecondaryUrl.includes('spotify');
+        const isYt = daily.musicSecondaryUrl.includes('youtube') || daily.musicSecondaryUrl.includes('youtu.be');
+        musicLinks.push(isSp ? `[🎧 Écouter sur Spotify](${daily.musicSecondaryUrl})` : isYt ? `[▶️ Écouter sur YouTube](${daily.musicSecondaryUrl})` : `[🔗 Écouter](${daily.musicSecondaryUrl})`);
+        musicButtons.push(
+          new ButtonBuilder()
+            .setLabel(isSp ? '🎧 Écouter sur Spotify' : isYt ? '▶️ Écouter sur YouTube' : '🔗 Autre plateforme')
+            .setStyle(ButtonStyle.Link)
+            .setURL(daily.musicSecondaryUrl)
+        );
+      }
+
       const dailyEmbed = new EmbedBuilder()
         .setTitle('⚡ PAWAKO COMMUNITY CM — LA DOSE D\'ÉNERGIE DU JOUR 🚀')
         .setDescription(
@@ -4391,7 +4637,7 @@ export class PawakoBotRunner {
           `✅ *À privilégier :* \`${daily.frenchGood}\`\n` +
           `💡 *Conseil :* ${daily.frenchTip}\n\n` +
           `🎧 **La Playlist Boost : ${daily.musicTitle}**\n${daily.musicDesc}\n` +
-          `[👉 Écouter sur Spotify](${daily.musicUrl})\n` +
+          (musicLinks.length > 0 ? `${musicLinks.join('  •  ')}\n` : '') +
           `_${daily.musicQuote}_\n\n` +
           `🎮 **${daily.miniGame.title} :**\n${daily.miniGame.scenario}`
         )
@@ -4413,14 +4659,9 @@ export class PawakoBotRunner {
       if (daily.miniGame.options.length > 0) {
         components.push(row);
       }
-      if (daily.musicUrl) {
+      if (musicButtons.length > 0) {
         components.push(
-          new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setLabel('🎧 Écouter la Playlist du Jour')
-              .setStyle(ButtonStyle.Link)
-              .setURL(daily.musicUrl)
-          )
+          new ActionRowBuilder<ButtonBuilder>().addComponents(musicButtons.slice(0, 5))
         );
       }
 

@@ -96,7 +96,9 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
     const newPlaylist: AiCmPlaylist = {
       id: 'pl-' + Date.now().toString(),
       title: '🎵 Nouvelle Playlist Focus',
-      url: 'https://open.spotify.com/playlist/',
+      url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+      secondaryUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXdLENR312A3i',
+      platform: 'youtube',
       genre: 'focus',
       description: 'Ambiance de travail pour booster la concentration.',
       quote: '⚡ "La régularité bat le talent."',
@@ -695,23 +697,23 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
             </div>
           </div>
 
-          {/* Section 5: Playlists & Sons de Travail (Spotify / YouTube) */}
+          {/* Section 5: Playlists & Sons de Travail (Multi-Apps : YouTube, Spotify, SoundCloud) */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
                   <Headphones className="w-4 h-4 text-emerald-400" />
-                  <span>Playlists Focus & Motivation (Discord `!playlist` & Post Quotidien)</span>
+                  <span>Playlists & Radios Focus Multi-Applications (YouTube, Spotify, SoundCloud)</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Ces vraies playlists Spotify sont recommandées quotidiennement par le CM IA et accessibles avec filtres de style via <code className="text-emerald-300">!playlist</code> sur Discord.
+                  Recommandées quotidiennement par le CM IA et accessibles via <code className="text-emerald-300">!playlist</code> sur Discord.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleResetPlaylists}
                   className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-all flex items-center gap-1.5"
-                  title="Restaurer les 10 playlists Spotify officielles"
+                  title="Restaurer les 10 ambiances multi-plateformes officielles"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Restaurer par défaut</span>
@@ -726,13 +728,26 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
               </div>
             </div>
 
+            {/* Explanatory banner about why YouTube + Spotify */}
+            <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-200 flex items-start gap-3">
+              <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 text-[11px] leading-relaxed">
+                <div className="font-bold text-emerald-300">💡 Synchronisation Universelle (YouTube & Spotify)</div>
+                <p className="text-slate-300">
+                  Beaucoup de membres n'ont pas de compte Spotify ou n'ont pas l'application installée sur leur PC/téléphone de travail. En renseignant un lien <strong>YouTube (vidéo, radio 24/7 ou mix)</strong>, <strong>100% des candidats peuvent écouter la musique instantanément et gratuitement en 1 clic sans aucune inscription</strong>, tout en conservant le lien Spotify pour ceux qui ont l'app !
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-3.5">
               {(promptCfg.cmConfig?.playlists || defaultCmConfig.playlists || DEFAULT_WORK_PLAYLISTS).map((pl) => (
                 <div key={pl.id} className="bg-slate-950/80 p-4 rounded-xl border border-slate-800/80 space-y-3">
                   <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
                     <div className="w-full md:w-1/3">
                       <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                        Titre / Nom de la playlist
+                        Titre / Nom de l'ambiance
                       </label>
                       <input
                         type="text"
@@ -756,37 +771,82 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
                       />
                     </div>
 
-                    <div className="flex-1 w-full">
+                    <div className="w-full md:w-1/5">
                       <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                        Lien Spotify ou YouTube (Vérifié)
+                        Plateforme Principale
                       </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={pl.url}
-                          onChange={(e) => handleUpdatePlaylist(pl.id, { url: e.target.value })}
-                          placeholder="https://open.spotify.com/playlist/..."
-                          className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none focus:border-emerald-500"
-                        />
+                      <select
+                        value={pl.platform || (pl.url.includes('youtube') || pl.url.includes('youtu.be') ? 'youtube' : 'spotify')}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { platform: e.target.value as any })}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                      >
+                        <option value="youtube">🔴 YouTube (Gratuit & Direct)</option>
+                        <option value="spotify">🟢 Spotify</option>
+                        <option value="soundcloud">☁️ SoundCloud</option>
+                        <option value="apple">🍎 Apple Music</option>
+                        <option value="deezer">🎵 Deezer</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1 self-end md:self-center pt-2 md:pt-0">
+                      <button
+                        onClick={() => handleRemovePlaylist(pl.id)}
+                        className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                        title="Supprimer cette ambiance"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dual URL Row : YouTube (Direct) & Spotify */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-slate-900">
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-rose-400 mb-1 flex items-center justify-between">
+                        <span>▶️ Lien YouTube (100% sans compte & universel)</span>
                         {pl.url && (
                           <a
                             href={pl.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
-                            title="Tester le lien"
+                            className="text-[10px] text-rose-400 hover:underline flex items-center gap-1"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <span>Tester</span>
+                            <ExternalLink className="w-3 h-3" />
                           </a>
                         )}
-                        <button
-                          onClick={() => handleRemovePlaylist(pl.id)}
-                          className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                          title="Supprimer cette playlist"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      </label>
+                      <input
+                        type="text"
+                        value={pl.url}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { url: e.target.value })}
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-rose-200 font-mono focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-emerald-400 mb-1 flex items-center justify-between">
+                        <span>🎧 Lien Spotify (Optionnel - pour abonnés Spotify)</span>
+                        {pl.secondaryUrl && (
+                          <a
+                            href={pl.secondaryUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-emerald-400 hover:underline flex items-center gap-1"
+                          >
+                            <span>Tester</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        value={pl.secondaryUrl || ''}
+                        onChange={(e) => handleUpdatePlaylist(pl.id, { secondaryUrl: e.target.value })}
+                        placeholder="https://open.spotify.com/playlist/..."
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-emerald-200 font-mono focus:outline-none focus:border-emerald-500"
+                      />
                     </div>
                   </div>
 

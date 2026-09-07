@@ -246,15 +246,23 @@ class VoiceRadioService {
 
       this.broadcasts.set(guild.id, state);
 
-      // Play resource
-      this.playStream(guild.id);
-
       // Subscribe connection to player
       connection.subscribe(player);
+
+      // Play resource immediately
+      this.playStream(guild.id);
 
       // Set up error & auto-reconnect listeners (once)
       if (!existing) {
         this.setupListeners(guild.id, connection, player, channel);
+      }
+
+      // Ensure connection transitions to Ready
+      try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+        console.log(`[VoiceRadio] Connecté et synchronisé en Ready au salon vocal "${channel.name}" (${guild.name}).`);
+      } catch (connWarn) {
+        console.warn(`[VoiceRadio] Note: la connexion vocale est en cours de négociation avec Discord (${channel.name}).`);
       }
 
       console.log(`[VoiceRadio] Diffusion active de "${station.name}" dans #${channel.name} (${guild.name}).`);

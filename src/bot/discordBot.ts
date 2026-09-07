@@ -709,8 +709,9 @@ export class PawakoBotRunner {
             targetStationId = subCommand;
           }
 
-          // Start or ensure voice broadcast
-          const broadcastResult = await this.startRadioBroadcast(message.guild, targetStationId || 'pawako');
+          // Start or ensure voice broadcast (joins the user's voice channel if they are in one, or 🔊 Radio Focus 24/7)
+          const memberVoiceChannel = (message.member as any)?.voice?.channel;
+          const broadcastResult = await this.startRadioBroadcast(message.guild, targetStationId || 'pawako', memberVoiceChannel);
           const channel = broadcastResult.channel;
           const station = broadcastResult.station;
           const guildId = message.guild?.id || '';
@@ -3228,7 +3229,10 @@ export class PawakoBotRunner {
    * Ensures the persistent Voice Channel "🔊 Radio Focus 24/7" exists on the guild.
    * Creates it with appropriate permissions for @everyone if not already present.
    */
-  public async ensureRadioFocusVoiceChannel(guildInput?: any): Promise<{ channel: any; inviteUrl?: string; error?: string } | null> {
+  public async ensureRadioFocusVoiceChannel(
+    guildInput?: any,
+    channelOverride?: any
+  ): Promise<{ channel: any; inviteUrl?: string; error?: string } | null> {
     if (!this.client) return null;
     try {
       let guild = guildInput;
@@ -3257,16 +3261,28 @@ export class PawakoBotRunner {
         };
       }
 
+      // If a specific voice channel was requested and belongs to this guild, prioritize it
+      if (
+        channelOverride &&
+        (channelOverride.type === ChannelType.GuildVoice || channelOverride.type === ChannelType.GuildStageVoice) &&
+        channelOverride.guild?.id === guild.id
+      ) {
+        let inviteUrl = `https://discord.com/channels/${guild.id}/${channelOverride.id}`;
+        return { channel: channelOverride, inviteUrl };
+      }
+
       const channels = await guild.channels.fetch().catch(() => null);
       let radioVoice = channels
         ? channels.find(
             (c: any) =>
               c &&
-              c.type === ChannelType.GuildVoice &&
+              (c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice) &&
               (c.name.toLowerCase().includes('radio focus') ||
                 c.name.toLowerCase().includes('radio 24/7') ||
                 c.name.toLowerCase().includes('radio-focus') ||
-                c.name.toLowerCase().includes('focus 24/7'))
+                c.name.toLowerCase().includes('focus 24/7') ||
+                c.name.toLowerCase().includes('pawako radio') ||
+                c.name.toLowerCase().includes('radio'))
           )
         : null;
 
@@ -3353,9 +3369,10 @@ export class PawakoBotRunner {
    */
   public async startRadioBroadcast(
     guildInput?: any,
-    stationId: string = 'pawako'
+    stationId: string = 'pawako',
+    channelOverride?: any
   ): Promise<{ success: boolean; message: string; channel?: any; inviteUrl?: string; station: RadioStation }> {
-    const radioData = await this.ensureRadioFocusVoiceChannel(guildInput);
+    const radioData = await this.ensureRadioFocusVoiceChannel(guildInput, channelOverride);
     if (!radioData?.channel) {
       return {
         success: false,

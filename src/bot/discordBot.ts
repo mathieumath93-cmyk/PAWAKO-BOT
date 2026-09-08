@@ -1453,6 +1453,53 @@ export class PawakoBotRunner {
           return;
         }
 
+        // --- COMMANDS TO TOGGLE / CUT SIMULATION AI (STAFF ONLY) ---
+        if (
+          content === '!cut-simu' ||
+          content === '!stop-simu-global' ||
+          content === '!simu-off' ||
+          content === '!toggle-simu' ||
+          content === '!simu-on'
+        ) {
+          const isStaff =
+            message.member?.permissions.has(PermissionFlagsBits.Administrator) ||
+            message.member?.permissions.has(PermissionFlagsBits.ManageGuild) ||
+            message.member?.roles.cache.some((r) =>
+              ['staff', 'coach', 'fondateur', 'admin', 'modérateur', 'moderateur'].some((roleKeyword) =>
+                r.name.toLowerCase().includes(roleKeyword)
+              )
+            );
+
+          if (!isStaff && message.author.id !== '1179090626027151390' && message.author.id !== '1178783478982348821') {
+            await message.reply('❌ Cette commande est réservée au Staff.').catch(() => {});
+            return;
+          }
+
+          let newState = false;
+          if (content === '!simu-on') {
+            newState = true;
+          } else if (content === '!simu-off' || content === '!cut-simu' || content === '!stop-simu-global') {
+            newState = false;
+          } else {
+            newState = !aiKnowledgeService.isSimulationEnabled();
+          }
+
+          aiKnowledgeService.setSimulationEnabled(newState);
+          if (!newState) {
+            this.activeAnthonySessions.forEach((s) => {
+              if (s.inactivityTimer) clearTimeout(s.inactivityTimer);
+            });
+            this.activeAnthonySessions.clear();
+          }
+
+          await message.reply(
+            newState
+              ? '✅ **L\'IA de simulation a été RÉACTIVÉE.** Les candidats peuvent à nouveau passer leurs tests de simulation.'
+              : '🛑 **L\'IA de simulation a été COUPÉE (mise en pause).** Toutes les sessions en cours ont été arrêtées et le bot ne répondra plus en tant que fan/coach.'
+          ).catch(() => {});
+          return;
+        }
+
         // --- COMMANDS TO LAUNCH ANTHONY SIMULATION DIRECTLY IN DISCORD ---
         if (
           content.startsWith('!lancer-anthony') ||
@@ -1462,6 +1509,13 @@ export class PawakoBotRunner {
           content.startsWith('!start-anthony') ||
           content.startsWith('!start-simu')
         ) {
+          if (!aiKnowledgeService.isSimulationEnabled()) {
+            await message.reply(
+              '⏸️ **L\'IA de simulation est actuellement désactivée pour le moment.**\nLe module de simulation IA a été mis en pause par l\'administration. Les tests reprendront prochainement.'
+            ).catch(() => {});
+            return;
+          }
+
           const mentionedUser = message.mentions.users.first();
           const args = content.split(' ').filter(Boolean).slice(1);
           const rawId = mentionedUser ? mentionedUser.id : args[0];
@@ -1570,6 +1624,11 @@ export class PawakoBotRunner {
 
         // --- CANDIDATE MESSAGES IN ACTIVE ANTHONY SIMULATION CHANNEL ---
         if (!content.startsWith('!')) {
+          // If simulation AI is disabled globally, ignore candidate simulation processing
+          if (!aiKnowledgeService.isSimulationEnabled()) {
+            return;
+          }
+
           // If simulation was explicitly stopped for this channel, ignore completely
           if (this.stoppedSimulationChannels.has(message.channel.id)) {
             return;
@@ -1795,6 +1854,14 @@ export class PawakoBotRunner {
 
         // --- HANDLER FOR CANDIDATE CLICKING "🚀 Démarrer la Simulation" OR "🔄 Recommencer la Simulation" ---
         if (interaction.isButton() && (customId.startsWith('launch_simu_') || customId.startsWith('restart_simu_'))) {
+          if (!aiKnowledgeService.isSimulationEnabled()) {
+            await interaction.reply({
+              content: '⏸️ **L\'IA de simulation est actuellement désactivée pour le moment.**\nLe module de simulation IA a été mis en pause par l\'administration. Les tests reprendront prochainement.',
+              ephemeral: true,
+            }).catch(() => {});
+            return;
+          }
+
           const isRestart = customId.startsWith('restart_simu_');
           const targetId = customId.replace(isRestart ? 'restart_simu_' : 'launch_simu_', '');
           const member =
@@ -5675,6 +5742,11 @@ export class PawakoBotRunner {
     channel: any,
     startedByStaffUserId?: string
   ): Promise<boolean> {
+    if (!aiKnowledgeService.isSimulationEnabled()) {
+      console.log(`[PawakoBot] startAnthonySimulationSession bloqué : l'IA de simulation est désactivée.`);
+      return false;
+    }
+
     const member = store.getMember(targetMemberInput.id) || targetMemberInput;
     if (!member || !channel) return false;
 

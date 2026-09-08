@@ -581,6 +581,7 @@ export interface AiPromptConfig {
   temperature: number;
   openRouterApiKey: string;
   enableLiveDiscordBot: boolean;
+  simulationEnabled?: boolean;
   minPassingScore?: number;
   cmConfig?: AiCmConfig;
 }

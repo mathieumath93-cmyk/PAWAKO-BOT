@@ -35,6 +35,8 @@ import {
   Headphones,
   ExternalLink,
   Music,
+  Power,
+  PowerOff,
 } from 'lucide-react';
 import {
   aiKnowledgeService,
@@ -149,6 +151,26 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
     });
     return () => unsubscribe();
   }, []);
+
+  const isSimulationActive = promptCfg.simulationEnabled === true && promptCfg.enableLiveDiscordBot !== false;
+
+  const handleToggleSimulation = () => {
+    const newActive = !isSimulationActive;
+    const updated = {
+      ...promptCfg,
+      simulationEnabled: newActive,
+      enableLiveDiscordBot: newActive,
+    };
+    setPromptCfg(updated);
+    aiKnowledgeService.updatePromptConfig(updated);
+    onShowToast(
+      newActive ? 'IA de Simulation Activée' : 'IA de Simulation Coupée',
+      newActive
+        ? 'Les tests de simulation Discord et les réponses automatiques sont réactivés.'
+        : 'L\'IA de simulation est maintenant en pause. Le bot ne répondra plus en fan/coach.',
+      newActive ? 'success' : 'info'
+    );
+  };
 
   const handleSave = () => {
     aiKnowledgeService.updatePromptConfig(promptCfg);
@@ -328,6 +350,70 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
       {/* TAB 1: PROMPT & OPENROUTER CONFIG */}
       {activeTab === 'prompt' && (
         <div className="space-y-6">
+          {/* Master Simulation AI Toggle Card */}
+          <div
+            className={`border rounded-2xl p-5 shadow-xl transition-all ${
+              isSimulationActive
+                ? 'bg-emerald-950/20 border-emerald-500/40'
+                : 'bg-rose-950/20 border-rose-500/40'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-3 rounded-xl border ${
+                    isSimulationActive
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  {isSimulationActive ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-white">IA de Simulation Discord & Web</h2>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        isSimulationActive
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                      }`}
+                    >
+                      {isSimulationActive ? 'Active' : 'Coupée / En Pause'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {isSimulationActive
+                      ? "L'IA joue le rôle du fan sur Discord et évalue les réponses des candidats."
+                      : "L'IA de simulation est actuellement coupée. Le bot Discord ne répond plus en fan, n'émet aucun appel OpenRouter et les commandes !start-simu sont mises en pause."}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleToggleSimulation}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 shrink-0 ${
+                  isSimulationActive
+                    ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
+              >
+                {isSimulationActive ? (
+                  <>
+                    <PowerOff className="w-4 h-4" />
+                    <span>Couper l'IA de simulation</span>
+                  </>
+                ) : (
+                  <>
+                    <Power className="w-4 h-4" />
+                    <span>Réactiver l'IA de simulation</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* OpenRouter API Settings */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
             <h2 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">

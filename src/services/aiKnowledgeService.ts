@@ -705,6 +705,9 @@ export async function callOpenRouterAI(
   maxTokens: number = 500
 ): Promise<string> {
   const cfg = aiKnowledgeService.getPromptConfig();
+  if (cfg.simulationEnabled === false || cfg.enableLiveDiscordBot === false) {
+    throw new Error("L'IA de simulation est actuellement désactivée par l'administration.");
+  }
   const apiKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
   // 1. Try OpenRouter API if API key is available
@@ -1065,7 +1068,8 @@ class AiKnowledgeService {
       modelName: '@preset/pawako-bot-2',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
-      enableLiveDiscordBot: true,
+      enableLiveDiscordBot: false,
+      simulationEnabled: false,
       cmConfig: defaultCmConfig,
     };
 
@@ -1114,6 +1118,8 @@ class AiKnowledgeService {
           fanPrompt: updatedFanPrompt,
           modelName: cleanModelName,
           openRouterApiKey: parsed.openRouterApiKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
+          simulationEnabled: parsed.simulationEnabled !== undefined ? parsed.simulationEnabled : false,
+          enableLiveDiscordBot: parsed.enableLiveDiscordBot !== undefined ? parsed.enableLiveDiscordBot : false,
           cmConfig: mergedCmConfig,
         };
       }
@@ -1136,6 +1142,17 @@ class AiKnowledgeService {
       } catch (e) {
         console.warn('Error in AI listener:', e);
       }
+    });
+  }
+
+  public isSimulationEnabled(): boolean {
+    return this.promptConfig.simulationEnabled === true && this.promptConfig.enableLiveDiscordBot !== false;
+  }
+
+  public setSimulationEnabled(enabled: boolean): void {
+    this.updatePromptConfig({
+      simulationEnabled: enabled,
+      enableLiveDiscordBot: enabled,
     });
   }
 
@@ -1179,7 +1196,8 @@ class AiKnowledgeService {
       modelName: '@preset/pawako-bot-2',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
-      enableLiveDiscordBot: true,
+      enableLiveDiscordBot: false,
+      simulationEnabled: false,
       cmConfig: defaultCmConfig,
     };
     this.saveToStorage();

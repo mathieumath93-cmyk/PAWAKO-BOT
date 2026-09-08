@@ -552,7 +552,7 @@ export async function callGeminiAI(
     parts: [{ text: item.content }],
   }));
 
-  const modelsToTry = ['gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-flash-latest'];
+  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
   let lastErr: any = null;
 
   for (const modelName of modelsToTry) {
@@ -710,10 +710,13 @@ export async function callOpenRouterAI(
   // 1. Try OpenRouter API if API key is available
   if (apiKey && apiKey.length > 5) {
     const primaryModel = cfg.modelName || '@preset/pawako-bot-2';
-    // Try user's preset first, then fallback to openrouter/auto if preset returns tool/provider error
+    // Try user's preset first, then resilient free models if preset is rate-limited (429) or out of credits (402)
     const modelsToTry = [primaryModel];
-    if (primaryModel !== 'openrouter/auto') {
-      modelsToTry.push('openrouter/auto');
+    if (primaryModel !== 'meta-llama/llama-3.3-70b-instruct:free') {
+      modelsToTry.push('meta-llama/llama-3.3-70b-instruct:free');
+    }
+    if (primaryModel !== 'mistralai/mistral-7b-instruct:free') {
+      modelsToTry.push('mistralai/mistral-7b-instruct:free');
     }
 
     for (const modelId of modelsToTry) {
@@ -733,7 +736,7 @@ export async function callOpenRouterAI(
               ...history,
             ],
             temperature: cfg.temperature ?? 0.8,
-            max_tokens: Math.max(maxTokens, 1000),
+            max_tokens: Math.min(maxTokens || 250, 400),
           }),
         });
 
@@ -746,6 +749,10 @@ export async function callOpenRouterAI(
         } else {
           const errorText = await response.text();
           console.warn(`[OpenRouter API Warning] (${response.status}) pour ${modelId}:`, errorText);
+          // If 402 (payment/credit required), skip to free model or fallback
+          if (response.status === 402 && modelId === primaryModel) {
+            continue;
+          }
         }
       } catch (err: any) {
         console.warn(`[OpenRouter Fetch Error] pour ${modelId}:`, err?.message || err);

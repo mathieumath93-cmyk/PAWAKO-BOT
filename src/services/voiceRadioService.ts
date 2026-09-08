@@ -12,6 +12,8 @@ import {
   getVoiceConnection,
 } from '@discordjs/voice';
 import { Guild, VoiceBasedChannel } from 'discord.js';
+import https from 'https';
+import http from 'http';
 
 // Ensure ffmpeg path is set for prism-media / @discordjs/voice
 try {
@@ -87,6 +89,7 @@ interface GuildBroadcastState {
   volume: number;
   isStreaming: boolean;
   reconnectTimeout?: NodeJS.Timeout;
+  currentRequest?: any;
 }
 
 class VoiceRadioService {
@@ -296,24 +299,79 @@ class VoiceRadioService {
 
   private playStream(guildId: string) {
     const state = this.broadcasts.get(guildId);
-    if (!state) return;
+    if (!state || !state.isStreaming) return;
 
-    try {
-      const resource = createAudioResource(state.station.url, {
-        inputType: StreamType.Arbitrary,
-        inlineVolume: true,
-      });
+    if (state.currentRequest) {
+      try {
+        state.currentRequest.destroy();
+      } catch {}
+      state.currentRequest = undefined;
+    }
 
-      if (resource.volume) {
-        resource.volume.setVolume(state.volume);
+    const streamUrl = state.station.url;
+
+    const startHttpStream = (targetUrl: string, redirectCount = 0) => {
+      if (redirectCount > 5) {
+        console.warn(`[VoiceRadio] Trop de redirections pour ${targetUrl}`);
+        return;
       }
 
-      state.player.play(resource);
-      state.isStreaming = true;
-      console.log(`[VoiceRadio] Flux audio lancé pour ${state.station.name} sur guilde ${guildId}.`);
-    } catch (err) {
-      console.warn(`[VoiceRadio PlayStream Error]`, err);
-    }
+      const client = targetUrl.startsWith('https:') ? https : http;
+      try {
+        const req = client.get(
+          targetUrl,
+          {
+            headers: {
+              'User-Agent': 'PawakoDiscordRadio/1.0',
+              Accept: '*/*',
+              'Icy-MetaData': '0',
+            },
+          },
+          (res) => {
+            // Handle redirects (301, 302, 307, 308)
+            if (
+              res.statusCode &&
+              res.statusCode >= 300 &&
+              res.statusCode < 400 &&
+              res.headers.location
+            ) {
+              const redirectUrl = res.headers.location.startsWith('http')
+                ? res.headers.location
+                : new URL(res.headers.location, targetUrl).href;
+              startHttpStream(redirectUrl, redirectCount + 1);
+              return;
+            }
+
+            if (res.statusCode && res.statusCode >= 400) {
+              console.warn(`[VoiceRadio HTTP Error] Code ${res.statusCode} reçu pour ${targetUrl}`);
+              return;
+            }
+
+            const resource = createAudioResource(res, {
+              inputType: StreamType.Arbitrary,
+              inlineVolume: true,
+            });
+
+            if (resource.volume) {
+              resource.volume.setVolume(state.volume);
+            }
+
+            state.player.play(resource);
+            console.log(`[VoiceRadio] Flux audio direct connecté pour "${state.station.name}" sur guilde ${guildId}.`);
+          }
+        );
+
+        req.on('error', (err) => {
+          console.warn(`[VoiceRadio HTTP Request Error]`, err.message || err);
+        });
+
+        state.currentRequest = req;
+      } catch (err: any) {
+        console.warn(`[VoiceRadio Stream Catch]`, err?.message || err);
+      }
+    };
+
+    startHttpStream(streamUrl);
   }
 
   private setupListeners(
@@ -322,16 +380,21 @@ class VoiceRadioService {
     player: AudioPlayer,
     channel: VoiceBasedChannel
   ) {
-    // When stream ends or drops, automatically reconnect in 2 seconds
-    player.on(AudioPlayerStatus.Idle, () => {
-      const state = this.broadcasts.get(guildId);
-      if (!state || !state.isStreaming) return;
+    // Reconnect only when state actually transitions from playing/buffering to Idle
+    player.on('stateChange', (oldState, newState) => {
+      if (
+        oldState.status !== AudioPlayerStatus.Idle &&
+        newState.status === AudioPlayerStatus.Idle
+      ) {
+        const state = this.broadcasts.get(guildId);
+        if (!state || !state.isStreaming) return;
 
-      console.log(`[VoiceRadio] Flux terminé ou reconnecté, redémarrage automatique dans 2s...`);
-      clearTimeout(state.reconnectTimeout);
-      state.reconnectTimeout = setTimeout(() => {
-        this.playStream(guildId);
-      }, 2000);
+        console.log(`[VoiceRadio] Flux audio terminé ou interrompu sur #${channel.name}, redémarrage automatique dans 3s...`);
+        clearTimeout(state.reconnectTimeout);
+        state.reconnectTimeout = setTimeout(() => {
+          this.playStream(guildId);
+        }, 3000);
+      }
     });
 
     player.on('error', (err) => {
@@ -402,6 +465,13 @@ class VoiceRadioService {
 
     state.isStreaming = false;
     clearTimeout(state.reconnectTimeout);
+
+    if (state.currentRequest) {
+      try {
+        state.currentRequest.destroy();
+      } catch {}
+      state.currentRequest = undefined;
+    }
 
     try {
       state.player.stop(true);

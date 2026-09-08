@@ -13,6 +13,18 @@ import {
 } from '@discordjs/voice';
 import { Guild, VoiceBasedChannel } from 'discord.js';
 
+// Ensure ffmpeg path is set for prism-media / @discordjs/voice
+try {
+  if (!process.env.FFMPEG_PATH) {
+    const ffmpegPath = require('ffmpeg-static');
+    if (ffmpegPath) {
+      process.env.FFMPEG_PATH = ffmpegPath;
+    }
+  }
+} catch {
+  // ffmpeg-static not available or not required if ffmpeg is in system PATH
+}
+
 export interface RadioStation {
   id: string;
   name: string;

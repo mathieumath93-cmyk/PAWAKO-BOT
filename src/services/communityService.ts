@@ -34,7 +34,7 @@ async function callOpenRouterOrGemini(
 
   // 1. Primary: OpenRouter API
   if (apiKey && apiKey.length > 5) {
-    const primaryModel = cfg.modelName || 'openrouter/auto';
+    const primaryModel = cfg.modelName || '@preset/pawako-bot-2';
     const modelsToTry = [primaryModel];
     if (primaryModel !== 'openrouter/auto') {
       modelsToTry.push('openrouter/auto');

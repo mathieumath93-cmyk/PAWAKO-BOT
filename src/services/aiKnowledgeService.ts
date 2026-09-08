@@ -709,7 +709,7 @@ export async function callOpenRouterAI(
 
   // 1. Try OpenRouter API if API key is available
   if (apiKey && apiKey.length > 5) {
-    const primaryModel = cfg.modelName || '@preset/pawako-bot';
+    const primaryModel = cfg.modelName || '@preset/pawako-bot-2';
     // Try user's preset first, then fallback to openrouter/auto if preset returns tool/provider error
     const modelsToTry = [primaryModel];
     if (primaryModel !== 'openrouter/auto') {
@@ -1055,7 +1055,7 @@ class AiKnowledgeService {
       analyzerPrompt: defaultInterventionRulesPrompt,
       fanPrompt: defaultFanPrompt,
       coachPrompt: '',
-      modelName: '@preset/pawako-bot',
+      modelName: '@preset/pawako-bot-2',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,
@@ -1080,16 +1080,17 @@ class AiKnowledgeService {
           updatedAnalyzerPrompt = defaultInterventionRulesPrompt;
         }
 
-        let cleanModelName = parsed.modelName || '@preset/pawako-bot';
+        let cleanModelName = parsed.modelName || '@preset/pawako-bot-2';
         if (
           cleanModelName.includes('grok') ||
           cleanModelName.includes('dots-3') ||
           cleanModelName.includes('liquid') ||
           cleanModelName.includes(':free') ||
           cleanModelName === 'gemini-3.7-flash' ||
-          cleanModelName === 'openrouter/auto'
+          cleanModelName === 'openrouter/auto' ||
+          cleanModelName === '@preset/pawako-bot'
         ) {
-          cleanModelName = '@preset/pawako-bot';
+          cleanModelName = '@preset/pawako-bot-2';
         }
 
         const mergedCmConfig: AiCmConfig = {
@@ -1168,7 +1169,7 @@ class AiKnowledgeService {
       analyzerPrompt: defaultInterventionRulesPrompt,
       fanPrompt: defaultFanPrompt,
       coachPrompt: '',
-      modelName: '@preset/pawako-bot',
+      modelName: '@preset/pawako-bot-2',
       temperature: 0.8,
       openRouterApiKey: process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey(),
       enableLiveDiscordBot: true,

@@ -203,6 +203,7 @@ export interface Member {
   toolsFormationReminderSent?: boolean;
   simulationValidatedAt?: string;
   toolsFormationValidatedAt?: string;
+  productionAnnouncedAt?: string;
   email?: string;
   whatsapp?: string;
   shift?: string;

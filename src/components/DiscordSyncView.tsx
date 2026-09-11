@@ -61,10 +61,11 @@ export const DiscordSyncView: React.FC = () => {
     setCmStatus(null);
     try {
       const res: any = await safeFetchJson('/api/discord/cm-relancer', { method: 'POST' });
-      if (res && res.success) {
-        setCmStatus(`✅ Relances effectuées avec succès ! ${res.count || 0} candidat(s) relancé(s).`);
+      const data = res?.data || res;
+      if ((res?.ok && data?.success !== false) || res?.success) {
+        setCmStatus(`✅ Relances effectuées avec succès ! ${data?.count || res?.count || 0} candidat(s) relancé(s).`);
       } else {
-        setCmStatus(`⚠️ Erreur : ${res?.error || 'Échec des relances'}`);
+        setCmStatus(`⚠️ Erreur : ${data?.error || res?.error || 'Échec des relances'}`);
       }
     } catch (e: any) {
       setCmStatus(`❌ Erreur réseau : ${e?.message}`);
@@ -78,10 +79,11 @@ export const DiscordSyncView: React.FC = () => {
     setCmStatus(null);
     try {
       const res: any = await safeFetchJson('/api/discord/cm-daily', { method: 'POST' });
-      if (res && res.success) {
+      const data = res?.data || res;
+      if ((res?.ok && data?.success !== false) || res?.success) {
         setCmStatus('✅ Post communautaire du jour publié avec succès sur Discord !');
       } else {
-        setCmStatus(`⚠️ Erreur : ${res?.error || 'Salon introuvable ou bot déconnecté'}`);
+        setCmStatus(`⚠️ Erreur : ${data?.error || res?.error || 'Salon introuvable ou bot déconnecté'}`);
       }
     } catch (e: any) {
       setCmStatus(`❌ Erreur réseau : ${e?.message}`);
@@ -111,11 +113,12 @@ export const DiscordSyncView: React.FC = () => {
     try {
       const gid = guildId || selectedGuildId;
       const res: any = await safeFetchJson(`/api/discord/radio/status${gid ? `?guildId=${gid}` : ''}`);
-      if (res && res.success) {
-        setRadioStreamInfo(res);
-        if (res.remoteStatus) setRemoteRadioStatus(res.remoteStatus);
-        if (res.customBaseUrl && !customWebradioUrl) setCustomWebradioUrl(res.customBaseUrl);
-        if (res.station?.id) setSelectedStation(res.station.id);
+      const data = res?.data || res;
+      if ((res?.ok && data?.stations) || data?.success || data?.stations) {
+        setRadioStreamInfo(data);
+        if (data.remoteStatus) setRemoteRadioStatus(data.remoteStatus);
+        if (data.customBaseUrl && !customWebradioUrl) setCustomWebradioUrl(data.customBaseUrl);
+        if (data.station?.id) setSelectedStation(data.station.id);
       }
     } catch {
       // ignore
@@ -131,9 +134,10 @@ export const DiscordSyncView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: customWebradioUrl.trim() }),
       });
-      if (res && res.success) {
-        setRadioStatus(`📻 ${res.message || 'URL Webradio Pawako enregistrée !'}`);
-        if (res.remoteStatus) setRemoteRadioStatus(res.remoteStatus);
+      const data = res?.data || res;
+      if ((res?.ok && data?.success === true) || res?.success === true) {
+        setRadioStatus(`📻 ${data?.message || res?.message || 'URL Webradio Pawako enregistrée !'}`);
+        if (data?.remoteStatus || res?.remoteStatus) setRemoteRadioStatus(data?.remoteStatus || res?.remoteStatus);
         // If already streaming pawako station, reload
         if (radioStreamInfo?.isStreaming) {
           handleStartVoiceBroadcast('pawako');
@@ -141,7 +145,7 @@ export const DiscordSyncView: React.FC = () => {
           loadRadioStreamStatus();
         }
       } else {
-        setRadioStatus(`⚠️ ${res?.error || 'Erreur lors de la sauvegarde de l\'URL'}`);
+        setRadioStatus(`⚠️ ${data?.error || res?.error || data?.message || res?.message || 'Erreur lors de la sauvegarde de l\'URL'}`);
       }
     } catch (err: any) {
       setRadioStatus(`❌ Erreur réseau : ${err?.message}`);
@@ -156,14 +160,16 @@ export const DiscordSyncView: React.FC = () => {
       const res: any = await safeFetchJson('/api/discord/radio/skip', {
         method: 'POST',
       });
-      if (res && res.success) {
-        setRadioStatus(`⏭️ ${res.message || 'Morceau passé avec succès !'}`);
-        if (res.nowPlaying) {
-          setRemoteRadioStatus((prev: any) => ({ ...(prev || {}), nowPlaying: res.nowPlaying }));
+      const data = res?.data || res;
+      if ((res?.ok && data?.success === true) || res?.success === true) {
+        setRadioStatus(`⏭️ ${data?.message || res?.message || 'Morceau passé avec succès !'}`);
+        const np = data?.nowPlaying || res?.nowPlaying;
+        if (np) {
+          setRemoteRadioStatus((prev: any) => ({ ...(prev || {}), nowPlaying: np }));
         }
         setTimeout(() => loadRadioStreamStatus(), 1000);
       } else {
-        setRadioStatus(`⚠️ ${res?.message || res?.error || 'Impossible de passer le morceau'}`);
+        setRadioStatus(`⚠️ ${data?.message || res?.message || data?.error || res?.error || 'Impossible de passer le morceau'}`);
       }
     } catch (err: any) {
       setRadioStatus(`❌ Erreur : ${err?.message}`);
@@ -181,12 +187,14 @@ export const DiscordSyncView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guildId: selectedGuildId || undefined, stationId: stationToPlay }),
       });
-      if (res && res.success) {
-        setRadioStatus(`🟢 ${res.message || 'Diffusion vocale 24/7 lancée avec succès !'}`);
-        if (res.station?.id) setSelectedStation(res.station.id);
+      const data = res?.data || res;
+      if ((res?.ok && data?.success === true) || res?.success === true) {
+        setRadioStatus(`🟢 ${data?.message || res?.message || 'Diffusion vocale 24/7 lancée avec succès !'}`);
+        const station = data?.station || res?.station;
+        if (station?.id) setSelectedStation(station.id);
         loadRadioStreamStatus();
       } else {
-        setRadioStatus(`⚠️ ${res?.message || res?.error || 'Erreur lors du lancement de la diffusion'}`);
+        setRadioStatus(`⚠️ ${data?.message || res?.message || data?.error || res?.error || 'Erreur lors du lancement de la diffusion'}`);
       }
     } catch (e: any) {
       setRadioStatus(`❌ Erreur réseau : ${e?.message}`);
@@ -203,9 +211,12 @@ export const DiscordSyncView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guildId: selectedGuildId || undefined }),
       });
-      if (res && res.success) {
-        setRadioStatus(`⏹️ ${res.message || 'Diffusion vocale arrêtée.'}`);
+      const data = res?.data || res;
+      if ((res?.ok && data?.success === true) || res?.success === true) {
+        setRadioStatus(`⏹️ ${data?.message || res?.message || 'Diffusion vocale arrêtée.'}`);
         loadRadioStreamStatus();
+      } else {
+        setRadioStatus(`⚠️ ${data?.message || res?.message || data?.error || res?.error || 'Erreur lors de l\'arrêt de la diffusion'}`);
       }
     } catch (e: any) {
       setRadioStatus(`❌ Erreur réseau : ${e?.message}`);
@@ -224,20 +235,22 @@ export const DiscordSyncView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guildId: selectedGuildId || undefined, stationId: selectedStation }),
       });
-      if (res && res.success) {
-        setRadioStatus(`✅ ${res.message || 'Salon vocal Radio Focus 24/7 actif et diffusion lancée !'}`);
+      const data = res?.data || res;
+      if ((res?.ok && data?.success === true) || res?.success === true) {
+        setRadioStatus(`✅ ${data?.message || res?.message || 'Salon vocal Radio Focus 24/7 actif et diffusion lancée !'}`);
         setRadioData({
-          channelName: res.channelName,
-          inviteUrl: res.inviteUrl,
+          channelName: data?.channelName || res?.channelName,
+          inviteUrl: data?.inviteUrl || res?.inviteUrl,
         });
         loadRadioStreamStatus();
         if (selectedGuildId) {
           loadGuildData(selectedGuildId);
         }
       } else {
-        setRadioStatus(`⚠️ ${res?.error || 'Impossible de créer le salon vocal'}`);
-        if (res?.botInviteUrl) {
-          setRadioData({ botInviteUrl: res.botInviteUrl });
+        setRadioStatus(`⚠️ ${data?.error || res?.error || data?.message || res?.message || 'Impossible de créer le salon vocal'}`);
+        const botInvite = data?.botInviteUrl || res?.botInviteUrl;
+        if (botInvite) {
+          setRadioData({ botInviteUrl: botInvite });
         }
       }
     } catch (e: any) {

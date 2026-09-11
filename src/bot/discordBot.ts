@@ -15,6 +15,7 @@ import {
   TextInputStyle,
   MessageFlags,
   ActivityType,
+  Guild,
 } from 'discord.js';
 import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
@@ -946,34 +947,68 @@ export class PawakoBotRunner {
           return;
         }
 
+        if (content.startsWith('!annonce-prod') || content.startsWith('!recrue-prod')) {
+          if (!this.isStaffChannel(message.channel) && !message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+            await message.reply('⛔ Commande réservée au staff Pawako.').catch(() => {});
+            return;
+          }
+          const targetUser = message.mentions.users.first();
+          if (!targetUser) {
+            await message.reply('ℹ️ **Utilisation :** `!annonce-prod @candidat` pour annoncer officiellement son passage en production dans `#🎉-recrues-prod` !').catch(() => {});
+            return;
+          }
+          const cand = store.getMembers().find((m) => m.discordId === targetUser.id || m.id === `mem-${targetUser.id}`);
+          if (!cand) {
+            await message.reply(`⚠️ Candidat introuvable pour <@${targetUser.id}>.`).catch(() => {});
+            return;
+          }
+          const success = await this.announceCandidateProductionSuccess(cand, true);
+          if (success) {
+            await message.reply(`🎉 **Annonce de production publiée avec succès pour ${cand.username} dans le salon officiel !**`).catch(() => {});
+          } else {
+            await message.reply(`⚠️ Impossible d'effectuer l'annonce pour ${cand.username} (vérifier la connexion du bot et les salons).`).catch(() => {});
+          }
+          return;
+        }
+
         if (content === '!cm-daily' || content === '!animation') {
           await message.reply('⏳ **Publication de la dose d\'énergie communautaire...**').catch(() => {});
           await this.publishDailyCommunityPost(message.channel as TextChannel);
           return;
         }
 
-        // --- AUTONOMOUS AI CM LISTENING & QA (OUTSIDE ACTIVE SIMULATION) ---
+        // --- AUTONOMOUS AI CM LISTENING & QA (OUTSIDE ACTIVE SIMULATION & OUTSIDE CANDIDATE CHANNELS) ---
         if (!this.activeAnthonySessions.has(message.channel.id) && !message.author.bot) {
-          const isMentioned = this.client?.user && message.mentions.has(this.client.user.id);
           const channelName = (message.channel as any).name?.toLowerCase() || '';
-          const isCommunityChannel =
-            channelName.includes('general') ||
-            channelName.includes('général') ||
-            channelName.includes('discussion') ||
-            channelName.includes('entraide') ||
-            channelName.includes('questions') ||
-            channelName.includes('formation');
+          
+          // STRICT RULE: Candidate private formation channels (formation-*, 🔒-formation-*, or matching personalChannelId)
+          // must NEVER have autonomous CM interruptions. Manual simulations and candidate/staff coaching occur here.
+          const isCandidateChannel =
+            channelName.startsWith('formation-') ||
+            channelName.startsWith('🔒-formation-') ||
+            channelName.includes('formation-') ||
+            store.getMembers().some((m) => m.personalChannelId === message.channel.id);
 
-          const cleanQuery = content.replace(/<@!?\d+>/g, '').trim();
-          const isQuestion = cleanQuery.includes('?') || cleanQuery.length >= 10;
-          const isHelpKeyword = /aide|question|bloqu|module|quiz|conseil|astuce|salut|bonjour|coucou|formation|comment|quand|inflow/i.test(cleanQuery);
+          if (!isCandidateChannel) {
+            const isMentioned = this.client?.user && message.mentions.has(this.client.user.id);
+            const isCommunityChannel =
+              channelName === 'general' ||
+              channelName === 'général' ||
+              channelName.includes('discussion') ||
+              channelName.includes('entraide-générale') ||
+              channelName.includes('questions-réponses');
 
-          if (isMentioned || (isCommunityChannel && isQuestion && isHelpKeyword)) {
-            if (cleanQuery) {
-              if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
-              const reply = await communityService.answerCommunityQA(cleanQuery, message.author.username);
-              await message.reply(reply).catch(() => {});
-              return;
+            const cleanQuery = content.replace(/<@!?\d+>/g, '').trim();
+            const isQuestion = cleanQuery.includes('?') || cleanQuery.length >= 10;
+            const isHelpKeyword = /aide|question|bloqu|module|quiz|conseil|astuce|salut|bonjour|coucou|formation|comment|quand|inflow/i.test(cleanQuery);
+
+            if (isMentioned || (isCommunityChannel && isQuestion && isHelpKeyword)) {
+              if (cleanQuery) {
+                if ('sendTyping' in message.channel) await (message.channel as any).sendTyping().catch(() => {});
+                const reply = await communityService.answerCommunityQA(cleanQuery, message.author.username);
+                await message.reply(reply).catch(() => {});
+                return;
+              }
             }
           }
         }
@@ -1766,19 +1801,24 @@ export class PawakoBotRunner {
                       .setFooter({ text: 'PAWAKO FORMATION • Échec Simulation (Limite d\'alertes coach atteinte)' })
                       .setTimestamp();
 
-                    const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                      new ButtonBuilder()
-                        .setCustomId(`restart_simu_${candMember.id}`)
-                        .setLabel('🔄 Recommencer la Simulation de zéro')
-                        .setStyle(ButtonStyle.Danger)
-                    );
+                    const retryComponents: any[] = [];
+                    if (aiKnowledgeService.isSimulationEnabled()) {
+                      retryComponents.push(
+                        new ActionRowBuilder<ButtonBuilder>().addComponents(
+                          new ButtonBuilder()
+                            .setCustomId(`restart_simu_${candMember.id}`)
+                            .setLabel('🔄 Recommencer la Simulation de zéro')
+                            .setStyle(ButtonStyle.Danger)
+                        )
+                      );
+                    }
 
                     if ('send' in message.channel) {
                       await (message.channel as any)
                         .send({
                           content: `🚨 <@${session!.candidateDiscordId}>`,
                           embeds: [failEmbed],
-                          components: [retryRow],
+                          components: retryComponents,
                         })
                         .catch(() => {});
                     }
@@ -2030,6 +2070,7 @@ export class PawakoBotRunner {
 
           // Trigger automatic Staff MP & Salon Intégration notification
           await this.sendIntegrationSubmittedNotificationToStaff(member);
+          await this.announceCandidateProductionSuccess(member);
           return;
         }
 
@@ -3300,7 +3341,12 @@ export class PawakoBotRunner {
     guildInput?: any,
     channelOverride?: any
   ): Promise<{ channel: any; inviteUrl?: string; error?: string } | null> {
-    if (!this.client) return null;
+    if (!this.client) {
+      return { channel: null, error: 'Le bot Discord n\'est pas initialisé.' };
+    }
+    if (!this.isConnected) {
+      return { channel: null, error: 'Le bot Discord n\'est pas encore connecté. Vérifiez le token du bot dans la synchronisation.' };
+    }
     try {
       let guild = guildInput;
       if (!guild) {
@@ -4161,6 +4207,28 @@ export class PawakoBotRunner {
    */
   public async handleCandidateQuestion(message: Message): Promise<boolean> {
     if (message.author.bot) return false;
+
+    const channelName = (message.channel as any).name?.toLowerCase() || '';
+    const isCandidateChannel =
+      channelName.startsWith('formation-') ||
+      channelName.startsWith('🔒-formation-') ||
+      channelName.includes('formation-') ||
+      store.getMembers().some((m) => m.personalChannelId === message.channel.id);
+
+    // STRICT RULE: Never trigger generic auto-responder in ANY candidate formation channel.
+    // Manual simulations, 1-on-1 coaching and direct staff exchanges happen in these channels.
+    if (isCandidateChannel) return false;
+
+    // Do not trigger on staff / management messages
+    if (
+      message.member &&
+      (message.member.permissions.has(PermissionFlagsBits.ManageMessages) ||
+        message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+        message.member.roles.cache.some((r: any) => /staff|formateur|admin|management/i.test(r.name)))
+    ) {
+      return false;
+    }
+
     const content = message.content.toLowerCase().trim();
     if (content.startsWith('!')) return false;
 
@@ -4892,15 +4960,19 @@ export class PawakoBotRunner {
           const isOnboarding = m.candidateState === 'nouveau' || m.candidateState === 'bienvenue_validee' || (!m.candidateState && validatedCount === 0);
 
           const components: any[] = [];
+          const isAiActive = aiKnowledgeService.isSimulationEnabled();
           if (isSimu) {
-            components.push(
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`launch_simu_${m.id}`)
-                  .setLabel('🚀 Lancer la Simulation IA')
-                  .setStyle(ButtonStyle.Primary)
-              )
-            );
+            // STRICT RULE: Only display "Lancer la simulation" button when AI is active!
+            if (isAiActive) {
+              components.push(
+                new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`launch_simu_${m.id}`)
+                    .setLabel('🚀 Lancer la Simulation IA')
+                    .setStyle(ButtonStyle.Primary)
+                )
+              );
+            }
           } else if (isOnboarding) {
             components.push(
               new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -4913,10 +4985,16 @@ export class PawakoBotRunner {
           }
 
           const followupEmbed = new EmbedBuilder()
-            .setTitle('🎯 SUIVI DE PARCOURS & FORMATION PAWAKO')
+            .setTitle(
+              isSimu
+                ? isAiActive
+                  ? '🎭 SIMULATION IA — SUIVI PAWAKO'
+                  : '🎭 SIMULATION PRATIQUE — SUIVI PAWAKO'
+                : '🎯 SUIVI DE PARCOURS & FORMATION PAWAKO'
+            )
             .setDescription(followupMsg)
             .setColor(isSimu ? 0x3b82f6 : 0x8b5cf6)
-            .setFooter({ text: '💬 Alex, Pawako Community Coach • On avance ensemble !' })
+            .setFooter({ text: 'PAWAKO FORMATION • Suivi Personnalisé' })
             .setTimestamp();
 
           await (channel as any).send({ embeds: [followupEmbed], components }).catch(() => {});
@@ -5536,29 +5614,40 @@ export class PawakoBotRunner {
 
           const next14hDateStr = new Date(member.simulationScheduledTimestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
 
+          const isAiActive = aiKnowledgeService.isSimulationEnabled();
           const simEmbed = new EmbedBuilder()
-            .setTitle('🚀 MODULE 5 VALIDÉ — INVITATION AU TEST DE SIMULATION')
+            .setTitle(isAiActive ? '🚀 MODULE 5 VALIDÉ — INVITATION AU TEST DE SIMULATION' : '🏆 MODULE 5 VALIDÉ — ÉPREUVE PRATIQUE DE SIMULATION')
             .setDescription(
-              `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
-              `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
-              `Ton test de simulation est au programme pour **14h00 HF** (${next14hDateStr}).\n\n` +
-              `💡 **Prêt(e) à passer ton test dès maintenant ?** Tu peux le lancer en direct à tout moment en cliquant sur le bouton ci-dessous ou en tapant **\`!start-simu\`** dans ce salon ! 🚀`
+              isAiActive
+                ? `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
+                    `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
+                    `Ton test de simulation est au programme pour **14h00 HF** (${next14hDateStr}).\n\n` +
+                    `💡 **Prêt(e) à passer ton test dès maintenant ?** Tu peux le lancer en direct à tout moment en cliquant sur le bouton ci-dessous ou en tapant **\`!start-simu\`** dans ce salon ! 🚀`
+                : `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
+                    `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
+                    `Ton épreuve pratique se déroulera en direct avec l'équipe Staff PAWAKO.\n\n` +
+                    `💡 Un formateur va prendre le relais directement avec toi dans ce salon pour démarrer ta mise en situation. Fais un signe dans le chat dès que tu es prêt(e) ! 🔥`
             )
             .setColor(0x3b82f6)
-            .setFooter({ text: 'PAWAKO FORMATION • Test de Simulation IA' })
+            .setFooter({ text: isAiActive ? 'PAWAKO FORMATION • Test de Simulation IA' : 'PAWAKO FORMATION • Simulation Pratique Staff' })
             .setTimestamp();
 
-          const simRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`launch_simu_${member.id}`)
-              .setLabel('🚀 Démarrer la Simulation')
-              .setStyle(ButtonStyle.Primary)
-          );
+          const simComponents: any[] = [];
+          if (isAiActive) {
+            simComponents.push(
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`launch_simu_${member.id}`)
+                  .setLabel('🚀 Démarrer la Simulation')
+                  .setStyle(ButtonStyle.Primary)
+              )
+            );
+          }
 
           await candChan.send({
             content: `<@${discordUserId}>`,
             embeds: [simEmbed],
-            components: [simRow],
+            components: simComponents,
           }).catch((e: any) => console.warn('[Sim Launch Send Error]', e));
         }
 
@@ -5930,19 +6019,24 @@ export class PawakoBotRunner {
         .setFooter({ text: 'PAWAKO FORMATION • Échec Simulation (Note < 80/100)' })
         .setTimestamp();
 
-      const retryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`restart_simu_${candMember.id}`)
-          .setLabel('🔄 Recommencer la Simulation')
-          .setStyle(ButtonStyle.Danger)
-      );
+      const retryComponents: any[] = [];
+      if (aiKnowledgeService.isSimulationEnabled()) {
+        retryComponents.push(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`restart_simu_${candMember.id}`)
+              .setLabel('🔄 Recommencer la Simulation')
+              .setStyle(ButtonStyle.Danger)
+          )
+        );
+      }
 
       if (channel && 'send' in channel) {
         await channel
           .send({
             content: `📢 <@${session.candidateDiscordId}>`,
             embeds: [failEmbed],
-            components: [retryRow],
+            components: retryComponents,
           })
           .catch(() => {});
       }
@@ -6078,6 +6172,9 @@ export class PawakoBotRunner {
         'member',
         member.username
       );
+
+      // Trigger automatic celebration in #🎉-recrues-prod if all steps (modules 5/5, simu, outils) are validated
+      this.announceCandidateProductionSuccess(member).catch(() => {});
     }
 
     // Identify absent candidates currently enrolled in formation_outils who were not validated
@@ -6144,6 +6241,152 @@ export class PawakoBotRunner {
       'member',
       member.username
     );
+  }
+
+  /**
+   * Finds or automatically creates the public #🎉-recrues-prod announcement channel
+   */
+  public async getOrCreateRecruesProdChannel(guild: Guild): Promise<TextChannel | null> {
+    try {
+      const channels = await guild.channels.fetch().catch(() => null);
+      if (channels) {
+        const found = channels.find(
+          (c: any) =>
+            c &&
+            c.isTextBased() &&
+            (c.name.includes('recrues-prod') ||
+              c.name.includes('diplomes-prod') ||
+              c.name.includes('diplômés-prod') ||
+              c.name.includes('reussites-prod') ||
+              c.name.includes('nouveaux-chatters'))
+        );
+        if (found && 'send' in found) return found as TextChannel;
+      }
+
+      // Create channel with public read access
+      const created = await guild.channels.create({
+        name: '🎉-recrues-prod',
+        type: ChannelType.GuildText,
+        topic: '🎉 Félicitations officielles aux nouvelles recrues passant en production chez PAWAKO !',
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+            deny: [PermissionFlagsBits.SendMessages],
+          },
+          ...(this.client?.user
+            ? [
+                {
+                  id: this.client.user.id,
+                  allow: [
+                    PermissionFlagsBits.ViewChannel,
+                    PermissionFlagsBits.SendMessages,
+                    PermissionFlagsBits.EmbedLinks,
+                    PermissionFlagsBits.AttachFiles,
+                  ],
+                },
+              ]
+            : []),
+        ],
+      });
+      console.log('[PawakoBot] Salon #🎉-recrues-prod créé avec succès.');
+      return created as TextChannel;
+    } catch (err) {
+      console.warn('[PawakoBot] Erreur création salon #🎉-recrues-prod:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Publishes celebratory announcement in #🎉-recrues-prod when a candidate validates ALL stages:
+   * 1. 5 Modules théoriques validés (5/5)
+   * 2. Épreuve pratique de simulation validée
+   * 3. Prise en main des outils agence validée (formation_terminee)
+   * STRICTLY ZERO personal or confidential information disclosed (no email, no phone/WhatsApp, no shift, no internal passwords/links).
+   */
+  public async announceCandidateProductionSuccess(memberInput: Member, force: boolean = false): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    const member = store.getMember(memberInput.id) || memberInput;
+    if (!member) return false;
+
+    // Must be in formation_terminee
+    if (member.candidateState !== 'formation_terminee' && !force) return false;
+
+    // Avoid duplicate announcement unless forced
+    if (member.productionAnnouncedAt && !force) return false;
+
+    // Check all theoretical modules validated
+    const allMods = store.getModules();
+    const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
+    const modulesOk = validatedCount >= (allMods.length || 5);
+    const simuOk = Boolean(
+      member.simulationValidatedAt ||
+      member.progress?.['mod-5']?.status === 'valide' ||
+      member.progress?.['module-5']?.status === 'valide' ||
+      force
+    );
+    const toolsOk = Boolean(
+      member.toolsFormationValidatedAt ||
+      member.candidateState === 'formation_terminee' ||
+      force
+    );
+
+    if ((!modulesOk || !simuOk || !toolsOk) && !force) {
+      console.warn(`[Announce Prod Skipped for ${member.username}] Étapes incomplètes : Modules=${modulesOk}, Simu=${simuOk}, Outils=${toolsOk}`);
+      return false;
+    }
+
+    const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
+    let guild: Guild | null = null;
+    if (guildId) {
+      guild = await this.client.guilds.fetch(guildId).catch(() => null);
+    }
+    if (!guild && this.client.guilds.cache.size > 0) {
+      guild = this.client.guilds.cache.first() || null;
+    }
+    if (!guild) return false;
+
+    const targetChannel = await this.getOrCreateRecruesProdChannel(guild);
+    if (!targetChannel) return false;
+
+    const candDiscordId = member.discordId || member.id.replace('mem-', '');
+    const candMention = `<@${candDiscordId}>`;
+
+    // Strictly public celebratory message — NO confidential / personal data
+    const celebEmbed = new EmbedBuilder()
+      .setTitle('🎉 FÉLICITATIONS — NOUVEAU CHATTER EN PRODUCTION ! 🚀')
+      .setDescription(
+        `👏 Un immense bravo à ${candMention} (**${member.username}**) qui vient de valider avec brio l'intégralité de son parcours de formation PAWAKO !\n\n` +
+        `✅ **Modules théoriques :** 5/5 validés 🏆\n` +
+        `✅ **Épreuve pratique de simulation :** Validée avec succès 🎯\n` +
+        `✅ **Formation & Outils de chatting :** Maîtrisés et configurés 💼\n\n` +
+        `Bienvenue officielle dans l'équipe de production en agence ! On te souhaite de superbes shifts et un maximum de réussite ! 💸🔥`
+      )
+      .setColor(0x10b981)
+      .setFooter({ text: 'PAWAKO FORMATION • Validation Finale & Passage en Production' })
+      .setTimestamp();
+
+    if (member.avatarUrl) {
+      celebEmbed.setThumbnail(member.avatarUrl);
+    }
+
+    await targetChannel.send({
+      content: `🎉 **Passage en Production :** ${candMention} !`,
+      embeds: [celebEmbed],
+    }).catch((err) => console.warn('[Announce Prod Send Error]', err));
+
+    member.productionAnnouncedAt = store.getFormattedNow();
+    store.saveMembers();
+    firebaseSyncService.saveMember(member).catch(() => {});
+
+    store.addLog(
+      'System',
+      `Annonce officielle de passage en production publiée pour ${member.username} dans #${targetChannel.name}`,
+      'member',
+      member.username
+    );
+
+    return true;
   }
 
   /**

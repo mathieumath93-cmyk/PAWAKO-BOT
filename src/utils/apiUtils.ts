@@ -11,6 +11,9 @@ export interface SafeFetchResult<T = any> {
   data: T | null;
   error: string;
   backendMissing?: boolean;
+  success?: boolean;
+  message?: string;
+  [key: string]: any;
 }
 
 export async function safeFetchJson<T = any>(
@@ -98,27 +101,40 @@ export async function safeFetchJson<T = any>(
         parsed?.message ||
         parsed?.details ||
         `Erreur serveur HTTP ${status}`;
-      return {
+      const errObj: any = {
         ok: false,
         status,
         data: parsed,
         error: errMsg,
+        success: false,
+        message: errMsg,
       };
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        Object.assign(errObj, parsed);
+      }
+      return errObj;
     }
 
-    return {
+    const resultObj: any = {
       ok: true,
       status,
       data: parsed,
       error: '',
     };
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      Object.assign(resultObj, parsed);
+    }
+    return resultObj;
   } catch (err: any) {
     const isApiRoute = typeof input === 'string' && input.startsWith('/api');
+    const errMsg = isApiRoute ? AI_STUDIO_DISCORD_NOTICE : (err?.message || 'Erreur de connexion réseau au serveur');
     return {
       ok: false,
       status: 0,
       data: null,
-      error: isApiRoute ? AI_STUDIO_DISCORD_NOTICE : (err?.message || 'Erreur de connexion réseau au serveur'),
+      error: errMsg,
+      success: false,
+      message: errMsg,
       backendMissing: isApiRoute,
     };
   }

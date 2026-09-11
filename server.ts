@@ -1492,6 +1492,24 @@ async function startServer() {
     }
   });
 
+  app.post('/api/members/:id/announce-prod', async (req: Request, res: Response) => {
+    try {
+      const member = store.getMember(req.params.id);
+      if (!member) return res.status(404).json({ error: 'Membre introuvable' });
+      const force = req.body?.force === true;
+      const success = await pawakoBot.announceCandidateProductionSuccess(member, force);
+      res.json({
+        success,
+        member: store.getMember(req.params.id),
+        message: success
+          ? `Annonce de passage en production publiée avec succès dans #🎉-recrues-prod pour ${member.username} !`
+          : `Annonce non publiée (vérifier si les 5 modules, la simulation et les outils sont validés, ou utiliser force: true).`
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Tickets Endpoints
   app.get('/api/tickets', (req: Request, res: Response) => {
     res.json(store.getTickets());

@@ -300,24 +300,24 @@ Règles :
     let fallbackMessage = '';
 
     if (member.candidateState === 'formation_terminee') {
-      stageDescription = 'Formation intégrale 100% validée (Modules 1 à 5 + Simulation IA + Outils Agence). Prêt pour le shift en agence !';
-      actionInstructions = `Félicite chaleureusement le candidat pour avoir validé TOUT son parcours. Dis-lui qu'il est officiellement prêt pour ses créneaux de chatting et qu'un membre du management Pawako prendra contact avec lui dans ${chanMention}.`;
+      stageDescription = 'Formation intégrale 100% validée (Modules 1 à 5 + Simulation + Outils Agence). Prêt pour le shift en agence !';
+      actionInstructions = `Félicite chaleureusement le candidat pour avoir validé TOUT son parcours. Dis-lui qu'il est officiellement prêt pour ses créneaux de chatting et qu'un membre du management Pawako prendra contact avec lui ici.`;
       fallbackMessage =
         `🎓 **Félicitations <@${member.discordId || member.id}> !**\n\n` +
         `Tu as validé l'intégralité de ton parcours Pawako avec succès (Modules 1 à 5, Simulation et Outils) ! 🏆\n` +
-        `Tu es désormais fin prêt pour tes shifts en agence. Reste attentif à ${chanMention}, le management arrive très vite pour ton planning ! 🚀`;
+        `Tu es désormais fin prêt pour tes shifts en agence. Le management arrive très vite pour ton planning ! 🚀`;
     } else if (
       member.candidateState === 'formation_outils' ||
       (member.simulationValidatedAt && member.candidateState !== 'simulation')
     ) {
       const meetUrl = onboardingCfg.toolsFormationMeetUrl || '';
-      stageDescription = `Simulation IA validée avec succès ! Le candidat est à l'Étape Outils & Intégration (InFlow, Telegram, organisation opérationnelle).${meetUrl ? ` Lien Google Meet officiel de formation : ${meetUrl}` : ''}`;
-      actionInstructions = `Félicite le candidat pour sa simulation validée avec brio ! Indique-lui que la prochaine étape obligatoire est la prise en main des **Outils de l'Agence** (InFlow, Telegram, organisation des shifts). Invite-le à consulter les instructions et boutons dans ${chanMention}.${meetUrl ? ` Mentionne le lien visio Meet officiel : ${meetUrl}` : ''}`;
+      stageDescription = `Simulation validée avec succès ! Le candidat est à l'Étape Outils & Intégration (InFlow, Telegram, organisation opérationnelle).${meetUrl ? ` Lien Google Meet officiel de formation : ${meetUrl}` : ''}`;
+      actionInstructions = `Félicite le candidat pour sa simulation validée avec brio ! Indique-lui que la prochaine étape obligatoire est la prise en main des **Outils de l'Agence** (InFlow, Telegram, organisation des shifts). Le message étant déjà dans son salon, dis-lui simplement de suivre les consignes du staff ici.${meetUrl ? ` Mentionne le lien visio Meet officiel : ${meetUrl}` : ''}`;
       fallbackMessage =
         `🛠️ **Étape Suivante : Formation Outils & Intégration !**\n\n` +
         `Bravo <@${member.discordId || member.id}> ! Ta simulation de chatting est validée avec brio. 👏\n\n` +
         `Tu passes maintenant à la configuration de tes **outils opérationnels** (InFlow, Telegram, accès agence).\n` +
-        `📍 Rends-toi dans ${chanMention} pour suivre les consignes du staff et finaliser ton intégration ! 🚀` +
+        `L'équipe Staff va t'accompagner ici dans ce salon pour finaliser tes accès et préparer ton intégration ! 🚀` +
         (meetUrl ? `\n🔗 *Lien Visio Outils :* ${meetUrl}` : '');
     } else if (
       member.candidateState === 'simulation' ||
@@ -325,23 +325,32 @@ Règles :
       member.progress?.['mod-5']?.status === 'valide' ||
       member.progress?.['module-5']?.status === 'valide'
     ) {
-      stageDescription = `L'ensemble des 5 modules théoriques est validé (${validatedCount}/${totalModules}) ! ATTENTION ABSOLUE : IL N'Y A AUCUN MODULE 6 ! Le candidat est actuellement en phase de SIMULATION IA DE CHATTING avec Anthony directement dans son salon privé.`;
-      actionInstructions = `Félicite le candidat pour avoir validé tous ses modules théoriques (1 à 5). NE MENTIONNE SURTOUT PAS DE MODULE 6 (qui n'existe pas !). Indique-lui que sa prochaine étape cruciale est la **Simulation de Chatting IA** (mise en situation avec Anthony / le fan) directement dans ${chanMention}. Dis-lui de cliquer sur le bouton **"🚀 Lancer la Simulation"** (ou de continuer son échange en cours) dans son salon privé.`;
-      fallbackMessage =
-        `🎭 **Félicitations <@${member.discordId || member.id}> ! Tes 5 modules sont validés !** 🏆\n\n` +
-        `Tu passes désormais à l'épreuve pratique : la **Simulation de Chatting IA** avec Anthony !\n\n` +
-        `📍 Rends-toi dans ${chanMention} et clique sur le bouton **"🚀 Lancer la Simulation"** pour démarrer ta session en direct. Montre ce que tu sais faire ! 🔥`;
+      const isAiActive = aiKnowledgeService.isSimulationEnabled();
+      if (isAiActive) {
+        stageDescription = `L'ensemble des 5 modules théoriques est validé (${validatedCount}/${totalModules}) ! ATTENTION ABSOLUE : IL N'Y A AUCUN MODULE 6 ! Le candidat est actuellement en phase de SIMULATION IA DE CHATTING avec Anthony.`;
+        actionInstructions = `Félicite le candidat pour avoir validé tous ses modules théoriques (1 à 5). NE MENTIONNE SURTOUT PAS DE MODULE 6 (qui n'existe pas !). Indique-lui que son épreuve pratique est la **Simulation de Chatting IA** avec Anthony. Invite-le à cliquer sur le bouton **"🚀 Lancer la Simulation IA"** ci-dessous pour démarrer sa session en direct. NE DIS PAS "Rends-toi dans ton salon" car le message est déjà dans son salon.`;
+        fallbackMessage =
+          `🎭 **Félicitations <@${member.discordId || member.id}> ! Tes 5 modules théoriques sont validés !** 🏆\n\n` +
+          `Tu passes désormais à l'épreuve pratique : la **Simulation de Chatting IA** avec Anthony !\n\n` +
+          `Clique sur le bouton **"🚀 Lancer la Simulation IA"** ci-dessous pour démarrer ta session en direct. Montre ce que tu sais faire ! 🔥`;
+      } else {
+        stageDescription = `L'ensemble des 5 modules théoriques est validé (${validatedCount}/${totalModules}) ! Le mode de simulation IA est DÉSACTIVÉ. Le candidat passe sa simulation manuellement en direct avec l'équipe Staff PAWAKO.`;
+        actionInstructions = `Félicite le candidat pour avoir validé tous ses modules théoriques (1 à 5). NE MENTIONNE SURTOUT PAS D'IA, D'ANTHONY NI DE BOUTON DE SIMULATION. Indique-lui qu'un formateur / staff prend le relais directement avec lui ici dans ce salon pour démarrer sa mise en situation pratique. NE DIS PAS "Rends-toi dans ton salon".`;
+        fallbackMessage =
+          `🎭 **Félicitations <@${member.discordId || member.id}> ! Tes 5 modules théoriques sont validés !** 🏆\n\n` +
+          `Tu passes désormais à l'épreuve pratique : la **Simulation de Chatting** avec l'équipe Staff PAWAKO !\n\n` +
+          `Un formateur prend le relais directement avec toi dans ce salon pour démarrer ta mise en situation. Fais un signe dans le chat dès que tu es prêt(e) ! 🔥`;
+      }
     } else if (
       member.candidateState === 'nouveau' ||
       member.candidateState === 'bienvenue_validee' ||
       (!member.candidateState && validatedCount === 0)
     ) {
       stageDescription = `Le candidat vient d'arriver sur le serveur ou n'a pas encore lancé son Module 1 (0/${totalModules} validés).`;
-      actionInstructions = `Encourage le candidat avec enthousiasme. Indique-lui de se rendre dans ${chanMention} et de cliquer sur le bouton pour lancer sa formation et débloquer son **Module 1** dès maintenant.`;
+      actionInstructions = `Encourage le candidat avec enthousiasme. Dis-lui de cliquer sur le bouton ci-dessous pour lancer sa formation et débloquer son **Module 1** dès maintenant. NE DIS PAS "Rends-toi dans ton salon".`;
       fallbackMessage =
         `👋 **Bienvenue <@${member.discordId || member.id}> chez Pawako !**\n\n` +
-        `Ton salon privé de formation ${chanMention} est prêt. 🎯\n` +
-        `Rends-toi dedans et clique sur le bouton pour lancer ton **Module 1** et débuter l'aventure ! 🚀`;
+        `Ton espace de formation est prêt. Clique sur le bouton ci-dessous pour lancer ton **Module 1** et débuter l'aventure ! 🚀`;
     } else {
       // Theoretical stage (Modules 1 to 5)
       const nextUnvalidated = modules.find(
@@ -359,17 +368,17 @@ Règles :
       stageDescription = `Modules validés : ${validatedCount} / ${totalModules}. Module actuel à passer : "${nextTitle}". ${isCooldown ? `Cooldown actif sur le quiz (reste environ ${cooldownMinsLeft} min avant de retenter).` : 'Quiz disponible ou cours à étudier.'}`;
       actionInstructions = `Motive le candidat à avancer sur son module actuel : **${nextTitle}**. ${
         isCooldown
-          ? `Comme un délai de cooldown est en cours (${cooldownMinsLeft} min restantes), conseille-lui de relire posément son support de cours sans stresser dans ${chanMention} avant de retenter son quiz.`
-          : `Dis-lui d'aller dans ${chanMention}, de lire le support de cours puis de cliquer sur le bouton pour passer son quiz de validation.`
-      } Rappelle qu'il a déjà ${validatedCount} module(s) validé(s) sur ${totalModules}.`;
+          ? `Comme un délai de cooldown est en cours (${cooldownMinsLeft} min restantes), conseille-lui de relire posément son support de cours sans stresser avant de retenter son quiz.`
+          : `Dis-lui de lire le support de cours puis de cliquer sur le bouton ci-dessous pour passer son quiz de validation.`
+      } Rappelle qu'il a déjà ${validatedCount} module(s) validé(s) sur ${totalModules}. NE DIS PAS "Rends-toi dans ton salon" car le message est déjà dans son salon.`;
 
       fallbackMessage =
         `🔥 **Hey <@${member.discordId || member.id}> !**\n\n` +
         `Tu as validé **${validatedCount} sur ${totalModules} modules** ! Bravo pour ton rythme. 👏\n\n` +
         `🎯 **Étape en cours :** *${nextTitle}*\n` +
         (isCooldown
-          ? `⏳ *Un cooldown est actif (${cooldownMinsLeft} min restantes).* Profites-en pour relire tes fiches dans ${chanMention} avant de retenter ton quiz ! 📚`
-          : `💡 Rends-toi dans ${chanMention} pour lire ton cours et cliquer sur le bouton de passage du quiz ! 🚀`);
+          ? `⏳ **Cooldown actif :** Il te reste environ **${cooldownMinsLeft} min** avant de pouvoir retenter. Profites-en pour relire tes fiches avant le prochain essai ! 📚`
+          : `💡 Dès que tu as terminé de lire ton support de cours, clique sur le bouton ci-dessous pour lancer ton quiz de validation ! 🚀`);
     }
 
     if (cfg.cmConfig?.enableCandidateFollowups === false) {
@@ -377,14 +386,15 @@ Règles :
     }
 
     const systemPrompt = `${getCmSystemPromptContext()}
-Tu rédiges des messages de suivi et de relance personnalisés envoyés aux candidats dans leur salon privé Discord.
+Tu rédiges des messages de suivi et de relance personnalisés envoyés aux candidats DIRECTEMENT dans leur salon privé Discord.
 
 CONSIGNES STRICTES DE FIABILITÉ :
-1. INTERDICTION FORMELLE D'INVENTER DES LIENS WEB (pas d'URL externe http/https, pas de faux domaines ni de fausses plateformes). La formation se passe exclusivement sur Discord dans le salon privé du candidat via des embeds et des boutons interactifs.
-2. INTERDICTION FORMELLE DE CITER LA COMMANDE "!formation" (cette commande est obsolète pour les candidats, toute la progression se fait par les boutons interactifs du salon).
-3. INTERDICTION FORMELLE DE PARLER D'UN "MODULE 6" (le parcours théorique comprend strictement 5 modules. Après le Module 5, c'est obligatoirement la Simulation IA de Chatting, puis la Formation Outils).
-4. Pour désigner l'endroit où le candidat doit agir, utilise impérativement la mention de son salon privé : ${chanMention}.
-5. Utilise un style Markdown Discord propre, fluide, motivant et dynamique avec des emojis adaptés (longueur max 120-150 mots).`;
+1. LE MESSAGE EST DÉJÀ ENVOYÉ DANS LE SALON PRIVÉ DU CANDIDAT : NE JAMAIS ÉCRIRE "Rends-toi dans ton salon" ou "Rends-toi dans #salon". Tout se passe directement ici.
+2. INTERDICTION FORMELLE D'INVENTER DES LIENS WEB (pas d'URL externe http/https, pas de faux domaines ni de fausses plateformes). La formation se passe exclusivement sur Discord via des embeds et des boutons interactifs.
+3. INTERDICTION FORMELLE DE CITER LA COMMANDE "!formation" (cette commande est obsolète pour les candidats, toute la progression se fait par les boutons interactifs du salon).
+4. INTERDICTION FORMELLE DE PARLER D'UN "MODULE 6" (le parcours théorique comprend strictement 5 modules. Après le Module 5, c'est obligatoirement la Simulation de Chatting, puis la Formation Outils).
+5. SI L'IA EST DÉSACTIVÉE : INTERDICTION FORMELLE DE MENTIONNER L'IA, ANTHONY OU UN BOUTON DE SIMULATION. La simulation est animée directement par l'équipe Staff.
+6. Reste simple, court, percutant et axé sur l'action immédiate du candidat selon son avancée réelle (longueur max 80-100 mots).`;
 
     const userPrompt = `Rédige un message de relance/motivation hyper personnalisé pour ce candidat :
 

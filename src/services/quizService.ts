@@ -26,6 +26,13 @@ class QuizService {
     firebaseSyncService.saveQuiz(newQuiz).catch((err) =>
       console.error('[QuizService] Firebase saveQuiz failed:', err)
     );
+    if (typeof window !== 'undefined') {
+      fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newQuiz),
+      }).catch((err) => console.warn('[QuizService] API postQuiz warning:', err));
+    }
     return newQuiz;
   }
 
@@ -34,6 +41,13 @@ class QuizService {
     firebaseSyncService.saveQuiz(updated).catch((err) =>
       console.error('[QuizService] Firebase saveQuiz failed:', err)
     );
+    if (typeof window !== 'undefined') {
+      fetch(`/api/quiz/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }).catch((err) => console.warn('[QuizService] API putQuiz warning:', err));
+    }
     return updated;
   }
 
@@ -42,6 +56,11 @@ class QuizService {
     firebaseSyncService.deleteQuiz(id).catch((err) =>
       console.error('[QuizService] Firebase deleteQuiz failed:', err)
     );
+    if (typeof window !== 'undefined') {
+      fetch(`/api/quiz/${id}`, { method: 'DELETE' }).catch((err) =>
+        console.warn('[QuizService] API deleteQuiz warning:', err)
+      );
+    }
   }
 
   public calculateScore(questions: QuizQuestion[], userAnswers: number[]) {

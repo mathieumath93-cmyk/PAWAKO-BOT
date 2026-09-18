@@ -111,9 +111,18 @@ class OnboardingService {
   public updateConfig(newConfig: Partial<OnboardingFlowConfig>): OnboardingFlowConfig {
     this.config = { ...this.config, ...newConfig };
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
+      }
     } catch {
       // Ignore
+    }
+    if (typeof window !== 'undefined') {
+      fetch('/api/onboarding/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.config),
+      }).catch((err) => console.warn('[OnboardingService] API save config warning:', err));
     }
     return { ...this.config };
   }
@@ -147,11 +156,13 @@ class OnboardingService {
     const mod = store.getModule(moduleId);
     const quiz = mod ? store.getQuiz(mod.quizId || '') : undefined;
 
-    // Priority order: stepConfig's externalLinkUrl (if set), then module's url, then module resources
+    // Priority order: module's direct url first (if set and non-empty), then stepConfig's externalLinkUrl, then module resources
     const effectiveLinkUrl =
-      existing?.externalLinkUrl !== undefined && existing?.externalLinkUrl !== ''
-        ? existing.externalLinkUrl
-        : mod?.url || (mod?.resources && mod.resources[0]?.url) || '';
+      mod?.url && mod.url.trim() !== ''
+        ? mod.url
+        : existing?.externalLinkUrl !== undefined && existing?.externalLinkUrl.trim() !== ''
+          ? existing.externalLinkUrl
+          : (mod?.resources && mod.resources[0]?.url) || '';
 
     if (existing) {
       return {
@@ -193,14 +204,23 @@ class OnboardingService {
     // Bi-directional sync with store module and quiz
     const mod = store.getModule(step.moduleId);
     if (mod) {
+      const newUrl = step.externalLinkUrl !== undefined ? step.externalLinkUrl : mod.url;
       const updatedMod = store.updateModule(step.moduleId, {
         title: step.moduleTitle,
         content: step.directivesText || mod.content,
-        url: step.externalLinkUrl !== undefined ? step.externalLinkUrl : mod.url,
+        url: newUrl,
+        resources: newUrl ? [{ id: `res-${step.moduleId}-1`, title: 'Support de cours', type: 'link', url: newUrl }] : mod.resources,
         roleEnCoursName: step.roleOnStartName || mod.roleEnCoursName,
         roleValidatedName: step.roleOnPassName || mod.roleValidatedName,
       });
       firebaseSyncService.saveModule(updatedMod).catch(() => {});
+      if (typeof window !== 'undefined') {
+        fetch(`/api/modules/${step.moduleId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedMod),
+        }).catch(() => {});
+      }
 
       const quiz = mod.quizId ? store.getQuiz(mod.quizId) : store.getQuizzes().find((q) => q.moduleId === step.moduleId);
       if (quiz) {

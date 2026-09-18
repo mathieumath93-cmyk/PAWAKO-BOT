@@ -9,6 +9,7 @@ import { pawakoBot } from './src/bot/discordBot';
 import { voiceRadioService, RADIO_STATIONS } from './src/services/voiceRadioService';
 import { discordService } from './src/services/discordService';
 import { memberService } from './src/services/memberService';
+import { onboardingService } from './src/services/onboardingService';
 
 const BOT_CONFIG_FILE = path.join(process.cwd(), 'data', 'bot_config.json');
 
@@ -1085,6 +1086,7 @@ async function startServer() {
   app.post('/api/modules', (req: Request, res: Response) => {
     try {
       const mod = store.createModule(req.body);
+      firebaseSyncService.saveModule(mod).catch((err) => console.warn('[Server saveModule Firestore Warning]', err));
       res.json(mod);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1094,6 +1096,7 @@ async function startServer() {
   app.put('/api/modules/:id', (req: Request, res: Response) => {
     try {
       const mod = store.updateModule(req.params.id, req.body);
+      firebaseSyncService.saveModule(mod).catch((err) => console.warn('[Server saveModule Firestore Warning]', err));
       res.json(mod);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1103,6 +1106,7 @@ async function startServer() {
   app.delete('/api/modules/:id', (req: Request, res: Response) => {
     try {
       store.deleteModule(req.params.id);
+      firebaseSyncService.deleteModule(req.params.id).catch((err) => console.warn('[Server deleteModule Firestore Warning]', err));
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1123,6 +1127,7 @@ async function startServer() {
   app.post('/api/quiz', (req: Request, res: Response) => {
     try {
       const q = store.createQuiz(req.body);
+      firebaseSyncService.saveQuiz(q).catch((err) => console.warn('[Server saveQuiz Firestore Warning]', err));
       res.json(q);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1132,6 +1137,7 @@ async function startServer() {
   app.put('/api/quiz/:id', (req: Request, res: Response) => {
     try {
       const q = store.updateQuiz(req.params.id, req.body);
+      firebaseSyncService.saveQuiz(q).catch((err) => console.warn('[Server saveQuiz Firestore Warning]', err));
       res.json(q);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1141,9 +1147,41 @@ async function startServer() {
   app.delete('/api/quiz/:id', (req: Request, res: Response) => {
     try {
       store.deleteQuiz(req.params.id);
+      firebaseSyncService.deleteQuiz(req.params.id).catch((err) => console.warn('[Server deleteQuiz Firestore Warning]', err));
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Onboarding Config Endpoints
+  app.get('/api/onboarding/config', (req: Request, res: Response) => {
+    res.json(onboardingService.getConfig());
+  });
+
+  app.post('/api/onboarding/config', async (req: Request, res: Response) => {
+    try {
+      const cfg = onboardingService.updateConfig(req.body);
+      await firebaseSyncService.saveOnboardingConfig(cfg).catch((err) => console.warn('[Server saveOnboardingConfig Warning]', err));
+      res.json({ success: true, config: cfg });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Force Full Sync Endpoint for Dashboard & Discord Bot
+  app.post('/api/sync/refresh', async (req: Request, res: Response) => {
+    try {
+      await firebaseSyncService.revalidate();
+      res.json({
+        success: true,
+        modulesCount: store.getModules().length,
+        quizzesCount: store.getQuizzes().length,
+        membersCount: store.getMembers().length,
+        lastSyncedAt: firebaseSyncService.getLastSyncedAt(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

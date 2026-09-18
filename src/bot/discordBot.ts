@@ -2462,7 +2462,7 @@ export class PawakoBotRunner {
               console.warn('[Onboarding Role Assignment Warning]', roleErr?.message || roleErr);
             });
 
-            const externalLink = step1Cfg?.externalLinkUrl || mod1.url || (mod1.resources && mod1.resources[0]?.url);
+            const externalLink = (mod1.url && mod1.url.trim() !== '' ? mod1.url : (step1Cfg?.externalLinkUrl && step1Cfg.externalLinkUrl.trim() !== '' ? step1Cfg.externalLinkUrl : (mod1.resources && mod1.resources[0]?.url))) || '';
             const brandingName = store.getBranding().trainingName || 'Espace de Formation';
 
             const delayNotice = delayMins > 0
@@ -3086,7 +3086,7 @@ export class PawakoBotRunner {
             store.saveMembers();
             firebaseSyncService.saveMember(member).catch(() => {});
 
-            const externalLink = stepCfg?.externalLinkUrl || mod.url || (mod.resources && mod.resources[0]?.url);
+            const externalLink = (mod.url && mod.url.trim() !== '' ? mod.url : (stepCfg?.externalLinkUrl && stepCfg.externalLinkUrl.trim() !== '' ? stepCfg.externalLinkUrl : (mod.resources && mod.resources[0]?.url))) || '';
             const brandingName = store.getBranding().trainingName || 'Espace de Formation';
 
             const delayNotice = delayMins > 0

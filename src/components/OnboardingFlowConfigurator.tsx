@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Save,
@@ -63,17 +63,46 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   const [validationResult, setValidationResult] = useState<PreFlightValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [isLaunchingOnboarding, setIsLaunchingOnboarding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingWithBot, setIsSyncingWithBot] = useState(false);
+  const [quizVersion, setQuizVersion] = useState(0);
 
   // Expanded questions accordion state
   const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
   const [isRunningWorker, setIsRunningWorker] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
+  const refreshModulesState = () => {
+    const updated = store.getModules();
+    setLocalModules([...updated]);
+    setQuizVersion((v) => v + 1);
+    return updated;
+  };
+
+  useEffect(() => {
+    const unsub = store.subscribe(() => {
+      const updatedMods = store.getModules();
+      setLocalModules([...updatedMods]);
+      const currentConfig = onboardingService.getConfig();
+      setConfig(currentConfig);
+      setQuizVersion((v) => v + 1);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (initialModules && initialModules.length > 0) {
+      setLocalModules(initialModules);
+      setQuizVersion((v) => v + 1);
+    }
+  }, [initialModules]);
+
   const handleImportQuestions = (imported: QuizQuestion[], replaceExisting: boolean) => {
     if (!activeQuizObj) return;
     const current = activeQuizObj.questions || [];
     const finalQuestions = replaceExisting ? imported : [...current, ...imported];
     quizService.updateQuiz(activeQuizObj.id, { questions: finalQuestions });
+    refreshModulesState();
     onShowToast(
       'Quiz Mis à Jour',
       `${imported.length} question(s) importée(s) avec succès dans le quiz.`,
@@ -92,23 +121,22 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     );
   };
 
-  const refreshModulesState = () => {
-    const updated = store.getModules();
-    setLocalModules([...updated]);
-    return updated;
-  };
-
   const activeModuleObj = localModules.find((m) => m.id === selectedModuleTab) || localModules[0];
   const activeQuizObj = activeModuleObj ? store.getQuiz(activeModuleObj.quizId || '') || quizService.getQuizzes().find(q => q.moduleId === activeModuleObj.id) : undefined;
 
   const foundStep = config.stepConfigs.find((s) => s.moduleId === selectedModuleTab);
+
+  const currentExternalLink =
+    activeModuleObj?.url && activeModuleObj.url.trim() !== ''
+      ? activeModuleObj.url
+      : (foundStep?.externalLinkUrl || '');
 
   const currentStep: ModuleStepConfig = foundStep
     ? {
         ...foundStep,
         moduleTitle: activeModuleObj?.title || foundStep.moduleTitle,
         directivesText: activeModuleObj?.content || foundStep.directivesText,
-        externalLinkUrl: foundStep.externalLinkUrl !== undefined ? foundStep.externalLinkUrl : (activeModuleObj?.url || ''),
+        externalLinkUrl: currentExternalLink,
         delayMinutesBeforeQuiz: foundStep.delayMinutesBeforeQuiz ?? activeQuizObj?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartName: foundStep.roleOnStartName || activeModuleObj?.roleEnCoursName || 'En cours',
         roleOnPassName: foundStep.roleOnPassName || activeModuleObj?.roleValidatedName || 'Validé',
@@ -117,7 +145,7 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         moduleId: selectedModuleTab,
         moduleTitle: activeModuleObj?.title || 'Module de formation',
         directivesText: activeModuleObj?.content || 'Lisez les consignes avant de lancer le quiz.',
-        externalLinkUrl: activeModuleObj?.url || '',
+        externalLinkUrl: currentExternalLink,
         delayMinutesBeforeQuiz: activeQuizObj?.delayMinutesBeforeQuiz ?? 0,
         roleOnStartId: activeModuleObj?.roleEnCoursId || '',
         roleOnStartName: activeModuleObj?.roleEnCoursName || 'En cours',
@@ -337,11 +365,99 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     }
   };
 
-  const handleSaveMainConfig = (e: React.FormEvent) => {
+  const handleForceBotSync = async () => {
+    setIsSyncingWithBot(true);
+    try {
+      // 1. Save all current local modules to Firestore and server API
+      for (const mod of localModules) {
+        await firebaseSyncService.saveModule(mod);
+        await fetch(`/api/modules/${mod.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mod),
+        }).catch(() => {});
+      }
+      // 2. Save all quizzes to Firestore and server API
+      const allQuizzes = quizService.getQuizzes();
+      for (const q of allQuizzes) {
+        await firebaseSyncService.saveQuiz(q);
+        await fetch(`/api/quiz/${q.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(q),
+        }).catch(() => {});
+      }
+      // 3. Save onboarding config
+      await firebaseSyncService.saveOnboardingConfig(config);
+      await fetch('/api/onboarding/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      }).catch(() => {});
+
+      // 4. Force server & Discord bot refresh
+      const res = await fetch('/api/sync/refresh', { method: 'POST' });
+      const data = await res.json();
+      refreshModulesState();
+      onShowToast(
+        'Synchronisation Réussie ⚡',
+        `Bot Discord et Base de données synchronisés (${data.modulesCount || localModules.length} modules, ${data.quizzesCount || allQuizzes.length} quiz à jour) !`,
+        'success'
+      );
+    } catch (err: any) {
+      onShowToast('Erreur Synchronisation', err?.message || 'Impossible de synchroniser avec le serveur.', 'error');
+    } finally {
+      setIsSyncingWithBot(false);
+    }
+  };
+
+  const handleSaveMainConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    onboardingService.updateConfig(config);
-    firebaseSyncService.saveOnboardingConfig(config).catch(() => {});
-    onShowToast('Configuration Enregistrée 🚀', 'Toutes les modifications du parcours, des modules et des quiz ont été enregistrées sur le serveur.', 'success');
+    setIsSaving(true);
+    try {
+      onboardingService.updateConfig(config);
+      await firebaseSyncService.saveOnboardingConfig(config).catch(() => {});
+      await fetch('/api/onboarding/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      }).catch(() => {});
+
+      // Save all local modules
+      for (const mod of localModules) {
+        await firebaseSyncService.saveModule(mod).catch(() => {});
+        await fetch(`/api/modules/${mod.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mod),
+        }).catch(() => {});
+      }
+
+      // Save all quizzes
+      const allQuizzes = quizService.getQuizzes();
+      for (const q of allQuizzes) {
+        await firebaseSyncService.saveQuiz(q).catch(() => {});
+        await fetch(`/api/quiz/${q.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(q),
+        }).catch(() => {});
+      }
+
+      // Force server & bot refresh
+      await fetch('/api/sync/refresh', { method: 'POST' }).catch(() => {});
+
+      refreshModulesState();
+      onShowToast(
+        'Configuration Enregistrée 🚀',
+        'Toutes les modifications du parcours, des liens de cours et des quiz ont été enregistrées sur le serveur et le bot Discord.',
+        'success'
+      );
+    } catch (err: any) {
+      onShowToast('Erreur Enregistrement', err?.message || 'Une erreur est survenue lors de l\'enregistrement.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleUpdateStepConfig = (updatedStep: ModuleStepConfig) => {
@@ -395,6 +511,17 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
           >
             <Play className={`w-4 h-4 fill-slate-950 ${isLaunchingOnboarding ? 'animate-spin' : ''}`} />
             <span>{isLaunchingOnboarding ? 'Publication...' : '🚀 Lancer l\'Onboarding sur Discord'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleForceBotSync}
+            disabled={isSyncingWithBot}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all cursor-pointer"
+            title="Forcer la synchronisation immédiate de tous les modules, liens de formation et quiz avec le bot Discord"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncingWithBot ? 'animate-spin' : ''}`} />
+            <span>{isSyncingWithBot ? 'Synchronisation...' : '🔄 Synchroniser avec le Bot Discord'}</span>
           </button>
 
           <button
@@ -1363,10 +1490,11 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
         <div className="flex justify-end">
           <button
             type="submit"
-            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer"
+            disabled={isSaving}
+            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            <span>Enregistrer la Configuration globale</span>
+            <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>{isSaving ? 'Enregistrement & Synchronisation...' : 'Enregistrer la Configuration globale'}</span>
           </button>
         </div>
       </form>

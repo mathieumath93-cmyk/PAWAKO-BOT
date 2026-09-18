@@ -1,13 +1,14 @@
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { store, defaultModules, defaultQuizzes } from './store';
 import { TrainingModule, Quiz, Member, UsefulLink, OnboardingFlowConfig } from '../types';
 import { onboardingService } from './onboardingService';
 
 /**
- * FirebaseSyncService implementing a Stale-While-Revalidate (SWR) pattern.
+ * FirebaseSyncService implementing a Stale-While-Revalidate (SWR) pattern + Real-time Firestore Sync.
  * - Stale: Local store / localStorage data is returned immediately without UI blocking.
  * - Revalidate: Background non-blocking fetch from Firestore updates store & notifies subscribers.
+ * - Realtime: onSnapshot listeners push updates from Firestore to store in real time across browser & Discord bot.
  * - Deduplication: High-frequency triggers reuse the same inflight revalidation promise.
  */
 class FirebaseSyncService {
@@ -16,6 +17,7 @@ class FirebaseSyncService {
   private listeners: Array<() => void> = [];
   private workerInterval: ReturnType<typeof setInterval> | null = null;
   private lastWorkerRunAt: string | null = null;
+  private unsubscribers: Unsubscribe[] = [];
 
   /**
    * Helper to parse date strings into timestamps (ms)
@@ -260,8 +262,12 @@ class FirebaseSyncService {
   /**
    * Stale-While-Revalidate initialization & sync.
    * Immediately resolves with stale data while launching revalidation in background.
+   * Also activates real-time onSnapshot listeners for instantaneous updates.
    */
   public async initSync(): Promise<void> {
+    // Activate real-time Firestore listeners
+    this.initRealtimeListeners();
+
     // Return inflight promise if background revalidation is already running
     if (this.inFlightPromise) {
       return this.inFlightPromise;
@@ -274,6 +280,101 @@ class FirebaseSyncService {
 
     // Resolve immediately for SWR (non-blocking)
     return Promise.resolve();
+  }
+
+  /**
+   * Initialize realtime Firestore listeners to immediately sync data to in-memory store
+   * whenever modules, quizzes, or onboarding configurations are modified.
+   */
+  public initRealtimeListeners(): void {
+    if (this.unsubscribers.length > 0) return;
+
+    try {
+      // 1. Modules listener
+      const unsubMods = onSnapshot(
+        collection(db, 'modules'),
+        (snap) => {
+          if (!snap.empty) {
+            const loaded: TrainingModule[] = [];
+            snap.forEach((d) => loaded.push(d.data() as TrainingModule));
+            const existingIds = new Set(loaded.map((m) => m.id));
+            const missingDefaults = defaultModules.filter((defM) => !existingIds.has(defM.id));
+            const merged = [...loaded, ...missingDefaults].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            store.setModules(merged);
+            this.notify();
+          }
+        },
+        (err) => console.warn('⚠️ [onSnapshot Modules Warning]', err)
+      );
+      this.unsubscribers.push(unsubMods);
+
+      // 2. Quizzes listener
+      const unsubQuizzes = onSnapshot(
+        collection(db, 'quizzes'),
+        (snap) => {
+          if (!snap.empty) {
+            const loaded: Quiz[] = [];
+            snap.forEach((d) => loaded.push(d.data() as Quiz));
+            const existingQIds = new Set(loaded.map((q) => q.id));
+            const missingDefaults = defaultQuizzes.filter((defQ) => !existingQIds.has(defQ.id));
+            const merged = [...loaded, ...missingDefaults];
+            store.setQuizzes(merged);
+            this.notify();
+          }
+        },
+        (err) => console.warn('⚠️ [onSnapshot Quizzes Warning]', err)
+      );
+      this.unsubscribers.push(unsubQuizzes);
+
+      // 3. Onboarding Config listener
+      const unsubConfig = onSnapshot(
+        doc(db, 'systemConfig', 'onboardingFlowConfig'),
+        (snap) => {
+          if (snap.exists()) {
+            const cfg = snap.data() as OnboardingFlowConfig;
+            onboardingService.updateConfig(cfg);
+            this.notify();
+          }
+        },
+        (err) => console.warn('⚠️ [onSnapshot OnboardingConfig Warning]', err)
+      );
+      this.unsubscribers.push(unsubConfig);
+
+      // 4. Members listener
+      const unsubMembers = onSnapshot(
+        collection(db, 'members'),
+        (snap) => {
+          if (!snap.empty) {
+            const loaded: Member[] = [];
+            snap.forEach((d) => loaded.push(d.data() as Member));
+            store.setMembers(loaded);
+            this.notify();
+          }
+        },
+        (err) => console.warn('⚠️ [onSnapshot Members Warning]', err)
+      );
+      this.unsubscribers.push(unsubMembers);
+
+      // 5. Useful Links listener
+      const unsubLinks = onSnapshot(
+        collection(db, 'usefulLinks'),
+        (snap) => {
+          if (!snap.empty) {
+            const loaded: UsefulLink[] = [];
+            snap.forEach((d) => loaded.push(d.data() as UsefulLink));
+            loaded.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            store.setUsefulLinks(loaded);
+            this.notify();
+          }
+        },
+        (err) => console.warn('⚠️ [onSnapshot UsefulLinks Warning]', err)
+      );
+      this.unsubscribers.push(unsubLinks);
+
+      console.log('📡 [FirebaseSyncService] Realtime Firestore listeners successfully activated.');
+    } catch (err) {
+      console.warn('⚠️ [FirebaseSyncService] Could not initialize realtime listeners:', err);
+    }
   }
 
   /**

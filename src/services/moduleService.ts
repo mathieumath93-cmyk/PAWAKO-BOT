@@ -37,6 +37,13 @@ class ModuleService {
     firebaseSyncService.saveModule(newModule).catch((err) =>
       console.error('[ModuleService] Firebase saveModule failed:', err)
     );
+    if (typeof window !== 'undefined') {
+      fetch('/api/modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newModule),
+      }).catch((err) => console.warn('[ModuleService] API postModule warning:', err));
+    }
     return newModule;
   }
 
@@ -45,6 +52,13 @@ class ModuleService {
     firebaseSyncService.saveModule(updated).catch((err) =>
       console.error('[ModuleService] Firebase saveModule failed:', err)
     );
+    if (typeof window !== 'undefined') {
+      fetch(`/api/modules/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }).catch((err) => console.warn('[ModuleService] API putModule warning:', err));
+    }
     return updated;
   }
 
@@ -53,6 +67,11 @@ class ModuleService {
     firebaseSyncService.deleteModule(id).catch((err) =>
       console.error('[ModuleService] Firebase deleteModule failed:', err)
     );
+    if (typeof window !== 'undefined') {
+      fetch(`/api/modules/${id}`, { method: 'DELETE' }).catch((err) =>
+        console.warn('[ModuleService] API deleteModule warning:', err)
+      );
+    }
   }
 
   public duplicateModule(id: string): TrainingModule {

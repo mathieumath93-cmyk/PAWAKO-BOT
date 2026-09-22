@@ -290,8 +290,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-slate-200 truncate">{log.action}</div>
-                      <div className="text-[11px] text-slate-400 truncate">{log.details || log.executorName}</div>
-                      <div className="text-[9px] text-slate-500 font-mono mt-0.5">{log.timestamp}</div>
+                      <div className="text-[11px] text-slate-400 truncate">{log.details || log.targetMemberName || log.adminName}</div>
+                      <div className="text-[9px] text-slate-500 font-mono mt-0.5">{log.date}</div>
                     </div>
                   </div>
                 ))}

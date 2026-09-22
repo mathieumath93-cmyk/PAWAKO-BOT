@@ -42,6 +42,7 @@ import {
   CURATED_PLAYLISTS,
   FRENCH_CHATTING_TIPS,
 } from '../services/communityService';
+import { aiVoiceAnnouncerService } from '../services/aiVoiceAnnouncerService';
 
 export interface ActiveQuizSession {
   attemptId: string;
@@ -497,6 +498,14 @@ export class PawakoBotRunner {
       // Handle message commands (!help, !profile, !formation, !ticket)
       this.client.on('messageCreate', async (message: Message) => {
         if (message.author.bot) return;
+
+        // Anti-Spam Voice Mod check (triggers vocal warning if flood/spam detected)
+        try {
+          const wasSpam = await aiVoiceAnnouncerService.checkAndHandleMessageSpam(message);
+          if (wasSpam) return;
+        } catch (spamErr) {
+          console.warn('[Anti-Spam Check Error]', spamErr);
+        }
 
         // Register candidate activity timestamp
         store.touchMemberActivity(message.author.id);
@@ -4933,88 +4942,140 @@ export class PawakoBotRunner {
     }
   }
 
+  private isFollowupsRunning: boolean = false;
+  private lastMorningCronRunDate: string = '';
+  private cronIntervalId: NodeJS.Timeout | null = null;
+
   /**
    * Triggers personalized follow-up messages for candidates depending on their module progress.
    * Completely isolated from simulation channels.
+   * Includes strict single-send idempotency per calendar day to avoid double-sending.
    */
   public async triggerPersonalizedCandidateFollowups(): Promise<number> {
     if (!this.client || !this.isConnected) return 0;
+    if (this.isFollowupsRunning) {
+      console.log('[Followup] Relances déjà en cours d\'exécution, skip duplicate call.');
+      return 0;
+    }
+    this.isFollowupsRunning = true;
+
     let count = 0;
-    const modules = store.getModules();
-    const members = store.getMembers().filter((m) => m.isActive !== false && m.candidateState !== 'formation_terminee');
+    try {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const modules = store.getModules();
+      const members = store.getMembers().filter((m) => m.isActive !== false && m.candidateState !== 'formation_terminee');
 
-    for (const m of members) {
-      if (!m.personalChannelId) continue;
+      for (const m of members) {
+        if (!m.personalChannelId) continue;
 
-      // Do NOT send follow-up inside an active simulation session!
-      if (this.activeAnthonySessions.has(m.personalChannelId)) continue;
+        // Idempotency: avoid sending duplicate follow-ups to the same candidate on the same calendar day
+        if (m.lastFollowupDate === todayKey) {
+          continue;
+        }
 
-      try {
-        const channel = await this.client.channels.fetch(m.personalChannelId).catch(() => null);
-        if (!channel || !('send' in channel)) continue;
+        // Do NOT send follow-up inside an active simulation session!
+        if (this.activeAnthonySessions.has(m.personalChannelId)) continue;
 
-        const followupMsg = await communityService.generatePersonalizedFollowup(m, modules);
-        if (followupMsg) {
-          const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
-          const isSimu = m.candidateState === 'simulation' || validatedCount >= (modules.length || 5);
-          const isOnboarding = m.candidateState === 'nouveau' || m.candidateState === 'bienvenue_validee' || (!m.candidateState && validatedCount === 0);
+        try {
+          const channel = await this.client.channels.fetch(m.personalChannelId).catch(() => null);
+          if (!channel || !('send' in channel)) continue;
 
-          const components: any[] = [];
-          const isAiActive = aiKnowledgeService.isSimulationEnabled();
-          if (isSimu) {
-            // STRICT RULE: Only display "Lancer la simulation" button when AI is active!
-            if (isAiActive) {
+          const followupMsg = await communityService.generatePersonalizedFollowup(m, modules);
+          if (followupMsg) {
+            const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+            const isSimu = m.candidateState === 'simulation' || validatedCount >= (modules.length || 5);
+            const isOnboarding = m.candidateState === 'nouveau' || m.candidateState === 'bienvenue_validee' || (!m.candidateState && validatedCount === 0);
+
+            const components: any[] = [];
+            const isAiActive = aiKnowledgeService.isSimulationEnabled();
+            if (isSimu) {
+              // STRICT RULE: Only display "Lancer la simulation" button when AI is active!
+              if (isAiActive) {
+                components.push(
+                  new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    new ButtonBuilder()
+                      .setCustomId(`launch_simu_${m.id}`)
+                      .setLabel('🚀 Lancer la Simulation IA')
+                      .setStyle(ButtonStyle.Primary)
+                  )
+                );
+              }
+            } else if (isOnboarding) {
               components.push(
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                   new ButtonBuilder()
-                    .setCustomId(`launch_simu_${m.id}`)
-                    .setLabel('🚀 Lancer la Simulation IA')
-                    .setStyle(ButtonStyle.Primary)
+                    .setCustomId('start_training_module_1')
+                    .setLabel('🚀 Commencer la formation')
+                    .setStyle(ButtonStyle.Success)
                 )
               );
             }
-          } else if (isOnboarding) {
-            components.push(
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setCustomId('start_training_module_1')
-                  .setLabel('🚀 Commencer la formation')
-                  .setStyle(ButtonStyle.Success)
+
+            const followupEmbed = new EmbedBuilder()
+              .setTitle(
+                isSimu
+                  ? isAiActive
+                    ? '🎭 SIMULATION IA — SUIVI PAWAKO'
+                    : '🎭 SIMULATION PRATIQUE — SUIVI PAWAKO'
+                  : '🎯 SUIVI DE PARCOURS & FORMATION PAWAKO'
               )
-            );
+              .setDescription(followupMsg)
+              .setColor(isSimu ? 0x3b82f6 : 0x8b5cf6)
+              .setFooter({ text: 'PAWAKO FORMATION • Suivi Personnalisé' })
+              .setTimestamp();
+
+            await (channel as any).send({ embeds: [followupEmbed], components }).catch(() => {});
+            
+            // Mark lastFollowupDate to prevent any subsequent double-send today
+            m.lastFollowupDate = todayKey;
+            store.updateMember(m);
+            count++;
+
+            // AI Voice Announcer: If enabled, also generate and attach morning coaching audio capsule
+            if (aiVoiceAnnouncerService.getSettings().morningRelanceVoiceEnabled) {
+              try {
+                const voiceCapsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
+                  type: 'morning_relance',
+                  targetName: m.username,
+                  voiceName: 'Kore',
+                });
+                await aiVoiceAnnouncerService.sendToTextChannel(channel as TextChannel, voiceCapsule, 'Coach Vocal Pawako');
+              } catch (vErr) {
+                console.warn(`[Vocal Relance Error for ${m.username}]`, vErr);
+              }
+            }
           }
-
-          const followupEmbed = new EmbedBuilder()
-            .setTitle(
-              isSimu
-                ? isAiActive
-                  ? '🎭 SIMULATION IA — SUIVI PAWAKO'
-                  : '🎭 SIMULATION PRATIQUE — SUIVI PAWAKO'
-                : '🎯 SUIVI DE PARCOURS & FORMATION PAWAKO'
-            )
-            .setDescription(followupMsg)
-            .setColor(isSimu ? 0x3b82f6 : 0x8b5cf6)
-            .setFooter({ text: 'PAWAKO FORMATION • Suivi Personnalisé' })
-            .setTimestamp();
-
-          await (channel as any).send({ embeds: [followupEmbed], components }).catch(() => {});
-          count++;
+        } catch (err) {
+          console.warn(`[Followup Error for ${m.username}]`, err);
         }
-      } catch (err) {
-        console.warn(`[Followup Error for ${m.username}]`, err);
       }
+    } finally {
+      this.isFollowupsRunning = false;
     }
 
     return count;
   }
 
   /**
-   * Posts the daily Community Manager boost (Tip + French rule + Music + Mini-Game) to general/discussion channel.
+   * Posts the daily Community Manager boost (Tip + French rule + Music + Mini-Game) to target or general channel.
    */
-  public async publishDailyCommunityPost(targetChan?: TextChannel): Promise<boolean> {
+  public async publishDailyCommunityPost(targetChan?: TextChannel | string): Promise<boolean> {
     if (!this.client || !this.isConnected) return false;
 
-    let channel = targetChan;
+    let channel: TextChannel | null = null;
+    if (typeof targetChan === 'string' && targetChan.trim()) {
+      try {
+        const fetched = await this.client.channels.fetch(targetChan.trim());
+        if (fetched && fetched.isTextBased() && 'send' in fetched) {
+          channel = fetched as TextChannel;
+        }
+      } catch (err) {
+        console.warn(`[CM Post] Impossible de récupérer le salon ID ${targetChan}:`, err);
+      }
+    } else if (targetChan && typeof targetChan !== 'string') {
+      channel = targetChan;
+    }
+
     if (!channel) {
       const guild = this.client.guilds.cache.first();
       if (guild) {
@@ -5112,10 +5173,15 @@ export class PawakoBotRunner {
   private lastInactivityCheckTimestamp: number = 0;
 
   /**
-   * Periodic runner checking 18h00 HF schedule for stats dispatch
+   * Periodic runner checking scheduled tasks (11h00 morning followups + CM post, 18h00 stats dispatch)
    */
   private startScheduledCron() {
-    setInterval(() => {
+    if (this.cronIntervalId) {
+      clearInterval(this.cronIntervalId);
+      this.cronIntervalId = null;
+    }
+
+    this.cronIntervalId = setInterval(() => {
       if (!this.isConnected || !this.client) return;
 
       try {
@@ -5125,16 +5191,25 @@ export class PawakoBotRunner {
         const hours = pDate.getHours();
         const minutes = pDate.getMinutes();
 
+        const year = pDate.getFullYear();
+        const month = String(pDate.getMonth() + 1).padStart(2, '0');
+        const day = String(pDate.getDate()).padStart(2, '0');
+        const todayKey = `${year}-${month}-${day}`;
+
         // Check 14h00 HF simulation reminders
         this.checkSimulationReminders();
 
         // Check 10h00 HF tools formation reminders
         this.checkToolsFormationReminders();
 
-        // Check 11h00 HF daily community post and personalized candidate followups
+        // Check 11h00 HF daily community post and personalized candidate followups (EXACTLY ONCE PER DAY)
         if (hours === 11 && minutes === 0) {
-          this.triggerPersonalizedCandidateFollowups().catch(() => {});
-          this.publishDailyCommunityPost().catch(() => {});
+          if (this.lastMorningCronRunDate !== todayKey) {
+            this.lastMorningCronRunDate = todayKey;
+            console.log(`[PAWAKO BOT] Lancement automatique 11h00 HF (${todayKey}) : Relances matinales & Post CM...`);
+            this.triggerPersonalizedCandidateFollowups().catch((err) => console.warn('[Morning Followups Error]', err));
+            this.publishDailyCommunityPost().catch((err) => console.warn('[Daily Community Post Error]', err));
+          }
         }
 
         // Update leaderboard in #classement-formation
@@ -5142,11 +5217,6 @@ export class PawakoBotRunner {
 
         // Check if 18h00 HF
         if (hours === 18 && minutes === 0) {
-          const year = pDate.getFullYear();
-          const month = String(pDate.getMonth() + 1).padStart(2, '0');
-          const day = String(pDate.getDate()).padStart(2, '0');
-          const todayKey = `${year}-${month}-${day}`;
-
           if (this.lastCronRunDate !== todayKey) {
             this.lastCronRunDate = todayKey;
             const dayOfWeek = pDate.getDay(); // 5 = Friday

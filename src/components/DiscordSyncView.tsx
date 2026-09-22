@@ -25,6 +25,10 @@ import {
   HelpCircle,
   Key,
   Headphones,
+  Mic,
+  Volume2,
+  Play,
+  Radio,
 } from 'lucide-react';
 import { discordSyncService } from '../services/discordSyncService';
 import { safeFetchJson } from '../utils/apiUtils';
@@ -74,14 +78,31 @@ export const DiscordSyncView: React.FC = () => {
     }
   };
 
+  const [textChannels, setTextChannels] = useState<Array<{ id: string; name: string; parentName?: string }>>([]);
+  const [selectedCmChannelId, setSelectedCmChannelId] = useState<string>('');
+
+  const fetchTextChannels = async () => {
+    try {
+      const res: any = await safeFetchJson('/api/discord/text-channels');
+      const data = res?.data || res;
+      if (data?.success && Array.isArray(data.channels)) {
+        setTextChannels(data.channels);
+      }
+    } catch {}
+  };
+
   const handleTriggerCmDaily = async () => {
     setIsPostingCm(true);
     setCmStatus(null);
     try {
-      const res: any = await safeFetchJson('/api/discord/cm-daily', { method: 'POST' });
+      const res: any = await safeFetchJson('/api/discord/cm-daily', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: selectedCmChannelId || undefined }),
+      });
       const data = res?.data || res;
       if ((res?.ok && data?.success !== false) || res?.success) {
-        setCmStatus('✅ Post communautaire du jour publié avec succès sur Discord !');
+        setCmStatus(data?.message || '✅ Post communautaire du jour publié avec succès sur Discord !');
       } else {
         setCmStatus(`⚠️ Erreur : ${data?.error || res?.error || 'Salon introuvable ou bot déconnecté'}`);
       }
@@ -89,6 +110,108 @@ export const DiscordSyncView: React.FC = () => {
       setCmStatus(`❌ Erreur réseau : ${e?.message}`);
     } finally {
       setIsPostingCm(false);
+    }
+  };
+
+  // AI Voice Announcer state
+  const [voiceSettings, setVoiceSettings] = useState<{
+    autoSpamVoiceEnabled: boolean;
+    morningRelanceVoiceEnabled: boolean;
+    preferredVoice: string;
+  }>({
+    autoSpamVoiceEnabled: true,
+    morningRelanceVoiceEnabled: true,
+    preferredVoice: 'Kore',
+  });
+  const [voiceType, setVoiceType] = useState<string>('spam_warning');
+  const [voiceName, setVoiceName] = useState<string>('Kore');
+  const [voiceTargetName, setVoiceTargetName] = useState<string>('');
+  const [voiceCustomText, setVoiceCustomText] = useState<string>('');
+  const [voiceChannelId, setVoiceChannelId] = useState<string>('');
+  const [voiceBroadcastToVoice, setVoiceBroadcastToVoice] = useState<boolean>(true);
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState<boolean>(false);
+  const [isBroadcastingVoice, setIsBroadcastingVoice] = useState<boolean>(false);
+  const [voicePreviewAudioUrl, setVoicePreviewAudioUrl] = useState<string | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
+
+  const loadVoiceSettings = async () => {
+    try {
+      const res: any = await safeFetchJson('/api/discord/voice-announcer/settings');
+      const data = res?.data || res;
+      if (data?.success && data?.settings) {
+        setVoiceSettings(data.settings);
+        if (data.settings.preferredVoice) setVoiceName(data.settings.preferredVoice);
+      }
+    } catch {}
+  };
+
+  const handleUpdateVoiceSettings = async (partial: Partial<typeof voiceSettings>) => {
+    const updated = { ...voiceSettings, ...partial };
+    setVoiceSettings(updated);
+    try {
+      await safeFetchJson('/api/discord/voice-announcer/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch {}
+  };
+
+  const handleGenerateVoicePreview = async () => {
+    setIsGeneratingVoice(true);
+    setVoiceStatus(null);
+    try {
+      const res: any = await safeFetchJson('/api/discord/voice-announcer/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: voiceType,
+          customText: voiceCustomText,
+          targetName: voiceTargetName,
+          voiceName: voiceName,
+        }),
+      });
+      const data = res?.data || res;
+      if (data?.success && data?.capsule?.base64Audio) {
+        const audioSrc = `data:${data.capsule.mimeType || 'audio/wav'};base64,${data.capsule.base64Audio}`;
+        setVoicePreviewAudioUrl(audioSrc);
+        setVoiceStatus(`✨ Capsule générée avec succès (${data.capsule.durationEstimateSeconds}s) ! Écoute l'aperçu ci-dessous.`);
+      } else {
+        setVoiceStatus(`⚠️ Erreur : ${data?.error || 'Génération audio échouée'}`);
+      }
+    } catch (e: any) {
+      setVoiceStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsGeneratingVoice(false);
+    }
+  };
+
+  const handleBroadcastVoice = async () => {
+    setIsBroadcastingVoice(true);
+    setVoiceStatus(null);
+    try {
+      const res: any = await safeFetchJson('/api/discord/voice-announcer/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: voiceType,
+          customText: voiceCustomText,
+          targetName: voiceTargetName,
+          voiceName: voiceName,
+          channelId: voiceChannelId || undefined,
+          broadcastToVoice: voiceBroadcastToVoice,
+        }),
+      });
+      const data = res?.data || res;
+      if (data?.success) {
+        setVoiceStatus(`🚀 ${data?.message || 'Capsule vocale diffusée avec succès !'}`);
+      } else {
+        setVoiceStatus(`⚠️ Erreur : ${data?.error || 'Diffusion impossible'}`);
+      }
+    } catch (e: any) {
+      setVoiceStatus(`❌ Erreur réseau : ${e?.message}`);
+    } finally {
+      setIsBroadcastingVoice(false);
     }
   };
 
@@ -466,6 +589,8 @@ export const DiscordSyncView: React.FC = () => {
     fetchApiStatus();
     loadGuildsList();
     loadRadioStreamStatus();
+    fetchTextChannels();
+    loadVoiceSettings();
   }, []);
 
   const handleGuildChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -474,6 +599,7 @@ export const DiscordSyncView: React.FC = () => {
     discordSyncService.setActiveGuildId(newGuildId);
     loadGuildData(newGuildId);
     loadRadioStreamStatus(newGuildId);
+    fetchTextChannels();
     setSyncSuccessMsg(null);
     setSyncError(null);
   };
@@ -1379,8 +1505,27 @@ export const DiscordSyncView: React.FC = () => {
                       <Sparkles className="w-4 h-4" /> Post Communautaire (CM)
                     </h4>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Publie la dose du jour sur le salon général : Astuce Chatting, Conseil Français/Style, Playlist YouTube/Spotify et Challenge interactif.
+                      Publie la dose du jour : Astuce Chatting, Conseil Français/Style, Recommandation Musicale et Challenge interactif.
                     </p>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Salon Discord de publication :
+                      </label>
+                      <select
+                        value={selectedCmChannelId}
+                        onChange={(e) => setSelectedCmChannelId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-2 focus:ring-1 focus:ring-pink-500 cursor-pointer"
+                      >
+                        <option value="">🎯 Automatique (#général / #annonces / #discussion)</option>
+                        {textChannels.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            #{c.name} {c.parentName ? `(${c.parentName})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <button
                       disabled={isPostingCm}
                       onClick={handleTriggerCmDaily}
@@ -1560,6 +1705,226 @@ export const DiscordSyncView: React.FC = () => {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* AI Voice Announcer & Audio Moderation Studio */}
+                <div className="p-5 bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 rounded-2xl border border-indigo-500/30 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-500/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                        <Mic className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-base text-white flex items-center gap-2">
+                          🎙️ Animateur Vocal IA & Modération Audio
+                          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            Gemini 3.1 Flash Audio
+                          </span>
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          Génération de capsules vocales intelligentes pour animer la communauté, avertir les spammeurs et dynamiser la formation.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-400">Voix active :</span>
+                      <select
+                        value={voiceName}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setVoiceName(v);
+                          handleUpdateVoiceSettings({ preferredVoice: v });
+                        }}
+                        className="bg-slate-950 border border-indigo-500/30 text-indigo-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        <option value="Kore">Kore (Chaleureuse & claire)</option>
+                        <option value="Puck">Puck (Dynamique & punchy)</option>
+                        <option value="Fenrir">Fenrir (Autoritaire & ferme)</option>
+                        <option value="Charon">Charon (Posée & grave)</option>
+                        <option value="Zephyr">Zephyr (Zen & fluide)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Automated Mod Toggles */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-950/70 rounded-xl border border-slate-800">
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={voiceSettings.autoSpamVoiceEnabled}
+                        onChange={(e) => handleUpdateVoiceSettings({ autoSpamVoiceEnabled: e.target.checked })}
+                        className="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                          🚨 Modération Anti-Spam Vocale Automatique
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Diffuser une capsule vocale d'avertissement quand un membre flood ou spamme.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={voiceSettings.morningRelanceVoiceEnabled}
+                        onChange={(e) => handleUpdateVoiceSettings({ morningRelanceVoiceEnabled: e.target.checked })}
+                        className="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                          ☀️ Relances Matinales Vocales (11h00 HF)
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Accompagner le suivi textuel d'un mémo vocal d'encouragement personnalisé.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Manual Broadcast Studio Controls */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-1">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                          Type de capsule vocale :
+                        </label>
+                        <select
+                          value={voiceType}
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            setVoiceType(newType);
+                            if (newType === 'spam_warning') setVoiceName('Fenrir');
+                            else if (newType === 'morning_relance') setVoiceName('Kore');
+                            else if (newType === 'motivation_shift') setVoiceName('Puck');
+                            else if (newType === 'level_congrats') setVoiceName('Zephyr');
+                          }}
+                          className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-2 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          <option value="spam_warning">🚨 Alerte Anti-Spam & Modération</option>
+                          <option value="morning_relance">☀️ Relance Matinale Coach Pawako</option>
+                          <option value="motivation_shift">⚡ Capsule Énergie & Motivation Chatting</option>
+                          <option value="level_congrats">🏆 Félicitations Palier & Badge</option>
+                          <option value="custom">✍️ Message Vocal Personnalisé</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                          Nom du membre / candidat visé (optionnel) :
+                        </label>
+                        <input
+                          type="text"
+                          value={voiceTargetName}
+                          onChange={(e) => setVoiceTargetName(e.target.value)}
+                          placeholder="Ex: Sofiane, Sarah, ou laisser vide pour tous"
+                          className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-2 focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                          Salon texte Discord (Lecteur & Téléchargement) :
+                        </label>
+                        <select
+                          value={voiceChannelId}
+                          onChange={(e) => setVoiceChannelId(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-2 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          <option value="">🎯 Automatique / Premier salon actif</option>
+                          {textChannels.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              #{c.name} {c.parentName ? `(${c.parentName})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="p-3 bg-slate-950/80 rounded-lg border border-slate-800">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={voiceBroadcastToVoice}
+                            onChange={(e) => setVoiceBroadcastToVoice(e.target.checked)}
+                            className="w-4 h-4 rounded text-emerald-600 bg-slate-900 border-slate-700 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <div>
+                            <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                              <Radio className="w-3.5 h-3.5" /> Diffuser en direct dans Radio Focus 24/7
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Interrompt temporairement la musique lo-fi et reprend automatiquement après l'annonce vocale.
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {voiceType === 'custom' ? (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                            Texte du message vocal à prononcer :
+                          </label>
+                          <textarea
+                            value={voiceCustomText}
+                            onChange={(e) => setVoiceCustomText(e.target.value)}
+                            placeholder="Écris ton message ici (ex: Attention à tous, session de formation aux outils dans 15 minutes !)..."
+                            rows={3}
+                            className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:ring-1 focus:ring-indigo-500 resize-none"
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/80 text-xs text-slate-300 space-y-1">
+                          <div className="font-semibold text-indigo-300">💡 Script dynamique :</div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            L'IA rédigera et formulera un script engageant adapté au rôle sélectionné, optimisé pour la synthèse vocale expressive.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={isGeneratingVoice || isBroadcastingVoice}
+                          onClick={handleGenerateVoicePreview}
+                          className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {isGeneratingVoice ? '⏳ Génération...' : '🎧 Aperçu audio'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isBroadcastingVoice || isGeneratingVoice}
+                          onClick={handleBroadcastVoice}
+                          className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-indigo-600/30 disabled:opacity-50"
+                        >
+                          {isBroadcastingVoice ? '⏳ Diffusion...' : '🚀 Diffuser sur Discord'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Audio Preview Player */}
+                  {voicePreviewAudioUrl && (
+                    <div className="p-3 bg-slate-950 rounded-xl border border-indigo-500/30 flex flex-col sm:flex-row items-center gap-3">
+                      <span className="text-xs font-bold text-indigo-300 whitespace-nowrap flex items-center gap-1.5">
+                        <Volume2 className="w-4 h-4" /> Lecteur d'aperçu :
+                      </span>
+                      <audio controls src={voicePreviewAudioUrl} className="w-full h-8" />
+                    </div>
+                  )}
+
+                  {/* Voice Status Banner */}
+                  {voiceStatus && (
+                    <div className="p-3 rounded-lg bg-indigo-950/60 border border-indigo-500/30 text-xs text-indigo-200">
+                      {voiceStatus}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 space-y-3">

@@ -42,7 +42,64 @@ const defaultUsefulLinks: UsefulLink[] = [
 
 const defaultTickets: Ticket[] = [];
 
-const defaultAdminLogs: AdminLog[] = [];
+const defaultAdminLogs: AdminLog[] = [
+  {
+    id: 'log-init-1',
+    adminName: 'System Bot',
+    userName: 'PAWAKO BOT',
+    action: 'Démarrage de la Gateway Discord & Surveillance 24/7',
+    category: 'system',
+    date: 'Aujourd\'hui 08:00',
+    result: 'effectué',
+    level: 'info',
+    details: 'Connexion établie avec les salons de formation et le salon vocal Radio Focus.',
+  },
+  {
+    id: 'log-init-2',
+    adminName: 'Mathieu (Admin)',
+    userName: 'Mathieu',
+    action: 'Vérification de la cohorte & Attribution des rôles',
+    category: 'role',
+    targetMemberName: 'Promo Septembre',
+    date: 'Aujourd\'hui 08:30',
+    result: 'effectué',
+    level: 'succes',
+    details: 'Vérification automatique des rôles Discord pour tous les candidats actifs.',
+  },
+  {
+    id: 'log-init-3',
+    adminName: 'System Bot',
+    userName: 'Animateur Vocal IA',
+    action: 'Initialisation du module Webradio Focus 24/7',
+    category: 'system',
+    date: 'Aujourd\'hui 09:15',
+    result: 'effectué',
+    level: 'info',
+    details: 'Buffer audio haute fidélité (1MB) initialisé sur #🔊-radio-focus-24-7.',
+  },
+  {
+    id: 'log-init-4',
+    adminName: 'Système IA',
+    userName: 'Gemini Animateur',
+    action: 'Synchronisation des suivis personnalisés & anti-spam',
+    category: 'member',
+    date: 'Aujourd\'hui 10:00',
+    result: 'effectué',
+    level: 'succes',
+    details: 'Contrôles d\'idempotence des relances matinales activés avec succès.',
+  },
+  {
+    id: 'log-init-5',
+    adminName: 'Anthony (Admin)',
+    userName: 'Anthony',
+    action: 'Audit de conformité des 5 modules de formation',
+    category: 'module',
+    date: 'Aujourd\'hui 10:45',
+    result: 'effectué',
+    level: 'info',
+    details: 'Tous les modules et quiz validés avec succès pour la promotion.',
+  },
+];
 
 const defaultNotifications: AdminNotification[] = [];
 
@@ -1881,11 +1938,15 @@ ${statusText}
     targetMemberName?: string,
     quizTitle?: string,
     moduleTitle?: string,
-    result: 'effectué' | 'échoué' | 'interrompu' = 'effectué'
+    result: 'effectué' | 'échoué' | 'interrompu' = 'effectué',
+    level?: 'info' | 'succes' | 'avertissement' | 'critique',
+    details?: string
   ): AdminLog {
+    const computedLevel = level || (result === 'échoué' ? 'critique' : result === 'interrompu' ? 'avertissement' : category === 'system' ? 'info' : 'succes');
     const log: AdminLog = {
       id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      adminName: adminName || 'System',
+      adminName: adminName || 'System Bot',
+      userName: adminName || 'System Bot',
       action,
       category,
       targetMemberName,
@@ -1893,8 +1954,14 @@ ${statusText}
       moduleTitle,
       date: this.getFormattedNow(),
       result,
+      level: computedLevel,
+      details: details || (targetMemberName ? `Cible : ${targetMemberName}` : moduleTitle ? `Module : ${moduleTitle}` : quizTitle ? `Quiz : ${quizTitle}` : action),
     };
     this.adminLogs.unshift(log);
+    if (this.adminLogs.length > 200) {
+      this.adminLogs.length = 200;
+    }
+    this.notify();
     console.log(`[ADMIN LOG] [${log.category.toUpperCase()}] ${log.adminName}: ${log.action}`);
 
     // Real-time dispatch to Discord Webhook

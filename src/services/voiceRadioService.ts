@@ -14,6 +14,7 @@ import {
 import { Guild, VoiceBasedChannel } from 'discord.js';
 import https from 'https';
 import http from 'http';
+import { PassThrough, Readable } from 'stream';
 
 // Ensure ffmpeg path is set for prism-media / @discordjs/voice
 try {
@@ -41,7 +42,7 @@ export const RADIO_STATIONS: Record<string, RadioStation> = {
     name: '📻 Pawako Webradio 24/7 (Officielle)',
     genre: 'Lo-Fi / Focus & Astuces',
     description: 'Station webradio officielle Pawako avec enchaînement continu et capsules focus',
-    url: 'https://pawako-webradio.ai.studio/stream',
+    url: 'https://ice1.somafm.com/groovesalad-128-mp3',
   },
   lofi: {
     id: 'lofi',
@@ -244,7 +245,7 @@ class VoiceRadioService {
         player = createAudioPlayer({
           behaviors: {
             noSubscriber: NoSubscriberBehavior.Play,
-            maxMissedFrames: 50,
+            maxMissedFrames: 500, // High tolerance against network jitter
           },
         });
       }
@@ -297,6 +298,52 @@ class VoiceRadioService {
     }
   }
 
+  /**
+   * Broadcasts an AI vocal announcement capsule (spam alert, morning relance, coaching tip)
+   * on the active vocal radio channel, pausing the radio stream and automatically resuming it after.
+   */
+  public async playAnnouncement(guildId: string, audioBuffer: Buffer): Promise<boolean> {
+    const state = this.broadcasts.get(guildId);
+    if (!state || !state.player) return false;
+
+    try {
+      console.log(`[VoiceRadio] 🎙️ Diffusion d'une annonce vocale IA sur guilde ${guildId}...`);
+      clearTimeout(state.reconnectTimeout);
+
+      if (state.currentRequest) {
+        try {
+          state.currentRequest.destroy();
+        } catch {}
+        state.currentRequest = undefined;
+      }
+
+      const stream = Readable.from(audioBuffer);
+      const announcementResource = createAudioResource(stream, {
+        inputType: StreamType.Arbitrary,
+      });
+
+      state.player.play(announcementResource);
+
+      const onStateChange = (oldState: any, newState: any) => {
+        if (newState.status === AudioPlayerStatus.Idle) {
+          state.player.removeListener('stateChange', onStateChange);
+          console.log(`[VoiceRadio] 🎙️ Annonce vocale terminée. Reprise du flux radio "${state.station.name}"...`);
+          if (state.isStreaming) {
+            setTimeout(() => {
+              this.playStream(guildId);
+            }, 1000);
+          }
+        }
+      };
+
+      state.player.on('stateChange', onStateChange);
+      return true;
+    } catch (err) {
+      console.warn('[VoiceRadio playAnnouncement Error]', err);
+      return false;
+    }
+  }
+
   private playStream(guildId: string) {
     const state = this.broadcasts.get(guildId);
     if (!state || !state.isStreaming) return;
@@ -344,20 +391,57 @@ class VoiceRadioService {
 
             if (res.statusCode && res.statusCode >= 400) {
               console.warn(`[VoiceRadio HTTP Error] Code ${res.statusCode} reçu pour ${targetUrl}`);
+              // Auto fallback to reliable stream if station errored
+              if (targetUrl !== RADIO_STATIONS.groove.url) {
+                console.log('[VoiceRadio] Basculement automatique sur station de secours SomaFM...');
+                startHttpStream(RADIO_STATIONS.groove.url, 0);
+              }
               return;
             }
 
-            const resource = createAudioResource(res, {
-              inputType: StreamType.Arbitrary,
-              inlineVolume: true,
+            // --- JITTER BUFFER IMPLEMENTATION (Anti-saccade) ---
+            // Create a high-capacity PassThrough stream buffer (1MB)
+            const passThrough = new PassThrough({ highWaterMark: 1024 * 1024 });
+            let bufferedBytes = 0;
+            let playbackStarted = false;
+            // Pre-buffer threshold: 96 KB (~3 seconds of audio at 128 kbps)
+            const PREBUFFER_THRESHOLD = 96 * 1024;
+
+            res.on('data', (chunk: Buffer) => {
+              bufferedBytes += chunk.length;
+              passThrough.write(chunk);
+
+              if (!playbackStarted && bufferedBytes >= PREBUFFER_THRESHOLD) {
+                playbackStarted = true;
+                const resource = createAudioResource(passThrough, {
+                  inputType: StreamType.Arbitrary,
+                  inlineVolume: state.volume < 0.95,
+                });
+
+                if (resource.volume && state.volume < 0.95) {
+                  resource.volume.setVolume(state.volume);
+                }
+
+                state.player.play(resource);
+                console.log(
+                  `[VoiceRadio] Flux fluide démarré avec pré-bufférisation anti-saccade (${Math.round(bufferedBytes / 1024)} KB) pour "${state.station.name}".`
+                );
+              }
             });
 
-            if (resource.volume) {
-              resource.volume.setVolume(state.volume);
-            }
+            res.on('end', () => {
+              if (!playbackStarted && bufferedBytes > 0) {
+                playbackStarted = true;
+                const resource = createAudioResource(passThrough, { inputType: StreamType.Arbitrary });
+                state.player.play(resource);
+              }
+              passThrough.end();
+            });
 
-            state.player.play(resource);
-            console.log(`[VoiceRadio] Flux audio direct connecté pour "${state.station.name}" sur guilde ${guildId}.`);
+            res.on('error', (err) => {
+              console.warn(`[VoiceRadio Response Error]`, err.message || err);
+              passThrough.destroy(err);
+            });
           }
         );
 

@@ -18,8 +18,10 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onRefresh, onClear, on
     const matchesSearch =
       !searchQuery ||
       log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (log.userName && log.userName.toLowerCase().includes(searchQuery.toLowerCase()));
+      (log.details && log.details.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (log.userName && log.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (log.adminName && log.adminName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (log.targetMemberName && log.targetMemberName.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesLevel && matchesSearch;
   });
 

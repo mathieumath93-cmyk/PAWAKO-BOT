@@ -10,6 +10,7 @@ import { voiceRadioService, RADIO_STATIONS } from './src/services/voiceRadioServ
 import { discordService } from './src/services/discordService';
 import { memberService } from './src/services/memberService';
 import { onboardingService } from './src/services/onboardingService';
+import { aiVoiceAnnouncerService } from './src/services/aiVoiceAnnouncerService';
 
 const BOT_CONFIG_FILE = path.join(process.cwd(), 'data', 'bot_config.json');
 
@@ -1775,13 +1776,179 @@ async function startServer() {
     }
   });
 
-  // Trigger manual daily community post via CM bot
+  // Fetch available Discord text channels (for CM post destination selection & moderation)
+  app.get('/api/discord/text-channels', async (req: Request, res: Response) => {
+    try {
+      const client = pawakoBot.getClient();
+      if (!pawakoBot.getIsConnected() || !client) {
+        return res.json({ success: false, channels: [], message: 'Bot non connecté' });
+      }
+
+      const guild = client.guilds.cache.first();
+      if (!guild) {
+        return res.json({ success: false, channels: [], message: 'Aucun serveur trouvé' });
+      }
+
+      const channels: any[] = [];
+      guild.channels.cache.forEach((c) => {
+        if (c.isTextBased() && !c.isDMBased() && !c.isThread()) {
+          channels.push({
+            id: c.id,
+            name: c.name,
+            parentId: c.parentId,
+            parentName: c.parent ? c.parent.name : undefined,
+            position: c.position,
+          });
+        }
+      });
+
+      channels.sort((a, b) => a.name.localeCompare(b.name));
+      res.json({ success: true, channels, guildName: guild.name });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la récupération des salons', channels: [] });
+    }
+  });
+
+  // Trigger manual daily community post via CM bot with optional target channel
   app.post('/api/discord/cm-daily', async (req: Request, res: Response) => {
     try {
-      const ok = await pawakoBot.publishDailyCommunityPost();
-      res.json({ success: ok, message: ok ? 'Post communautaire publié !' : 'Salon non trouvé ou bot déconnecté.' });
+      const { channelId } = req.body || {};
+      const ok = await pawakoBot.publishDailyCommunityPost(channelId);
+      res.json({
+        success: ok,
+        message: ok
+          ? `Post communautaire publié avec succès${channelId ? ` dans le salon sélectionné` : ''} !`
+          : 'Salon non trouvé ou bot déconnecté.',
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la publication CM' });
+    }
+  });
+
+  // AI Voice Announcer: Get configuration & status
+  app.get('/api/discord/voice-announcer/settings', (req: Request, res: Response) => {
+    try {
+      const settings = aiVoiceAnnouncerService.getSettings();
+      res.json({
+        success: true,
+        settings,
+        presets: [
+          { type: 'spam_warning', label: '🚨 Alerte Anti-Spam Modération', defaultVoice: 'Fenrir' },
+          { type: 'morning_relance', label: '☀️ Relance Matinale Coach Pawako', defaultVoice: 'Kore' },
+          { type: 'motivation_shift', label: '⚡ Capsule Énergie & Motivation Chatting', defaultVoice: 'Puck' },
+          { type: 'level_congrats', label: '🏆 Félicitations Palier & Badge', defaultVoice: 'Zephyr' },
+          { type: 'custom', label: '🎙️ Message Vocal Personnalisé', defaultVoice: 'Kore' },
+        ],
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // AI Voice Announcer: Update configuration
+  app.post('/api/discord/voice-announcer/settings', (req: Request, res: Response) => {
+    try {
+      const { autoSpamVoiceEnabled, morningRelanceVoiceEnabled, preferredVoice } = req.body || {};
+      aiVoiceAnnouncerService.updateSettings({
+        autoSpamVoiceEnabled,
+        morningRelanceVoiceEnabled,
+        preferredVoice,
+      });
+      res.json({ success: true, settings: aiVoiceAnnouncerService.getSettings() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // AI Voice Announcer: Preview synthesis (generate audio)
+  app.post('/api/discord/voice-announcer/generate', async (req: Request, res: Response) => {
+    try {
+      const { type, customText, targetName, voiceName } = req.body || {};
+      const capsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
+        type: type || 'custom',
+        customText,
+        targetName,
+        voiceName,
+      });
+
+      res.json({
+        success: true,
+        capsule: {
+          id: capsule.id,
+          type: capsule.type,
+          title: capsule.title,
+          script: capsule.script,
+          voiceName: capsule.voiceName,
+          mimeType: capsule.mimeType,
+          durationEstimateSeconds: capsule.durationEstimateSeconds,
+          base64Audio: capsule.audioBuffer.toString('base64'),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur de génération vocale IA' });
+    }
+  });
+
+  // AI Voice Announcer: Broadcast to Discord text channel and/or live vocal radio
+  app.post('/api/discord/voice-announcer/broadcast', async (req: Request, res: Response) => {
+    try {
+      const { type, customText, targetName, voiceName, channelId, broadcastToVoice } = req.body || {};
+      const capsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
+        type: type || 'custom',
+        customText,
+        targetName,
+        voiceName,
+      });
+
+      let sentToText = false;
+      let sentToVoice = false;
+      const client = pawakoBot.getClient();
+
+      // 1. Text channel upload with player embed
+      if (client && channelId) {
+        try {
+          const fetchedChan = await client.channels.fetch(channelId);
+          if (fetchedChan && fetchedChan.isTextBased()) {
+            sentToText = await aiVoiceAnnouncerService.sendToTextChannel(
+              fetchedChan as any,
+              capsule,
+              'Animateur Vocal IA Pawako'
+            );
+          }
+        } catch (chanErr) {
+          console.warn('[Broadcast to text channel error]', chanErr);
+        }
+      }
+
+      // 2. Vocal channel broadcast (duck/pause radio, play speech, resume radio)
+      if (broadcastToVoice && client) {
+        const guild = client.guilds.cache.first();
+        if (guild) {
+          sentToVoice = await aiVoiceAnnouncerService.broadcastToVoiceChannel(guild.id, capsule.audioBuffer);
+        }
+      }
+
+      res.json({
+        success: sentToText || sentToVoice,
+        sentToText,
+        sentToVoice,
+        capsule: {
+          title: capsule.title,
+          script: capsule.script,
+          durationEstimateSeconds: capsule.durationEstimateSeconds,
+          voiceName: capsule.voiceName,
+        },
+        message:
+          sentToText && sentToVoice
+            ? 'Capsule vocale transmise dans le salon texte ET diffusée en direct dans la Radio Vocale !'
+            : sentToVoice
+            ? 'Capsule vocale diffusée en direct dans le salon vocal Radio Focus 24/7 !'
+            : sentToText
+            ? 'Capsule vocale envoyée avec lecteur audio dans le salon Discord sélectionné !'
+            : 'Capsule générée mais aucun canal cible joint.',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la diffusion de la capsule vocale' });
     }
   });
 

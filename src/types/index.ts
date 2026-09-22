@@ -214,6 +214,8 @@ export interface Member {
   inactivityWarningLevel?: 0 | 1 | 2 | 3;
   kickedAt?: string;
   kickedReason?: string;
+  lastFollowupDate?: string; // "YYYY-MM-DD" of last morning followup
+  lastVoiceFollowupSentAt?: string;
 }
 
 export interface TicketMessage {
@@ -253,6 +255,8 @@ export interface AdminLog {
   date: string; // "17/08/2026 14:35"
   result: 'effectué' | 'échoué' | 'interrompu';
   details?: string;
+  level?: 'info' | 'succes' | 'avertissement' | 'critique';
+  userName?: string;
 }
 
 export interface AdminNotification {

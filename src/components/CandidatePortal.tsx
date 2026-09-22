@@ -9,11 +9,14 @@ import {
   ShieldCheck,
   Lock,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Zap,
+  Trophy,
 } from 'lucide-react';
 import { Member, TrainingModule } from '../types';
 import { memberService } from '../services/memberService';
 import { moduleService } from '../services/moduleService';
+import { gamificationService } from '../services/gamificationService';
 
 interface CandidatePortalProps {
   allowCandidateSwitch?: boolean;
@@ -41,6 +44,10 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
   const totalModules = modules.length || 5;
   const progressPercent = Math.round((completedCount / totalModules) * 100);
   const isCompleted = completedCount >= totalModules || activeCand.candidateState === 'formation_terminee';
+
+  const xpBreakdown = gamificationService.calculateMemberXp(activeCand, modules);
+  const currentLevel = gamificationService.getLevelForXp(xpBreakdown.totalXp);
+  const badgesEarned = activeCand.badges || [];
 
   return (
     <div className="space-y-6 text-slate-100 font-sans">
@@ -93,13 +100,29 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
             </p>
           </div>
 
-          <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-center min-w-[180px]">
-            <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Avancement Global</div>
-            <div className="text-2xl font-black text-indigo-400">
-              {progressPercent}%
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-center min-w-[150px]">
+              <div className="text-xs text-slate-400 uppercase font-semibold mb-1 flex items-center justify-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Niveau & XP</span>
+              </div>
+              <div className="text-xl font-black text-amber-400 flex items-center justify-center gap-1.5">
+                <span>{currentLevel.badgeEmoji}</span>
+                <span>Niv. {currentLevel.level}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                {xpBreakdown.totalXp} XP • {badgesEarned.length} 🏅
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {completedCount} / {totalModules} modules validés
+
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-center min-w-[150px]">
+              <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Avancement Global</div>
+              <div className="text-2xl font-black text-indigo-400">
+                {progressPercent}%
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">
+                {completedCount} / {totalModules} modules validés
+              </div>
             </div>
           </div>
         </div>

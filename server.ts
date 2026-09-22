@@ -1185,6 +1185,21 @@ async function startServer() {
     }
   });
 
+  // Discord Leaderboard Sync Endpoint
+  app.post('/api/leaderboard/sync', async (req: Request, res: Response) => {
+    try {
+      const ok = await pawakoBot.updateLeaderboardChannel();
+      res.json({
+        success: ok,
+        message: ok
+          ? 'Classement officiel mis à jour avec succès dans le salon Discord ! 🏆'
+          : 'Le bot Discord n\'a pas pu poster dans le salon de classement. Vérifiez la connexion du bot.',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Erreur lors de la mise à jour du classement.' });
+    }
+  });
+
   app.post('/api/quiz/submit', (req: Request, res: Response) => {
     const { memberId, quizId, answers } = req.body;
     try {

@@ -208,6 +208,8 @@ export interface Member {
   whatsapp?: string;
   shift?: string;
   badges?: MemberBadge[];
+  xp?: number;
+  level?: number;
   lastActiveAtTimestamp?: number | null;
   inactivityWarningLevel?: 0 | 1 | 2 | 3;
   kickedAt?: string;
@@ -638,5 +640,56 @@ export interface SimulationAnalytics {
     maxPoints: number;
   }>;
   recentAttempts: SimulationAttempt[];
+}
+
+export interface ExperienceLevel {
+  level: number;
+  title: string;
+  minXp: number;
+  maxXp: number;
+  badgeEmoji: string;
+  color: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  description: string;
+  perks: string[];
+}
+
+export interface XpBreakdown {
+  modulesXp: number;
+  quizzesBonusXp: number;
+  simulationXp: number;
+  toolsFormationXp: number;
+  badgesXp: number;
+  bonusXp: number;
+  totalXp: number;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  member: Member;
+  xp: number;
+  level: ExperienceLevel;
+  xpProgressPercent: number;
+  xpToNextLevel: number;
+  xpInCurrentLevel: number;
+  xpRangeCurrentLevel: number;
+  modulesCompleted: number;
+  totalModules: number;
+  avgScore: number;
+  badgesCount: number;
+  breakdown: XpBreakdown;
+  isProductionReady: boolean;
+}
+
+export interface GamificationStats {
+  totalXpDistributed: number;
+  averageCandidateLevel: number;
+  totalBadgesUnlocked: number;
+  topCandidateName: string;
+  topCandidateXp: number;
+  totalCandidates: number;
+  productionReadyCount: number;
 }
 

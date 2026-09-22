@@ -40,7 +40,10 @@
         "email": { "type": "string" },
         "roles": { "type": "array" },
         "progress": { "type": "number" },
-        "status": { "type": "string" }
+        "status": { "type": "string" },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "badges": { "type": "array" }
       },
       "required": ["id", "name"]
     },

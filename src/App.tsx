@@ -14,6 +14,7 @@ import { AIKnowledgeConfigurator } from './components/AIKnowledgeConfigurator';
 import { AnnouncementsView } from './components/AnnouncementsView';
 import { BotTokenModal } from './components/BotTokenModal';
 import { CandidatePortal } from './components/CandidatePortal';
+import { GamificationView } from './components/GamificationView';
 
 import { serverService } from './services/serverService';
 import { moduleService } from './services/moduleService';
@@ -149,6 +150,10 @@ export function App() {
               onNavigate={setActiveTab}
               onCreateModuleClick={() => setActiveTab('onboarding')}
             />
+          )}
+
+          {activeTab === 'gamification' && (
+            <GamificationView onShowToast={showToast} />
           )}
 
           {activeTab === 'member-portal' && (

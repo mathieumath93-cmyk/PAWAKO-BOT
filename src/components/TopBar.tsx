@@ -42,7 +42,12 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const tabLabels: Record<string, string> = {
     overview: 'Candidats & Progression',
+    gamification: 'Gamification & Classements',
+    'member-portal': 'Espace Membre',
+    members: 'Gestion des Candidats',
+    announcements: 'Annonces Discord',
     onboarding: 'Parcours Onboarding & Rôles',
+    'ai-config': 'Configuration & Prompts IA',
     'discord-sync': 'Synchronisation Discord',
     logs: 'Journal & Audit',
     settings: 'Paramètres',

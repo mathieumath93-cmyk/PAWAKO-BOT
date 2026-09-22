@@ -19,6 +19,7 @@ import {
   Brain,
   Megaphone,
   GraduationCap,
+  Trophy,
 } from 'lucide-react';
 import { DiscordServer } from '../types';
 import { serverService } from '../services/serverService';
@@ -35,6 +36,7 @@ interface SidebarProps {
 
 export const navItems = [
   { id: 'overview', label: 'Dashboard & Bilan Global', icon: LayoutDashboard },
+  { id: 'gamification', label: 'Gamification & Classements', icon: Trophy },
   { id: 'member-portal', label: 'Espace Membre', icon: GraduationCap },
   { id: 'members', label: 'Gestion des Candidats', icon: Users },
   { id: 'announcements', label: 'Annonces Discord', icon: Megaphone },

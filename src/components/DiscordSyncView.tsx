@@ -117,14 +117,16 @@ export const DiscordSyncView: React.FC = () => {
   const [voiceSettings, setVoiceSettings] = useState<{
     autoSpamVoiceEnabled: boolean;
     morningRelanceVoiceEnabled: boolean;
+    engine: 'google_fr' | 'gemini';
     preferredVoice: string;
   }>({
     autoSpamVoiceEnabled: true,
     morningRelanceVoiceEnabled: true,
-    preferredVoice: 'Kore',
+    engine: 'google_fr',
+    preferredVoice: 'French_Natural',
   });
-  const [voiceType, setVoiceType] = useState<string>('spam_warning');
-  const [voiceName, setVoiceName] = useState<string>('Kore');
+  const [voiceType, setVoiceType] = useState<string>('custom');
+  const [voiceName, setVoiceName] = useState<string>('French_Natural');
   const [voiceTargetName, setVoiceTargetName] = useState<string>('');
   const [voiceCustomText, setVoiceCustomText] = useState<string>('');
   const [voiceChannelId, setVoiceChannelId] = useState<string>('');
@@ -169,13 +171,14 @@ export const DiscordSyncView: React.FC = () => {
           customText: voiceCustomText,
           targetName: voiceTargetName,
           voiceName: voiceName,
+          engine: voiceSettings.engine,
         }),
       });
       const data = res?.data || res;
       if (data?.success && data?.capsule?.base64Audio) {
-        const audioSrc = `data:${data.capsule.mimeType || 'audio/wav'};base64,${data.capsule.base64Audio}`;
+        const audioSrc = `data:${data.capsule.mimeType || 'audio/mpeg'};base64,${data.capsule.base64Audio}`;
         setVoicePreviewAudioUrl(audioSrc);
-        setVoiceStatus(`✨ Capsule générée avec succès (${data.capsule.durationEstimateSeconds}s) ! Écoute l'aperçu ci-dessous.`);
+        setVoiceStatus(`✨ Capsule vocale générée avec succès (${data.capsule.durationEstimateSeconds}s) ! Écoute l'aperçu ci-dessous.`);
       } else {
         setVoiceStatus(`⚠️ Erreur : ${data?.error || 'Génération audio échouée'}`);
       }
@@ -198,13 +201,14 @@ export const DiscordSyncView: React.FC = () => {
           customText: voiceCustomText,
           targetName: voiceTargetName,
           voiceName: voiceName,
+          engine: voiceSettings.engine,
           channelId: voiceChannelId || undefined,
           broadcastToVoice: voiceBroadcastToVoice,
         }),
       });
       const data = res?.data || res;
       if (data?.success) {
-        setVoiceStatus(`🚀 ${data?.message || 'Capsule vocale diffusée avec succès !'}`);
+        setVoiceStatus(`🚀 ${data?.message || 'Message vocal diffusé avec succès sur Discord !'}`);
       } else {
         setVoiceStatus(`⚠️ Erreur : ${data?.error || 'Diffusion impossible'}`);
       }
@@ -1727,23 +1731,43 @@ export const DiscordSyncView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-slate-400">Voix active :</span>
-                      <select
-                        value={voiceName}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setVoiceName(v);
-                          handleUpdateVoiceSettings({ preferredVoice: v });
-                        }}
-                        className="bg-slate-950 border border-indigo-500/30 text-indigo-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                      >
-                        <option value="Kore">Kore (Chaleureuse & claire)</option>
-                        <option value="Puck">Puck (Dynamique & punchy)</option>
-                        <option value="Fenrir">Fenrir (Autoritaire & ferme)</option>
-                        <option value="Charon">Charon (Posée & grave)</option>
-                        <option value="Zephyr">Zephyr (Zen & fluide)</option>
-                      </select>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-slate-400">Moteur vocal :</span>
+                        <select
+                          value={voiceSettings.engine || 'google_fr'}
+                          onChange={(e) => {
+                            const eng = e.target.value as 'google_fr' | 'gemini';
+                            handleUpdateVoiceSettings({ engine: eng });
+                            if (eng === 'google_fr') setVoiceName('French_Natural');
+                            else if (voiceName === 'French_Natural') setVoiceName('Puck');
+                          }}
+                          className="bg-slate-950 border border-indigo-500/30 text-indigo-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          <option value="google_fr">🇫🇷 Voix Française HD (100% fiable, 0 quota)</option>
+                          <option value="gemini">🤖 Gemini 3.1 Flash TTS (Google GenAI)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-slate-400">Voix :</span>
+                        <select
+                          value={voiceName}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setVoiceName(v);
+                            handleUpdateVoiceSettings({ preferredVoice: v });
+                          }}
+                          className="bg-slate-950 border border-indigo-500/30 text-indigo-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          <option value="French_Natural">🇫🇷 Voix Française Studio (Naturelle)</option>
+                          <option value="Kore">Kore (Chaleureuse & claire)</option>
+                          <option value="Puck">Puck (Dynamique & punchy)</option>
+                          <option value="Fenrir">Fenrir (Autoritaire & ferme)</option>
+                          <option value="Charon">Charon (Posée & grave)</option>
+                          <option value="Zephyr">Zephyr (Zen & fluide)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 

@@ -1484,6 +1484,32 @@ async function startServer() {
     res.json(m);
   });
 
+  // Candidate Private Channel Live Chat & Manual Reply Endpoints
+  app.get('/api/candidates/:id/channel/messages', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const limit = parseInt(req.query.limit as string) || 40;
+      const result = await pawakoBot.getCandidateMessages(id, limit);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, messages: [], error: err?.message || 'Erreur serveur' });
+    }
+  });
+
+  app.post('/api/candidates/:id/channel/messages', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+      if (!content || !content.trim()) {
+        return res.status(400).json({ success: false, error: 'Le contenu du message est requis' });
+      }
+      const result = await pawakoBot.sendCandidateMessage(id, content);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Échec de l\'envoi du message' });
+    }
+  });
+
   app.post('/api/members/:id/roles', async (req: Request, res: Response) => {
     try {
       const { roles } = req.body;
@@ -1848,10 +1874,11 @@ async function startServer() {
   // AI Voice Announcer: Update configuration
   app.post('/api/discord/voice-announcer/settings', (req: Request, res: Response) => {
     try {
-      const { autoSpamVoiceEnabled, morningRelanceVoiceEnabled, preferredVoice } = req.body || {};
+      const { autoSpamVoiceEnabled, morningRelanceVoiceEnabled, engine, preferredVoice } = req.body || {};
       aiVoiceAnnouncerService.updateSettings({
         autoSpamVoiceEnabled,
         morningRelanceVoiceEnabled,
+        engine,
         preferredVoice,
       });
       res.json({ success: true, settings: aiVoiceAnnouncerService.getSettings() });
@@ -1863,12 +1890,13 @@ async function startServer() {
   // AI Voice Announcer: Preview synthesis (generate audio)
   app.post('/api/discord/voice-announcer/generate', async (req: Request, res: Response) => {
     try {
-      const { type, customText, targetName, voiceName } = req.body || {};
+      const { type, customText, targetName, voiceName, engine } = req.body || {};
       const capsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
         type: type || 'custom',
         customText,
         targetName,
         voiceName,
+        engine,
       });
 
       res.json({
@@ -1892,12 +1920,13 @@ async function startServer() {
   // AI Voice Announcer: Broadcast to Discord text channel and/or live vocal radio
   app.post('/api/discord/voice-announcer/broadcast', async (req: Request, res: Response) => {
     try {
-      const { type, customText, targetName, voiceName, channelId, broadcastToVoice } = req.body || {};
+      const { type, customText, targetName, voiceName, engine, channelId, broadcastToVoice } = req.body || {};
       const capsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
         type: type || 'custom',
         customText,
         targetName,
         voiceName,
+        engine,
       });
 
       let sentToText = false;

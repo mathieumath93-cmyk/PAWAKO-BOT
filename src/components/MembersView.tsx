@@ -29,6 +29,7 @@ import {
   ExternalLink,
   BookOpen,
   ArrowRight,
+  Bot,
 } from 'lucide-react';
 import { Member } from '../types';
 import { memberService } from '../services/memberService';
@@ -36,6 +37,7 @@ import { discordService } from '../services/discordService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
 import { store } from '../services/store';
 import { SYSTEM_BADGES, badgeService } from '../services/badgeService';
+import { CandidateChannelChatModal } from './CandidateChannelChatModal';
 
 interface MembersViewProps {
   members: Member[];
@@ -56,6 +58,9 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
   // Selected candidate drawer / modal
   const [selectedCandidate, setSelectedCandidate] = useState<Member | null>(null);
+
+  // Candidate Private Channel Live Chat Modal
+  const [chatChannelMember, setChatChannelMember] = useState<Member | null>(null);
 
   // Discord DM Modal
   const [dmTarget, setDmTarget] = useState<Member | null>(null);

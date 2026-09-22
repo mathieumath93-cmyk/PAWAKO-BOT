@@ -3844,6 +3844,151 @@ export class PawakoBotRunner {
   }
 
   /**
+   * Récupère l'historique récent des messages du salon privé de formation d'un candidat
+   */
+  public async getCandidateMessages(
+    memberId: string,
+    limit: number = 40
+  ): Promise<{
+    success: boolean;
+    channelId?: string;
+    channelName?: string;
+    messages: Array<{
+      id: string;
+      author: {
+        id: string;
+        username: string;
+        avatarUrl?: string;
+        isBot: boolean;
+      };
+      content: string;
+      createdAt: string;
+      attachments: Array<{ id: string; name: string; url: string; contentType?: string }>;
+    }>;
+    error?: string;
+  }> {
+    if (!this.client || !this.client.isReady()) {
+      return { success: false, messages: [], error: 'Bot Discord non connecté' };
+    }
+    const member = store.getMember(memberId);
+    if (!member) {
+      return { success: false, messages: [], error: 'Candidat introuvable' };
+    }
+
+    const channel = await this.getCandidateChannel(member, false);
+    if (!channel) {
+      return {
+        success: true,
+        channelId: undefined,
+        channelName: undefined,
+        messages: [],
+        error: 'Aucun salon Discord actif détecté pour ce candidat. Il sera créé lors du premier envoi.',
+      };
+    }
+
+    try {
+      const fetched = await channel.messages.fetch({ limit: Math.min(limit, 50) });
+      const messages = Array.from(fetched.values())
+        .reverse()
+        .map((m) => ({
+          id: m.id,
+          author: {
+            id: m.author.id,
+            username: m.author.displayName || m.author.username,
+            avatarUrl: m.author.displayAvatarURL(),
+            isBot: m.author.bot,
+          },
+          content: m.content || (m.embeds && m.embeds.length > 0 ? (m.embeds[0].description || m.embeds[0].title || '[Embed]') : ''),
+          createdAt: m.createdAt.toISOString(),
+          attachments: Array.from(m.attachments.values()).map((a) => ({
+            id: a.id,
+            name: a.name,
+            url: a.url,
+            contentType: a.contentType || undefined,
+          })),
+        }));
+
+      return {
+        success: true,
+        channelId: channel.id,
+        channelName: channel.name,
+        messages,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        messages: [],
+        error: err?.message || 'Erreur lors de la lecture des messages Discord',
+      };
+    }
+  }
+
+  /**
+   * Envoie manuellement un message dans le salon privé du candidat en tant que Pawako Formation
+   */
+  public async sendCandidateMessage(
+    memberId: string,
+    content: string
+  ): Promise<{
+    success: boolean;
+    channelId?: string;
+    channelName?: string;
+    message?: any;
+    error?: string;
+  }> {
+    if (!this.client || !this.client.isReady()) {
+      return { success: false, error: 'Bot Discord non connecté' };
+    }
+    const member = store.getMember(memberId);
+    if (!member) {
+      return { success: false, error: 'Candidat introuvable' };
+    }
+
+    if (!content || !content.trim()) {
+      return { success: false, error: 'Le message ne peut pas être vide' };
+    }
+
+    const channel = await this.getCandidateChannel(member, true);
+    if (!channel) {
+      return { success: false, error: 'Impossible d\'accéder ou de créer le salon privé du candidat' };
+    }
+
+    try {
+      const sent = await channel.send({ content: content.trim() });
+
+      store.addLog({
+        adminName: 'Staff Pawako',
+        userName: member.username,
+        action: `Réponse manuelle dans #${channel.name}`,
+        category: 'discord',
+        result: 'effectué',
+        level: 'info',
+        details: content.trim().slice(0, 160),
+      });
+
+      return {
+        success: true,
+        channelId: channel.id,
+        channelName: channel.name,
+        message: {
+          id: sent.id,
+          author: {
+            id: sent.author.id,
+            username: sent.author.displayName || sent.author.username,
+            avatarUrl: sent.author.displayAvatarURL(),
+            isBot: sent.author.bot,
+          },
+          content: sent.content,
+          createdAt: sent.createdAt.toISOString(),
+          attachments: [],
+        },
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Échec de l\'envoi sur Discord' };
+    }
+  }
+
+  /**
    * Helper to fetch or auto-create a staff-only channel on Discord with permission overwrites
    */
   public async getOrCreateStaffOnlyChannel(

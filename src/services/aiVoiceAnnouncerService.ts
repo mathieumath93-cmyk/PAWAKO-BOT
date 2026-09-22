@@ -1,15 +1,18 @@
 import { GoogleGenAI, Modality } from '@google/genai';
-import { TextChannel, AttachmentBuilder, EmbedBuilder, Message } from 'discord.js';
+import { TextChannel, AttachmentBuilder, Message } from 'discord.js';
+import https from 'https';
 import { voiceRadioService } from './voiceRadioService';
 import { store } from './store';
 
 export type VoiceCapsuleType = 'spam_warning' | 'morning_relance' | 'motivation_shift' | 'level_congrats' | 'custom';
+export type VoiceEngineType = 'google_fr' | 'gemini';
 
 export interface VoiceCapsuleConfig {
   type: VoiceCapsuleType;
   customText?: string;
   targetName?: string;
-  voiceName?: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr';
+  voiceName?: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' | 'French_Natural';
+  engine?: VoiceEngineType;
   channelId?: string;
   broadcastToVoice?: boolean;
 }
@@ -27,10 +30,65 @@ export interface GeneratedVoiceCapsule {
 }
 
 /**
+ * Fetches high-quality natural French speech MP3 audio from the Google TTS engine
+ * Splits text into natural sentence fragments to prevent length cutoff
+ */
+async function fetchGoogleSpeechMp3(text: string, lang = 'fr'): Promise<Buffer> {
+  const clean = text.replace(/[\r\n]+/g, ' ').trim();
+  const words = clean.split(/\s+/);
+  const chunks: string[] = [];
+  let currentChunk = '';
+
+  for (const word of words) {
+    if ((currentChunk + ' ' + word).trim().length > 160) {
+      if (currentChunk.trim()) chunks.push(currentChunk.trim());
+      currentChunk = word;
+    } else {
+      currentChunk = (currentChunk + ' ' + word).trim();
+    }
+  }
+  if (currentChunk.trim()) chunks.push(currentChunk.trim());
+  if (chunks.length === 0) chunks.push(clean || 'Bonjour');
+
+  const buffers: Buffer[] = [];
+
+  for (const chunk of chunks) {
+    const buf = await new Promise<Buffer>((resolve, reject) => {
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+      const req = https.get(
+        url,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            Accept: '*/*',
+          },
+          timeout: 10000,
+        },
+        (res) => {
+          if (res.statusCode && res.statusCode >= 400) {
+            return reject(new Error(`TTS Service HTTP ${res.statusCode}`));
+          }
+          const data: Buffer[] = [];
+          res.on('data', (d) => data.push(d));
+          res.on('end', () => resolve(Buffer.concat(data)));
+        }
+      );
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('TTS timeout'));
+      });
+    });
+    buffers.push(buf);
+  }
+
+  return Buffer.concat(buffers);
+}
+
+/**
  * Wraps raw 16-bit Mono PCM buffer (24000Hz) into a valid RIFF/WAVE file container.
  */
 function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
-  // Check if buffer is already a valid WAV file (starts with 'RIFF')
   if (pcmBuffer.length >= 4 && pcmBuffer.toString('ascii', 0, 4) === 'RIFF') {
     return pcmBuffer;
   }
@@ -44,8 +102,8 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPe
   header.writeUInt32LE(36 + dataSize, 4);
   header.write('WAVE', 8);
   header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16); // SubChunk1Size (16 for PCM)
-  header.writeUInt16LE(1, 20); // AudioFormat (1 for PCM)
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
   header.writeUInt16LE(numChannels, 22);
   header.writeUInt32LE(sampleRate, 24);
   header.writeUInt32LE(byteRate, 28);
@@ -58,7 +116,7 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPe
 }
 
 /**
- * Generates a clean synthetic WAV beep/melodic chime tone if no API key is set
+ * Generates a clean synthetic WAV melodic chime tone as an emergency fallback
  */
 function generateSyntheticAlertWav(durationSeconds = 2.5, frequency = 440, sampleRate = 24000): Buffer {
   const numSamples = Math.floor(sampleRate * durationSeconds);
@@ -66,7 +124,6 @@ function generateSyntheticAlertWav(durationSeconds = 2.5, frequency = 440, sampl
 
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
-    // Harmonic pleasant chime envelope
     const envelope = Math.exp(-3 * t);
     const sample = Math.sin(2 * Math.PI * frequency * t) * envelope * 0.5 +
                    Math.sin(2 * Math.PI * (frequency * 1.5) * t) * envelope * 0.25;
@@ -80,7 +137,8 @@ function generateSyntheticAlertWav(durationSeconds = 2.5, frequency = 440, sampl
 class AiVoiceAnnouncerService {
   private autoSpamVoiceEnabled = true;
   private morningRelanceVoiceEnabled = true;
-  private preferredVoice: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' = 'Kore';
+  private engine: VoiceEngineType = 'google_fr'; // Default to ultra-reliable natural French voice
+  private preferredVoice: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' | 'French_Natural' = 'French_Natural';
 
   // Anti-spam tracker (userId -> Array of timestamps)
   private userMessageHistory = new Map<string, { timestamps: number[]; lastContent: string }>();
@@ -92,6 +150,7 @@ class AiVoiceAnnouncerService {
     return {
       autoSpamVoiceEnabled: this.autoSpamVoiceEnabled,
       morningRelanceVoiceEnabled: this.morningRelanceVoiceEnabled,
+      engine: this.engine,
       preferredVoice: this.preferredVoice,
     };
   }
@@ -99,17 +158,19 @@ class AiVoiceAnnouncerService {
   public updateSettings(settings: {
     autoSpamVoiceEnabled?: boolean;
     morningRelanceVoiceEnabled?: boolean;
-    preferredVoice?: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr';
+    engine?: VoiceEngineType;
+    preferredVoice?: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' | 'French_Natural';
   }) {
     if (settings.autoSpamVoiceEnabled !== undefined) this.autoSpamVoiceEnabled = settings.autoSpamVoiceEnabled;
     if (settings.morningRelanceVoiceEnabled !== undefined) this.morningRelanceVoiceEnabled = settings.morningRelanceVoiceEnabled;
+    if (settings.engine) this.engine = settings.engine;
     if (settings.preferredVoice) this.preferredVoice = settings.preferredVoice;
   }
 
   /**
    * Generates natural French speech scripts based on action type
    */
-  public getPresetScript(type: VoiceCapsuleType, targetName?: string): { title: string; script: string; defaultVoice: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' } {
+  public getPresetScript(type: VoiceCapsuleType, targetName?: string): { title: string; script: string; defaultVoice: any } {
     const name = targetName || 'candidat';
     switch (type) {
       case 'spam_warning':
@@ -122,19 +183,19 @@ class AiVoiceAnnouncerService {
         return {
           title: '☀️ Relance Matinale Coach Pawako',
           script: `Bonjour ${name} ! C'est ton coach vocal Pawako. N'oublie pas de valider ton module du jour et de te concentrer sur tes relances. La régularité bat le talent ! Bon courage pour ta journée.`,
-          defaultVoice: 'Kore',
+          defaultVoice: 'French_Natural',
         };
       case 'motivation_shift':
         return {
           title: '⚡ Capsule Énergie & Motivation Chatting',
           script: `Flash motivation Pawako ! Les équipes au top gardent une cadence constante et des messages soignés. Appliquez les bonnes méthodes, soyez réactifs et dépassez vos objectifs aujourd'hui !`,
-          defaultVoice: 'Puck',
+          defaultVoice: 'French_Natural',
         };
       case 'level_congrats':
         return {
           title: '🏆 Félicitations Palier & Badge Obtenu',
           script: `Bravo ${name} pour ton nouveau palier franchi ! Tes efforts et ton sérieux portent leurs fruits. Continue sur cette excellente lancée !`,
-          defaultVoice: 'Zephyr',
+          defaultVoice: 'French_Natural',
         };
       case 'custom':
       default:
@@ -147,22 +208,27 @@ class AiVoiceAnnouncerService {
   }
 
   /**
-   * Generates a voice capsule using Gemini TTS (model: gemini-3.1-flash-tts-preview)
+   * Generates a voice capsule using the reliable French voice engine with Gemini TTS support & automatic quota fallback
    */
   public async generateVoiceCapsule(config: VoiceCapsuleConfig): Promise<GeneratedVoiceCapsule> {
     const preset = this.getPresetScript(config.type, config.targetName);
     const script = config.customText && config.customText.trim().length > 0
       ? config.customText.trim()
       : preset.script;
-    const voiceName = config.voiceName || preset.defaultVoice || this.preferredVoice;
+    const requestedVoice = config.voiceName || preset.defaultVoice || this.preferredVoice;
+    const engine = config.engine || this.engine;
 
     let audioBuffer: Buffer | null = null;
-    const apiKey = process.env.GEMINI_API_KEY;
+    let mimeType = 'audio/mpeg';
 
-    if (apiKey) {
+    // 1. Try Gemini TTS if specifically selected and API key is present
+    if (engine === 'gemini' && process.env.GEMINI_API_KEY) {
       try {
-        console.log(`[AiVoice] Synthèse vocale Gemini TTS via model 'gemini-3.1-flash-tts-preview' (Voix: ${voiceName})...`);
-        const ai = new GoogleGenAI({ apiKey });
+        const geminiVoice = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'].includes(requestedVoice)
+          ? requestedVoice
+          : 'Puck';
+        console.log(`[AiVoice] Synthèse vocale Gemini TTS via model 'gemini-3.1-flash-tts-preview' (Voix: ${geminiVoice})...`);
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const response = await ai.models.generateContent({
           model: 'gemini-3.1-flash-tts-preview',
           contents: [{ parts: [{ text: script }] }],
@@ -170,7 +236,7 @@ class AiVoiceAnnouncerService {
             responseModalities: [Modality.AUDIO],
             speechConfig: {
               voiceConfig: {
-                prebuiltVoiceConfig: { voiceName },
+                prebuiltVoiceConfig: { voiceName: geminiVoice as any },
               },
             },
           },
@@ -180,31 +246,45 @@ class AiVoiceAnnouncerService {
         if (base64Audio) {
           const rawBuf = Buffer.from(base64Audio, 'base64');
           audioBuffer = pcmToWav(rawBuf, 24000);
-          console.log(`[AiVoice] Capsule audio générée avec succès (${audioBuffer.length} bytes).`);
+          mimeType = 'audio/wav';
+          console.log(`[AiVoice] Gemini TTS généré avec succès (${audioBuffer.length} bytes).`);
         }
       } catch (err: any) {
-        console.warn('[AiVoice TTS Error, using synthetic audio fallback]', err?.message || err);
+        console.warn('[AiVoice Gemini TTS quota/erreur, basculement automatique sur la Voix Française Naturelle]', err?.message || err);
       }
     }
 
+    // 2. High-Quality Natural French Neural TTS (Zero quota, speaks actual French, instant & reliable)
     if (!audioBuffer) {
-      // Fallback synthetic wave tone with speech marker
-      console.log('[AiVoice] Utilisation du synthétiseur audio alternatif Pawako.');
+      try {
+        console.log(`[AiVoice] Synthèse vocale Voix Française Naturelle pour: "${script.substring(0, 45)}..."`);
+        audioBuffer = await fetchGoogleSpeechMp3(script, 'fr');
+        mimeType = 'audio/mpeg';
+        console.log(`[AiVoice] Voix Française générée avec succès (${audioBuffer.length} bytes).`);
+      } catch (err: any) {
+        console.warn('[AiVoice French Voice error]', err?.message || err);
+      }
+    }
+
+    // 3. Fallback tone only if everything failed (network completely disconnected)
+    if (!audioBuffer) {
+      console.log('[AiVoice] Utilisation du carillon de secours.');
       const frequency = config.type === 'spam_warning' ? 320 : 520;
       audioBuffer = generateSyntheticAlertWav(3.0, frequency, 24000);
+      mimeType = 'audio/wav';
     }
 
     // Estimate duration based on French speech rate (~15 characters per second)
-    const durationEstimateSeconds = Math.max(3, Math.round(script.length / 15));
+    const durationEstimateSeconds = Math.max(2, Math.round(script.length / 14));
 
     return {
       id: `voice-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       type: config.type,
       title: preset.title,
       script,
-      voiceName,
+      voiceName: requestedVoice,
       audioBuffer,
-      mimeType: 'audio/wav',
+      mimeType,
       durationEstimateSeconds,
       timestamp: new Date().toISOString(),
     };
@@ -218,47 +298,40 @@ class AiVoiceAnnouncerService {
   }
 
   /**
-   * Posts the audio capsule as an interactive voice message with player embed into a Discord text channel.
+   * Posts the audio capsule cleanly to Discord without bulky technical embeds or clutter
    */
   public async sendToTextChannel(
     channel: TextChannel,
     capsule: GeneratedVoiceCapsule,
-    authorName: string = 'Pawako AI Voice Coach'
+    authorName: string = 'Pawako Formation'
   ): Promise<boolean> {
     try {
+      const ext = capsule.mimeType.includes('wav') ? 'wav' : 'mp3';
       const attachment = new AttachmentBuilder(capsule.audioBuffer, {
-        name: `capsule-vocale-pawako-${capsule.type}.wav`,
+        name: `message-vocal-pawako.${ext}`,
         description: capsule.script,
       });
 
-      const colorMap: Record<VoiceCapsuleType, number> = {
-        spam_warning: 0xef4444,
-        morning_relance: 0x8b5cf6,
-        motivation_shift: 0xf59e0b,
-        level_congrats: 0x10b981,
-        custom: 0x3b82f6,
-      };
-
-      const embed = new EmbedBuilder()
-        .setTitle(capsule.title)
-        .setDescription(`🎙️ **Transcription Vocale :**\n> *"${capsule.script}"*`)
-        .setColor(colorMap[capsule.type] || 0x6366f1)
-        .addFields(
-          { name: '🗣️ Voix IA', value: `\`${capsule.voiceName}\``, inline: true },
-          { name: '⏱️ Durée Estimée', value: `\`~${capsule.durationEstimateSeconds}s\``, inline: true },
-          { name: '📻 Format', value: '`WAV HD (24kHz)`', inline: true }
-        )
-        .setFooter({ text: `${authorName} • Animateur Vocal IA Intégré` })
-        .setTimestamp();
+      // Sleek, minimal and authentic Discord message (no cluttered tables or redundant specs)
+      let prefix = '🎙️ **Message vocal de la formation**';
+      if (capsule.type === 'spam_warning') {
+        prefix = '🚨 **Avertissement Modération Vocale**';
+      } else if (capsule.type === 'morning_relance') {
+        prefix = '☀️ **Relance Matinale Coach**';
+      } else if (capsule.type === 'motivation_shift') {
+        prefix = '⚡ **Capsule Motivation & Énergie**';
+      } else if (capsule.type === 'level_congrats') {
+        prefix = '🏆 **Félicitations Palier**';
+      }
 
       await channel.send({
-        embeds: [embed],
+        content: `${prefix} :\n> *« ${capsule.script} »*`,
         files: [attachment],
       });
 
       store.addLog(
         'Animateur Vocal IA',
-        `Capsule vocale diffusée [${capsule.type}] dans #${channel.name} (${capsule.voiceName}, ~${capsule.durationEstimateSeconds}s)`,
+        `Message vocal envoyé dans #${channel.name}`,
         'system',
         'info'
       );
@@ -341,3 +414,4 @@ class AiVoiceAnnouncerService {
 }
 
 export const aiVoiceAnnouncerService = new AiVoiceAnnouncerService();
+

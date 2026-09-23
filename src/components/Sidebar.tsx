@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard,
+  Radio,
   BookOpen,
   HelpCircle,
   Users,
@@ -36,6 +37,7 @@ interface SidebarProps {
 
 export const navItems = [
   { id: 'overview', label: 'Dashboard & Bilan Global', icon: LayoutDashboard },
+  { id: 'live-salons', label: 'Salons en Direct', icon: Radio, badge: 'LIVE' },
   { id: 'gamification', label: 'Gamification & Classements', icon: Trophy },
   { id: 'member-portal', label: 'Espace Membre', icon: GraduationCap },
   { id: 'members', label: 'Gestion des Candidats', icon: Users },
@@ -207,8 +209,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
-              <span>{item.label}</span>
+              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+              <span className="flex-1 text-left truncate">{item.label}</span>
+              {(item as any).badge && (
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 tracking-wider animate-pulse">
+                  {(item as any).badge}
+                </span>
+              )}
             </button>
           );
         })}

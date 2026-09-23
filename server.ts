@@ -1554,6 +1554,80 @@ async function startServer() {
     }
   });
 
+  // Real-Time Server-Sent Events (SSE) Stream for Live Discord Salons & Chat
+  const liveSseClients = new Set<Response>();
+
+  pawakoBot.onLiveMessage((msg) => {
+    const payload = `data: ${JSON.stringify({ type: 'message', message: msg })}\n\n`;
+    for (const client of liveSseClients) {
+      try {
+        client.write(payload);
+      } catch (err) {
+        liveSseClients.delete(client);
+      }
+    }
+  });
+
+  app.get('/api/discord/live-stream', (req: Request, res: Response) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+    });
+    res.write('data: {"type":"connected"}\n\n');
+
+    liveSseClients.add(res);
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(':\n\n');
+      } catch {
+        clearInterval(heartbeat);
+        liveSseClients.delete(res);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      liveSseClients.delete(res);
+    });
+  });
+
+  // Salons Overview & Channel Live Messages Endpoints
+  app.get('/api/channels/live-list', async (req: Request, res: Response) => {
+    try {
+      const result = await pawakoBot.getLiveChannelsOverview();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, channels: [], error: err?.message || 'Erreur serveur' });
+    }
+  });
+
+  app.get('/api/channels/:id/messages', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const result = await pawakoBot.getChannelMessages(id, limit);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, messages: [], error: err?.message || 'Erreur serveur' });
+    }
+  });
+
+  app.post('/api/channels/:id/messages', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+      if (!content || !content.trim()) {
+        return res.status(400).json({ success: false, error: 'Le contenu du message est requis' });
+      }
+      const result = await pawakoBot.sendToChannel(id, content);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Échec de l\'envoi' });
+    }
+  });
+
   app.post('/api/members/:id/roles', async (req: Request, res: Response) => {
     try {
       const { roles } = req.body;

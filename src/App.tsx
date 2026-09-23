@@ -15,6 +15,7 @@ import { AnnouncementsView } from './components/AnnouncementsView';
 import { BotTokenModal } from './components/BotTokenModal';
 import { CandidatePortal } from './components/CandidatePortal';
 import { GamificationView } from './components/GamificationView';
+import { LiveChannelsMonitorView } from './components/LiveChannelsMonitorView';
 
 import { serverService } from './services/serverService';
 import { moduleService } from './services/moduleService';
@@ -143,7 +144,16 @@ export function App() {
         />
 
         {/* View Content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+        <main className={`flex-1 ${activeTab === 'live-salons' ? 'p-0 w-full' : 'p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6'}`}>
+          {activeTab === 'live-salons' && (
+            <LiveChannelsMonitorView
+              onShowToast={showToast}
+              onSelectMember={(m) => {
+                setActiveTab('members');
+              }}
+            />
+          )}
+
           {activeTab === 'overview' && (
             <OverviewView
               logs={logs}

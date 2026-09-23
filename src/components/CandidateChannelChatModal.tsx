@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Member } from '../types';
+import { liveChannelService } from '../services/liveChannelService';
 
 interface CandidateMessage {
   id: string;
@@ -105,9 +106,27 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
 
   useEffect(() => {
     loadMessages();
-    const interval = setInterval(() => loadMessages(false), 8000);
-    return () => clearInterval(interval);
-  }, [member.id]);
+    const interval = setInterval(() => loadMessages(false), 15000);
+
+    const unsubscribe = liveChannelService.subscribe((newMsg) => {
+      const isForThisCandidate =
+        (channelId && newMsg.channelId === channelId) ||
+        (newMsg.candidateId && newMsg.candidateId === member.id) ||
+        (member.discordId && newMsg.author?.id === member.discordId);
+
+      if (isForThisCandidate) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg as any];
+        });
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [member.id, channelId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

@@ -400,6 +400,73 @@ export class PawakoBotRunner {
   private stoppedSimulationChannels = new Set<string>();
   private userClickTracker = new Map<string, { count: number; lastClickTime: number }>();
   private cooldownClickTracker = new Map<string, { count: number; cooldownUntil: number }>();
+  private liveMessageListeners: Set<(msg: any) => void> = new Set();
+
+  public onLiveMessage(callback: (msg: any) => void): () => void {
+    this.liveMessageListeners.add(callback);
+    return () => {
+      this.liveMessageListeners.delete(callback);
+    };
+  }
+
+  public notifyLiveMessage(msg: any) {
+    for (const listener of this.liveMessageListeners) {
+      try {
+        listener(msg);
+      } catch (e) {
+        console.error('[LiveMessageListener error]', e);
+      }
+    }
+  }
+
+  public broadcastLiveDiscordMessage(message: Message) {
+    if (!message) return;
+    try {
+      const authorName = message.member?.displayName || message.author?.displayName || message.author?.username || 'Utilisateur';
+      const channelName = 'name' in message.channel ? (message.channel as any).name : 'inconnu';
+
+      let candidate: any = undefined;
+      const allMembers = store.getMembers();
+      candidate = allMembers.find((m) =>
+        m.personalChannelId === message.channelId ||
+        (m.discordId && message.author.id === m.discordId) ||
+        (channelName && channelName.includes(m.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 12)))
+      );
+
+      const liveMsg = {
+        id: message.id,
+        channelId: message.channelId,
+        channelName,
+        guildId: message.guildId,
+        candidateId: candidate?.id,
+        candidateUsername: candidate?.username,
+        author: {
+          id: message.author.id,
+          username: authorName,
+          avatarUrl: message.author.displayAvatarURL(),
+          isBot: message.author.bot,
+        },
+        content: message.content || (message.embeds?.[0]?.description || message.embeds?.[0]?.title || ''),
+        createdAt: message.createdAt ? message.createdAt.toISOString() : new Date().toISOString(),
+        attachments: Array.from(message.attachments?.values() || []).map((a) => ({
+          id: a.id,
+          name: a.name,
+          url: a.url,
+          contentType: a.contentType || undefined,
+          size: a.size,
+        })),
+        embeds: message.embeds?.map((e) => ({
+          title: e.title,
+          description: e.description,
+          color: e.color,
+        })) || [],
+      };
+
+      this.notifyLiveMessage(liveMsg);
+    } catch (err) {
+      console.warn('[broadcastLiveDiscordMessage error]', err);
+    }
+  }
 
   private SARCASTIC_SPAM_MESSAGES = [
     "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
@@ -540,6 +607,12 @@ export class PawakoBotRunner {
 
       // Handle message commands (!help, !profile, !formation, !ticket)
       this.client.on('messageCreate', async (message: Message) => {
+        try {
+          this.broadcastLiveDiscordMessage(message);
+        } catch (liveErr) {
+          // ignore
+        }
+
         if (message.author.bot) return;
 
         // Anti-Spam Voice Mod check (triggers vocal warning if flood/spam detected)
@@ -4016,25 +4089,271 @@ export class PawakoBotRunner {
         content.trim().slice(0, 160)
       );
 
+      const msgObj = {
+        id: sent.id,
+        channelId: channel.id,
+        channelName: channel.name,
+        candidateId: member.id,
+        candidateUsername: member.username,
+        author: {
+          id: sent.author.id,
+          username: sent.author.displayName || sent.author.username,
+          avatarUrl: sent.author.displayAvatarURL(),
+          isBot: sent.author.bot,
+        },
+        content: sent.content,
+        createdAt: sent.createdAt.toISOString(),
+        attachments: [],
+        embeds: [],
+      };
+
+      this.notifyLiveMessage(msgObj);
+
       return {
         success: true,
         channelId: channel.id,
         channelName: channel.name,
-        message: {
-          id: sent.id,
-          author: {
-            id: sent.author.id,
-            username: sent.author.displayName || sent.author.username,
-            avatarUrl: sent.author.displayAvatarURL(),
-            isBot: sent.author.bot,
-          },
-          content: sent.content,
-          createdAt: sent.createdAt.toISOString(),
-          attachments: [],
-        },
+        message: msgObj,
       };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Échec de l\'envoi sur Discord' };
+    }
+  }
+
+  /**
+   * Aperçu complet des salons actifs du serveur Discord avec typage et candidats associés
+   */
+  public async getLiveChannelsOverview(): Promise<{
+    success: boolean;
+    channels: Array<{
+      id: string;
+      name: string;
+      category?: string;
+      type: 'candidate' | 'ticket' | 'staff' | 'general';
+      candidate?: {
+        id: string;
+        username: string;
+        avatarUrl?: string;
+        stage?: string;
+        currentModule?: string;
+        simulationScheduledTimestamp?: number;
+      };
+      lastMessage?: {
+        id: string;
+        content: string;
+        author: string;
+        createdAt: string;
+        isBot: boolean;
+      };
+    }>;
+  }> {
+    if (!this.client || !this.client.isReady()) {
+      const allMembers = store.getMembers();
+      const fallbackList = allMembers.map((m) => ({
+        id: m.personalChannelId || `chan-${m.id}`,
+        name: m.personalChannelName || `candidat-${m.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '')}`,
+        type: 'candidate' as const,
+        candidate: {
+          id: m.id,
+          username: m.username,
+          avatarUrl: m.avatarUrl,
+          stage: m.candidateState,
+          currentModule: m.currentModuleId,
+          simulationScheduledTimestamp: m.simulationScheduledTimestamp,
+        },
+      }));
+      return { success: true, channels: fallbackList };
+    }
+    try {
+      const guild = this.client.guilds.cache.get(process.env.DISCORD_GUILD_ID || '') || this.client.guilds.cache.first();
+      if (!guild) return { success: false, channels: [] };
+
+      const allMembers = store.getMembers();
+      const textChannels = Array.from(guild.channels.cache.values()).filter((c) => c.isTextBased());
+
+      const channelsList: any[] = [];
+
+      for (const chan of textChannels) {
+        const c = chan as any;
+        const name = c.name || '';
+        let type: 'candidate' | 'ticket' | 'staff' | 'general' = 'general';
+        let candidateObj: any = undefined;
+
+        // Match candidate
+        const matchedMember = allMembers.find((m) =>
+          m.personalChannelId === c.id ||
+          (m.username && name.toLowerCase().includes(m.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 12)))
+        );
+
+        if (matchedMember) {
+          type = 'candidate';
+          candidateObj = {
+            id: matchedMember.id,
+            username: matchedMember.username,
+            avatarUrl: matchedMember.avatarUrl,
+            stage: matchedMember.candidateState,
+            currentModule: matchedMember.currentModuleId,
+            simulationScheduledTimestamp: matchedMember.simulationScheduledTimestamp,
+          };
+        } else if (name.startsWith('ticket-')) {
+          type = 'ticket';
+        } else if (name.includes('staff') || name.includes('admin') || name.includes('alerte')) {
+          type = 'staff';
+        }
+
+        const lastMsg = c.messages?.cache?.last();
+
+        channelsList.push({
+          id: c.id,
+          name: c.name,
+          category: c.parent?.name,
+          type,
+          candidate: candidateObj,
+          lastMessage: lastMsg ? {
+            id: lastMsg.id,
+            content: lastMsg.content || (lastMsg.embeds?.[0]?.title ? `[${lastMsg.embeds[0].title}]` : ''),
+            author: lastMsg.author.displayName || lastMsg.author.username,
+            createdAt: lastMsg.createdAt.toISOString(),
+            isBot: lastMsg.author.bot,
+          } : undefined,
+        });
+      }
+
+      // Sort: candidate first, then ticket, then staff, then general
+      const order = { candidate: 0, ticket: 1, staff: 2, general: 3 };
+      channelsList.sort((a, b) => (order[a.type as keyof typeof order] ?? 4) - (order[b.type as keyof typeof order] ?? 4));
+
+      return {
+        success: true,
+        channels: channelsList,
+      };
+    } catch (e: any) {
+      return { success: false, channels: [] };
+    }
+  }
+
+  /**
+   * Récupère l'historique récent d'un salon quelconque par son channelId
+   */
+  public async getChannelMessages(
+    channelId: string,
+    limit = 50
+  ): Promise<{
+    success: boolean;
+    channelId?: string;
+    channelName?: string;
+    messages: any[];
+    error?: string;
+  }> {
+    if (channelId.startsWith('chan-')) {
+      const memberId = channelId.replace('chan-', '');
+      return this.getCandidateMessages(memberId, limit);
+    }
+
+    if (!this.client || !this.client.isReady()) {
+      return { success: false, messages: [], error: 'Bot Discord non connecté' };
+    }
+    try {
+      const channel = await this.client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) {
+        return { success: false, messages: [], error: 'Salon introuvable ou non textuel' };
+      }
+      const fetched = await (channel as any).messages.fetch({ limit: Math.min(limit, 50) });
+      const messages = Array.from(fetched.values())
+        .reverse()
+        .map((m: any) => ({
+          id: m.id,
+          channelId: channel.id,
+          channelName: (channel as any).name,
+          author: {
+            id: m.author.id,
+            username: m.author.displayName || m.author.username,
+            avatarUrl: m.author.displayAvatarURL(),
+            isBot: m.author.bot,
+          },
+          content: m.content || (m.embeds && m.embeds.length > 0 ? (m.embeds[0].description || m.embeds[0].title || '[Embed]') : ''),
+          createdAt: m.createdAt.toISOString(),
+          attachments: Array.from(m.attachments.values()).map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            url: a.url,
+            contentType: a.contentType || undefined,
+            size: a.size,
+          })),
+          embeds: m.embeds?.map((e: any) => ({
+            title: e.title,
+            description: e.description,
+            color: e.color,
+          })) || [],
+        }));
+
+      return {
+        success: true,
+        channelId: channel.id,
+        channelName: (channel as any).name,
+        messages,
+      };
+    } catch (err: any) {
+      return { success: false, messages: [], error: err?.message || 'Erreur lors de la lecture des messages' };
+    }
+  }
+
+  /**
+   * Envoie manuellement un message dans un salon Discord quelconque par son channelId
+   */
+  public async sendToChannel(
+    channelId: string,
+    content: string
+  ): Promise<{
+    success: boolean;
+    channelId?: string;
+    channelName?: string;
+    message?: any;
+    error?: string;
+  }> {
+    if (channelId.startsWith('chan-')) {
+      const memberId = channelId.replace('chan-', '');
+      return this.sendCandidateMessage(memberId, content);
+    }
+
+    if (!this.client || !this.client.isReady()) {
+      return { success: false, error: 'Bot Discord non connecté' };
+    }
+    if (!content || !content.trim()) {
+      return { success: false, error: 'Le message ne peut pas être vide' };
+    }
+    try {
+      const channel = await this.client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) {
+        return { success: false, error: 'Salon introuvable' };
+      }
+      const sent = await (channel as any).send({ content: content.trim() });
+      const msgData = {
+        id: sent.id,
+        channelId: channel.id,
+        channelName: (channel as any).name,
+        author: {
+          id: sent.author.id,
+          username: sent.author.displayName || sent.author.username,
+          avatarUrl: sent.author.displayAvatarURL(),
+          isBot: sent.author.bot,
+        },
+        content: sent.content,
+        createdAt: sent.createdAt.toISOString(),
+        attachments: [],
+        embeds: [],
+      };
+
+      this.notifyLiveMessage(msgData);
+
+      return {
+        success: true,
+        channelId: channel.id,
+        channelName: (channel as any).name,
+        message: msgData,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Échec de l\'envoi' };
     }
   }
 

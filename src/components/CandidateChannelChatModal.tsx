@@ -49,7 +49,26 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
   const [isSending, setIsSending] = useState<boolean>(false);
   const [textInput, setTextInput] = useState<string>('');
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
-  const [isStaffMode, setIsStaffMode] = useState<boolean>(true);
+  const [manualMessageIds, setManualMessageIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('pawako_manual_staff_msg_ids');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const saveManualMessageId = (id: string) => {
+    setManualMessageIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem('pawako_manual_staff_msg_ids', JSON.stringify(Array.from(next).slice(-300)));
+      } catch {}
+      return next;
+    });
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -95,12 +114,8 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
   }, [messages, isLoading]);
 
   const handleSendMessage = async () => {
-    let trimmed = textInput.trim();
+    const trimmed = textInput.trim();
     if (!trimmed || isSending) return;
-
-    if (isStaffMode && !trimmed.startsWith('🛡️ [Staff]')) {
-      trimmed = `🛡️ **[Intervention Staff Pawako]** :\n${trimmed}`;
-    }
 
     setIsSending(true);
     try {
@@ -116,12 +131,15 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
         if (data.channelName) setChannelName(data.channelName);
         if (data.channelId) setChannelId(data.channelId);
         if (data.message) {
+          if (data.message.id) {
+            saveManualMessageId(data.message.id);
+          }
           setMessages((prev) => [...prev, data.message]);
         } else {
           loadMessages(false);
         }
         if (onShowToast) {
-          onShowToast('🚀 Message Envoyé', `Posté en tant que Pawako Formation dans #${data.channelName || 'salon privé'}`, 'success');
+          onShowToast('🚀 Message Envoyé', `Posté en direct via Pawako Formation dans #${data.channelName || 'salon privé'}`, 'success');
         }
       } else {
         if (onShowToast) {
@@ -253,13 +271,12 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
             </div>
           ) : (
             messages.map((msg, idx) => {
-              const isStaffIntervention =
-                msg.content.includes('Intervention Staff') ||
-                msg.content.includes('[Staff]') ||
-                msg.content.includes('🛡️') ||
-                msg.content.includes('Staff Pawako');
-              const isBotMsg = msg.author.isBot;
-              const isCandidateMsg = !isBotMsg;
+              const candDiscordId = (member.discordId || member.id).replace('mem-', '');
+              const isRealDiscordStaff = !msg.author.isBot && msg.author.id !== candDiscordId && msg.author.id !== member.id;
+              const isManualConsoleStaff = manualMessageIds.has(msg.id);
+              const isLegacyStaffText = msg.content.includes('Intervention Staff') || msg.content.includes('[Staff]');
+              const isStaffIntervention = isRealDiscordStaff || isManualConsoleStaff || isLegacyStaffText;
+              const isBotMsg = msg.author.isBot && !isManualConsoleStaff;
               const formattedTime = new Date(msg.createdAt).toLocaleTimeString('fr-FR', {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -371,17 +388,10 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
         {/* Message Input & Send Bar */}
         <div className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800 shrink-0 space-y-2">
           <div className="flex items-center justify-between px-1">
-            <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
-              <input
-                type="checkbox"
-                checked={isStaffMode}
-                onChange={(e) => setIsStaffMode(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-900 cursor-pointer"
-              />
-              <span className={`text-[11px] font-semibold flex items-center gap-1 ${isStaffMode ? 'text-amber-300' : 'text-slate-400'}`}>
-                🛡️ Intervenir en tant que Staff Humain (badge prioritaire)
-              </span>
-            </label>
+            <span className="text-[11px] font-medium text-slate-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>Intervention directe en tant que <strong>Pawako Formation</strong></span>
+            </span>
             <span className="text-[10px] text-slate-500">
               Salon : <code className="text-slate-300">#{channelName || 'salon-prive'}</code>
             </span>
@@ -394,11 +404,7 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={2}
-              placeholder={
-                isStaffMode
-                  ? `Répondre en tant que Staff Humain à ${member.username}...`
-                  : `Écrire au nom de Pawako Formation à ${member.username}...`
-              }
+              placeholder={`Écrire directement à ${member.username}... (Entrée pour envoyer)`}
               className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none transition-colors"
             />
 
@@ -420,7 +426,7 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
 
           <div className="flex items-center justify-between text-[10px] text-slate-500 px-1">
             <span>
-              💡 <strong>Astuce :</strong> Le message apparaît sous l'identité officielle du bot dans son salon privé Discord.
+              💡 <strong>Direct Bot :</strong> Message envoyé directement sans mention ni balise technique sur Discord.
             </span>
             <span>Touche <strong>Entrée</strong> pour envoyer</span>
           </div>

@@ -290,6 +290,20 @@ class FirebaseSyncService {
     if (this.unsubscribers.length > 0) return;
 
     try {
+      const handleStreamError = (collectionLabel: string, err: any) => {
+        const msg = String(err?.message || err || '');
+        if (
+          err?.code === 13 ||
+          msg.includes('RST_STREAM') ||
+          msg.includes('INTERNAL') ||
+          err?.code === 'unavailable'
+        ) {
+          // Normal Firestore stream idle reset; Firestore client automatically reconnects with exponential backoff
+          return;
+        }
+        console.warn(`⚠️ [onSnapshot ${collectionLabel} Warning]`, msg);
+      };
+
       // 1. Modules listener
       const unsubMods = onSnapshot(
         collection(db, 'modules'),
@@ -304,7 +318,7 @@ class FirebaseSyncService {
             this.notify();
           }
         },
-        (err) => console.warn('⚠️ [onSnapshot Modules Warning]', err)
+        (err) => handleStreamError('Modules', err)
       );
       this.unsubscribers.push(unsubMods);
 
@@ -322,7 +336,7 @@ class FirebaseSyncService {
             this.notify();
           }
         },
-        (err) => console.warn('⚠️ [onSnapshot Quizzes Warning]', err)
+        (err) => handleStreamError('Quizzes', err)
       );
       this.unsubscribers.push(unsubQuizzes);
 
@@ -336,7 +350,7 @@ class FirebaseSyncService {
             this.notify();
           }
         },
-        (err) => console.warn('⚠️ [onSnapshot OnboardingConfig Warning]', err)
+        (err) => handleStreamError('OnboardingConfig', err)
       );
       this.unsubscribers.push(unsubConfig);
 
@@ -351,7 +365,7 @@ class FirebaseSyncService {
             this.notify();
           }
         },
-        (err) => console.warn('⚠️ [onSnapshot Members Warning]', err)
+        (err) => handleStreamError('Members', err)
       );
       this.unsubscribers.push(unsubMembers);
 
@@ -367,7 +381,7 @@ class FirebaseSyncService {
             this.notify();
           }
         },
-        (err) => console.warn('⚠️ [onSnapshot UsefulLinks Warning]', err)
+        (err) => handleStreamError('UsefulLinks', err)
       );
       this.unsubscribers.push(unsubLinks);
 
@@ -528,6 +542,17 @@ class FirebaseSyncService {
       await setDoc(doc(db, 'members', memberData.id), memberData);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `members/${memberData.id}`);
+    }
+  }
+
+  public async deleteMember(memberId: string): Promise<void> {
+    const existing = store.getMembers().filter((m) => m.id !== memberId && m.discordId !== memberId && m.id !== `mem-${memberId}`);
+    store.setMembers(existing);
+
+    try {
+      await deleteDoc(doc(db, 'members', memberId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `members/${memberId}`);
     }
   }
 

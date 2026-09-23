@@ -1201,7 +1201,10 @@ class StoreService {
             const totalQ = quiz.questions?.length || 20;
             const finalPoints = Math.round((score / 100) * totalQ);
             pawakoBot.notifyStaffModule5Completion(member, quiz.title, finalPoints, totalQ, quiz.minScore || 16).catch(() => {});
+            pawakoBot.scheduleAndAnnounceSimulation14h(member).catch(() => {});
           }).catch(() => {});
+        } else {
+          fetch(`/api/members/${member.id}/schedule-14h`, { method: 'POST' }).catch(() => {});
         }
       }
 

@@ -1,8 +1,9 @@
 import { GoogleGenAI, Modality } from '@google/genai';
-import { TextChannel, AttachmentBuilder, Message } from 'discord.js';
+import { TextChannel, AttachmentBuilder, Message, EmbedBuilder } from 'discord.js';
 import https from 'https';
 import { voiceRadioService } from './voiceRadioService';
 import { store } from './store';
+import { aiKnowledgeService, getDefaultOpenRouterApiKey } from './aiKnowledgeService';
 
 export type VoiceCapsuleType = 'spam_warning' | 'morning_relance' | 'motivation_shift' | 'level_congrats' | 'custom';
 export type VoiceEngineType = 'google_fr' | 'gemini';
@@ -208,13 +209,125 @@ class AiVoiceAnnouncerService {
   }
 
   /**
+   * Uses OpenRouter API with resilient free-tier models (Llama 3.3, Mistral 7B, etc.)
+   * to dynamically create crisp, punchy, human French coaching speech scripts.
+   */
+  public async generateOpenRouterSpeechScript(
+    type: VoiceCapsuleType,
+    targetName?: string
+  ): Promise<string> {
+    const name = targetName && targetName.trim() ? targetName.trim() : 'candidat';
+    const cfgKey = aiKnowledgeService.getConfig()?.openRouterApiKey;
+    const apiKey = cfgKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
+
+    let contextPrompt = '';
+    if (type === 'morning_relance') {
+      contextPrompt = `Tu es le Coach Vocal d'élite de PAWAKO Formation. Rédige un message audio de relance matinale percutant et très court (1 à 2 phrases percutantes, maximum 25 mots) pour le candidat "${name}". Motive-le à valider ses modules de formation et à rester régulier sur ses relances de chatting. Sois dynamique, positif et axé résultats. Pas d'émojis, pas de guillemets, juste le texte exact à prononcer.`;
+    } else if (type === 'spam_warning') {
+      contextPrompt = `Tu es la voix de modération de PAWAKO. Rédige un avertissement audio très court (1 phrase ferme et courtoise, maximum 18 mots) rappelant de ne pas inonder le salon de messages répétés. Pas d'émojis, pas de guillemets.`;
+    } else if (type === 'motivation_shift') {
+      contextPrompt = `Tu es le coach d'énergie de PAWAKO. Rédige un flash motivationnel audio percutant (2 phrases maximum, 25 mots) pour galvaniser les chatteurs. Pas d'émojis, pas de guillemets.`;
+    } else if (type === 'level_congrats') {
+      contextPrompt = `Tu es le coach vocal de PAWAKO. Rédige de brèves félicitations chaleureuses (1 à 2 phrases, maximum 20 mots) pour féliciter "${name}" pour avoir franchi un palier. Pas d'émojis, pas de guillemets.`;
+    } else {
+      contextPrompt = `Tu es le coach vocal officiel de PAWAKO Formation. Rédige une annonce courte et dynamique (2 phrases maximum, 25 mots). Pas d'émojis, pas de guillemets.`;
+    }
+
+    const freeModels = [
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'mistralai/mistral-7b-instruct:free',
+      'google/gemini-2.0-flash-exp:free',
+    ];
+
+    if (apiKey && apiKey.length > 5) {
+      for (const model of freeModels) {
+        try {
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://pawako-formation.app',
+              'X-Title': 'PAWAKO Formation Voice Coach',
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Tu es un générateur de texte pour synthèse vocale française. Tu réponds UNIQUEMENT avec le texte à prononcer à l\'oral, sans aucun préambule, sans astérisques, sans guillemets, et sans émojis.',
+                },
+                { role: 'user', content: contextPrompt },
+              ],
+              temperature: 0.85,
+              max_tokens: 80,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content?.trim();
+            if (content && content.length > 15) {
+              return content
+                .replace(/^["'«\s]+|["'»\s]+$/g, '')
+                .replace(/[*_#`~]/g, '')
+                .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+                .trim();
+            }
+          }
+        } catch (err: any) {
+          console.warn(`[OpenRouter Voice Script Error for ${model}]`, err?.message || err);
+        }
+      }
+    }
+
+    // Dynamic varied presets as instant backup
+    const fallbacks: Record<VoiceCapsuleType, string[]> = {
+      morning_relance: [
+        `Bonjour ${name} ! C'est ton coach Pawako. Concentre-toi sur tes relances et valide ton module du jour, la constance bat le talent !`,
+        `Salut ${name} ! Nouvelle journée, nouvelles opportunités. Donne le meilleur sur tes sessions de formation aujourd'hui !`,
+        `Hello ${name} ! Rappel du jour : garde le rythme, relance avec méthode et avance vers tes objectifs !`,
+      ],
+      spam_warning: [
+        `Alerte modération Pawako ! Merci de ne pas inonder le salon de messages répétés et de patienter tranquillement.`,
+        `Attention modération. Merci d'éviter les envois successifs et de respecter le calme du salon.`,
+      ],
+      motivation_shift: [
+        `Flash motivation Pawako ! Les meilleurs chatteurs gardent une cadence soutenue et soignée. Soyez réactifs et dépassez vos objectifs !`,
+        `Énergie au maximum pour l'équipe Pawako ! Appliquez les techniques du guide et faites la différence aujourd'hui !`,
+      ],
+      level_congrats: [
+        `Bravo ${name} pour ton nouveau palier franchi ! Tes efforts et ton sérieux portent leurs fruits, continue comme ça !`,
+        `Félicitations ${name} ! Ce niveau validé confirme ta progression. Fonce vers la prochaine étape !`,
+      ],
+      custom: [
+        `Message d'annonce officiel de la formation Pawako. Restez concentrés et attentifs aux prochaines consignes.`,
+      ],
+    };
+
+    const list = fallbacks[type] || fallbacks.custom;
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  /**
    * Generates a voice capsule using the reliable French voice engine with Gemini TTS support & automatic quota fallback
    */
   public async generateVoiceCapsule(config: VoiceCapsuleConfig): Promise<GeneratedVoiceCapsule> {
     const preset = this.getPresetScript(config.type, config.targetName);
-    const script = config.customText && config.customText.trim().length > 0
+    
+    // Use OpenRouter to generate fresh, dynamic, intelligent coaching voice scripts
+    let script = config.customText && config.customText.trim().length > 0
       ? config.customText.trim()
-      : preset.script;
+      : null;
+
+    if (!script) {
+      try {
+        script = await this.generateOpenRouterSpeechScript(config.type, config.targetName);
+      } catch {
+        script = preset.script;
+      }
+    }
     const requestedVoice = config.voiceName || preset.defaultVoice || this.preferredVoice;
     const engine = config.engine || this.engine;
 
@@ -298,34 +411,51 @@ class AiVoiceAnnouncerService {
   }
 
   /**
-   * Posts the audio capsule cleanly to Discord without bulky technical embeds or clutter
+   * Posts the audio capsule cleanly to Discord as an executive, sleek voice note
+   * Absolutely NO cluttered tables or technical specs (no "Voix IA", no "Durée Estimée", no "Format WAV")
    */
   public async sendToTextChannel(
     channel: TextChannel,
     capsule: GeneratedVoiceCapsule,
-    authorName: string = 'Pawako Formation'
+    authorName: string = 'Coach Vocal Pawako'
   ): Promise<boolean> {
     try {
       const ext = capsule.mimeType.includes('wav') ? 'wav' : 'mp3';
       const attachment = new AttachmentBuilder(capsule.audioBuffer, {
-        name: `message-vocal-pawako.${ext}`,
+        name: `note-vocale-pawako.${ext}`,
         description: capsule.script,
       });
 
-      // Sleek, minimal and authentic Discord message (no cluttered tables or redundant specs)
-      let prefix = '🎙️ **Message vocal de la formation**';
+      // Sleek, executive, and highly presentable Discord Embed
+      let title = '🎙️ Note Vocale du Coach';
+      let color = 0x6366f1; // Indigo Pawako
       if (capsule.type === 'spam_warning') {
-        prefix = '🚨 **Avertissement Modération Vocale**';
+        title = '🚨 Rappel Modération Vocale';
+        color = 0xef4444; // Red
       } else if (capsule.type === 'morning_relance') {
-        prefix = '☀️ **Relance Matinale Coach**';
+        title = '☀️ Relance Matinale — Coach Pawako';
+        color = 0xf59e0b; // Amber
       } else if (capsule.type === 'motivation_shift') {
-        prefix = '⚡ **Capsule Motivation & Énergie**';
+        title = '⚡ Flash Énergie & Motivation';
+        color = 0x8b5cf6; // Purple
       } else if (capsule.type === 'level_congrats') {
-        prefix = '🏆 **Félicitations Palier**';
+        title = '🏆 Félicitations Palier';
+        color = 0x10b981; // Emerald
       }
 
+      const embed = new EmbedBuilder()
+        .setColor(color)
+        .setAuthor({
+          name: 'PAWAKO FORMATION • Coach Vocal',
+          iconURL: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80',
+        })
+        .setTitle(title)
+        .setDescription(`> *« ${capsule.script} »*`)
+        .setFooter({ text: '🎧 Écoutez la note vocale ci-jointe' })
+        .setTimestamp();
+
       await channel.send({
-        content: `${prefix} :\n> *« ${capsule.script} »*`,
+        embeds: [embed],
         files: [attachment],
       });
 

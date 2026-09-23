@@ -360,6 +360,34 @@ class MemberService {
       inactive3dCount,
     };
   }
+
+  public async purgeAbsentMembers(): Promise<{ success: boolean; purgedCount: number; remainingCount: number; purgedUsernames?: string[]; message?: string }> {
+    try {
+      const res = await fetch('/api/members/purge-absent', { method: 'POST' });
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      return {
+        success: false,
+        purgedCount: 0,
+        remainingCount: this.getMembers().length,
+        message: err.message || 'Erreur lors de la purge des candidats absents',
+      };
+    }
+  }
+
+  public async scheduleSimulation14h(memberId: string): Promise<{ success: boolean; member?: Member; message?: string }> {
+    try {
+      const res = await fetch(`/api/members/${memberId}/schedule-14h`, { method: 'POST' });
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Erreur lors de la programmation du RDV Simulation 14h00',
+      };
+    }
+  }
 }
 
 export const memberService = new MemberService();

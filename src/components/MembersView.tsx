@@ -55,6 +55,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [isPurging, setIsPurging] = useState<boolean>(false);
 
   // Selected candidate drawer / modal
   const [selectedCandidate, setSelectedCandidate] = useState<Member | null>(null);
@@ -93,6 +94,32 @@ export const MembersView: React.FC<MembersViewProps> = ({
       );
     } else {
       onShowToast('Info Synchronisation', res.message || 'Mise à jour effectuée', 'info');
+    }
+  };
+
+  const handlePurgeAbsent = async () => {
+    if (!window.confirm("🧹 Lancer le nettoyage de la base de données ?\n\nTous les profils qui ne sont plus présents sur le serveur Discord seront définitivement purgés pour ne conserver que les vrais candidats actifs avec leurs parcours.")) {
+      return;
+    }
+    setIsPurging(true);
+    try {
+      const res = await memberService.purgeAbsentMembers();
+      setIsPurging(false);
+      onRefresh();
+      if (res.success) {
+        onShowToast(
+          'Base Nettoyée avec Succès',
+          res.purgedCount > 0
+            ? `${res.purgedCount} candidat(s) absent(s) supprimé(s). ${res.remainingCount} candidat(s) réel(s) conservé(s).`
+            : `Aucun candidat fantôme : les ${res.remainingCount} candidats sont tous sur le serveur Discord.`,
+          'success'
+        );
+      } else {
+        onShowToast('Info Purge', res.message || 'Erreur lors du nettoyage', 'info');
+      }
+    } catch (err: any) {
+      setIsPurging(false);
+      onShowToast('Erreur Purge', err.message || 'Erreur inconnue', 'info');
     }
   };
 
@@ -157,8 +184,9 @@ export const MembersView: React.FC<MembersViewProps> = ({
     } else if (targetStage === 'simulation') {
       memberService.forceModule(member.id, 'module-5');
       store.updateCandidateState(member.id, 'simulation');
+      memberService.scheduleSimulation14h(member.id).catch(() => {});
       onRefresh();
-      onShowToast('Etape Simulation', `${member.username} passe en Simulation IA`, 'success');
+      onShowToast('Convocation Simulation 14h00', `${member.username} passe en Simulation & convoqué(e) à 14h00 HF`, 'success');
     } else if (targetStage === 'formation_outils') {
       memberService.validateSimulation(member.id, 'Staff Kanban');
       onRefresh();
@@ -308,6 +336,28 @@ export const MembersView: React.FC<MembersViewProps> = ({
           >
             <Zap className={`w-4 h-4 ${isEvaluating ? 'animate-spin text-amber-200' : 'text-amber-300'}`} />
             <span>Worker Inactivité</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const target = selectedCandidate || members.find((m) => m.personalChannelId) || members[0];
+              if (target) setChatChannelMember(target);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+            title="Ouvrir un salon privé candidat et répondre en direct sur Discord"
+          >
+            <Bot className="w-4 h-4 text-emerald-200" />
+            <span>Salons Privés</span>
+          </button>
+
+          <button
+            onClick={handlePurgeAbsent}
+            disabled={isPurging}
+            className="px-3.5 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/20 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+            title="Nettoyer la base : supprimer tous les profils qui ne sont plus présents sur Discord"
+          >
+            <UserX className={`w-4 h-4 ${isPurging ? 'animate-spin text-rose-200' : 'text-rose-300'}`} />
+            <span>{isPurging ? 'Nettoyage...' : 'Purger Absents'}</span>
           </button>
 
           <button
@@ -490,6 +540,16 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                             {/* Quick Action Buttons Bar */}
                             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-1">
+                              {/* Open Private Channel Live Chat */}
+                              <button
+                                onClick={() => setChatChannelMember(member)}
+                                className="px-2 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Ouvrir son salon privé Discord et répondre en tant que Pawako Formation"
+                              >
+                                <Bot className="w-3 h-3 text-emerald-400" />
+                                <span>Salon Privé</span>
+                              </button>
+
                               {/* Direct DM button */}
                               <button
                                 onClick={() => {
@@ -500,7 +560,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                                 title="Envoyer un message DM Discord"
                               >
                                 <MessageSquare className="w-3 h-3 text-indigo-400" />
-                                <span>Relance DM</span>
+                                <span>DM</span>
                               </button>
 
                               {/* Stage Selector Dropdown */}
@@ -736,6 +796,25 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     ></div>
                   </div>
                 </div>
+
+                {selectedCandidate.simulationScheduledTimestamp && (
+                  <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30">
+                    <span className="text-blue-300 font-semibold flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                      <span>RDV Simulation 14h00 HF :</span>
+                    </span>
+                    <span className="text-white font-mono font-bold">
+                      {new Date(selectedCandidate.simulationScheduledTimestamp).toLocaleString('fr-FR', {
+                        timeZone: 'Europe/Paris',
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Discord Actions Panel */}
@@ -746,6 +825,31 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 </h3>
 
                 <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={async () => {
+                      const res = await memberService.scheduleSimulation14h(selectedCandidate.id);
+                      if (res.success) {
+                        onShowToast('Convocation 14h Envoyée', `Convocation RDV Simulation 14h00 programmée pour ${selectedCandidate.username}`, 'success');
+                        onRefresh();
+                      } else {
+                        onShowToast('Erreur Convocation', res.message || 'Impossible d\'envoyer la convocation', 'info');
+                      }
+                    }}
+                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-center gap-2 col-span-2 cursor-pointer"
+                    title="Envoyer la convocation officielle au RDV de Simulation 14h00 HF dans son salon Discord"
+                  >
+                    <Calendar className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>📢 Programmer / Renvoyer Convocation RDV Simulation (14h00 HF)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setChatChannelMember(selectedCandidate)}
+                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 col-span-2 cursor-pointer"
+                  >
+                    <Bot className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>💬 Ouvrir le Salon Privé & Répondre (Staff / Pawako)</span>
+                  </button>
+
                   <button
                     onClick={() => {
                       setDmTarget(selectedCandidate);
@@ -1141,6 +1245,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Candidate Private Channel Live Chat Modal */}
+      {chatChannelMember && (
+        <CandidateChannelChatModal
+          member={chatChannelMember}
+          allMembers={members}
+          onSelectMember={(m) => setChatChannelMember(m)}
+          onClose={() => setChatChannelMember(null)}
+          onShowToast={onShowToast as any}
+        />
       )}
     </div>
   );

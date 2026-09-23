@@ -107,7 +107,14 @@ function formatMemberRolesDisplay(roles: string[] = []): string {
  * If current time in Paris is < 14h00 on Mon-Sat, returns 14h00 today.
  * Otherwise advances to the next valid day (Mon-Sat) at 14h00.
  */
-function getNext14hParisTimestamp(): number {
+/**
+ * Calculates epoch timestamp and schedule details for next 14h00 HF (Europe/Paris timezone).
+ * Allowed days: Monday to Saturday (Du lundi au samedi). Sunday (0) is excluded!
+ * - If current time in Paris is < 14h00 on Mon-Sat, returns 14h00 today.
+ * - If current time in Paris is >= 14h00 on Mon-Sat, moves to tomorrow at 14h00.
+ * - Skips Sundays to Monday at 14h00.
+ */
+export function getSimulationScheduleDetails(): { timestamp: number; isToday: boolean; formattedDate: string } {
   const now = new Date();
   const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
   const parisDate = new Date(parisString);
@@ -116,18 +123,34 @@ function getNext14hParisTimestamp(): number {
   targetParis.setHours(14, 0, 0, 0);
 
   const currentDay = parisDate.getDay();
-  // If today is Sunday or past 14:00, move to tomorrow
-  if (currentDay === 0 || parisDate.getTime() >= targetParis.getTime()) {
-    targetParis.setDate(targetParis.getDate() + 1);
-  }
+  // Is it valid for today? Only if Monday (1) through Saturday (6) and before 14:00
+  const isToday = currentDay !== 0 && parisDate.getTime() < targetParis.getTime();
 
-  // Keep advancing until day is Monday (1) through Saturday (6)
-  while (targetParis.getDay() === 0) { // Sunday
+  if (!isToday) {
     targetParis.setDate(targetParis.getDate() + 1);
+    while (targetParis.getDay() === 0) { // Sunday skipped
+      targetParis.setDate(targetParis.getDate() + 1);
+    }
   }
 
   const diffMs = targetParis.getTime() - parisDate.getTime();
-  return now.getTime() + diffMs;
+  const timestamp = now.getTime() + diffMs;
+
+  const formattedDate = targetParis.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
+  return {
+    timestamp,
+    isToday,
+    formattedDate,
+  };
+}
+
+function getNext14hParisTimestamp(): number {
+  return getSimulationScheduleDetails().timestamp;
 }
 
 /**
@@ -491,6 +514,26 @@ export class PawakoBotRunner {
           title: 'Nouveau membre rejoint',
           message: `${member.displayName} a rejoint le serveur Discord. Rôle initial attribué.`,
           event: 'member_join',
+          mentionAdmin: false,
+        });
+      });
+
+      this.client.on('guildMemberRemove', async (member: any) => {
+        const allowedGuildId = process.env.DISCORD_GUILD_ID;
+        if (allowedGuildId && member.guild?.id && member.guild.id !== allowedGuildId) return;
+
+        const userId = member.id || member.user?.id;
+        if (!userId) return;
+        const displayName = member.displayName || member.user?.username || 'Membre';
+        console.log(`[GuildMemberRemove] Le membre ${displayName} (${userId}) a quitté le serveur Discord.`);
+
+        await this.purgeCandidate(userId);
+
+        store.addNotification({
+          level: 'information',
+          title: 'Départ d\'un candidat',
+          message: `${displayName} a quitté le serveur Discord. Profil et données nettoyés.`,
+          event: 'member_leave',
           mentionAdmin: false,
         });
       });
@@ -3630,9 +3673,14 @@ export class PawakoBotRunner {
 
           if (!member.candidateState || member.candidateState === 'nouveau' || member.candidateState === 'module_en_cours' || member.candidateState === 'cooldown_actif' || member.candidateState === 'quiz_disponible') {
             member.candidateState = 'simulation';
-            if (!member.simulationScheduledTimestamp) {
-              member.simulationScheduledTimestamp = getNext14hParisTimestamp();
+          }
+
+          if (member.candidateState === 'simulation') {
+            if (!member.simulationScheduledTimestamp || member.simulationScheduledTimestamp < Date.now()) {
+              const { timestamp } = getSimulationScheduleDetails();
+              member.simulationScheduledTimestamp = timestamp;
               member.simulationReminderSent = false;
+              member.simulationUpcomingReminderSent = false;
             }
           }
 
@@ -3956,15 +4004,17 @@ export class PawakoBotRunner {
     try {
       const sent = await channel.send({ content: content.trim() });
 
-      store.addLog({
-        adminName: 'Staff Pawako',
-        userName: member.username,
-        action: `Réponse manuelle dans #${channel.name}`,
-        category: 'discord',
-        result: 'effectué',
-        level: 'info',
-        details: content.trim().slice(0, 160),
-      });
+      store.addLog(
+        'Staff Pawako',
+        `Réponse manuelle dans #${channel.name}`,
+        'member',
+        member.username,
+        undefined,
+        undefined,
+        'effectué',
+        'info',
+        content.trim().slice(0, 160)
+      );
 
       return {
         success: true,
@@ -4551,65 +4601,297 @@ export class PawakoBotRunner {
   }
 
   /**
-   * Check and send 14h00 HF Simulation reminders for scheduled candidates
+   * Schedules and sends the official 14h00 HF Simulation RDV announcement.
+   * If validated before 14h00 Paris time (Mon-Sat), scheduled for today at 14h00 HF.
+   * If validated after 14h00 Paris time (or on Sunday), scheduled for tomorrow (or next valid open day) at 14h00 HF.
+   * Prepares automatic reminders (1h before at 13h00 HF and live at 14h00 HF).
+   */
+  public async scheduleAndAnnounceSimulation14h(memberInput: Member): Promise<boolean> {
+    const member = store.getMember(memberInput.id) || memberInput;
+    if (!member) return false;
+
+    const { timestamp, isToday, formattedDate } = getSimulationScheduleDetails();
+
+    member.candidateState = 'simulation';
+    member.simulationScheduledTimestamp = timestamp;
+    member.simulationReminderSent = false;
+    member.simulationUpcomingReminderSent = false;
+    store.saveMembers();
+    firebaseSyncService.saveMember(member).catch(() => {});
+
+    const discordUserId = member.discordId || member.id.replace(/^mem-/, '');
+    const timingBadge = isToday
+      ? "📅 **AUJOURD'HUI à 14h00 HF**"
+      : `📅 **DEMAIN (${formattedDate}) à 14h00 HF**`;
+
+    const candChan = await this.getCandidateChannel(member, true);
+    if (candChan) {
+      const isAiActive = aiKnowledgeService.isSimulationEnabled();
+      const simEmbed = new EmbedBuilder()
+        .setTitle('🏆 TOUS LES MODULES VALIDÉS — CONVOCATION RDV SIMULATION (14h00 HF)')
+        .setDescription(
+          `Félicitations <@${discordUserId}> pour la réussite complète de tes 5 modules de formation théorique ! 🎓\n\n` +
+          `🎯 **RDV Étape Finale : Le Test de Simulation Pratique**\n` +
+          `Ton rendez-vous officiel de simulation est fixé pour :\n` +
+          `👉 ${timingBadge}\n\n` +
+          (isToday
+            ? `L'équipe Staff PAWAKO sera présente dans ce salon à **14h00 HF** pour animer ton épreuve de mise en situation. Prépare tes fiches de cours et sois bien connecté(e) à l'heure ! 🚀`
+            : `L'équipe Staff PAWAKO sera présente dans ce salon demain à **14h00 HF** pour animer ton épreuve de mise en situation. Profite de la soirée pour réviser tes fiches et sois ponctuel(le) demain à 14h00 HF ! 🚀`) +
+          `\n\n⏰ **Rappels automatiques programmés :**\n` +
+          `• 1 rappel à **13h00 HF** (1h avant le début du test)\n` +
+          `• 1 rappel à **14h00 HF** (coup d'envoi en direct avec le staff)` +
+          (isAiActive
+            ? `\n\n💡 *Tu souhaites t'entraîner ou passer le test immédiatement ? Clique sur le bouton ci-dessous !*`
+            : '')
+        )
+        .setColor(isToday ? 0x10b981 : 0x3b82f6)
+        .setFooter({ text: 'PAWAKO FORMATION • Convocation Simulation 14h00 HF' })
+        .setTimestamp();
+
+      const simComponents: any[] = [];
+      if (isAiActive) {
+        simComponents.push(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`launch_simu_${member.id}`)
+              .setLabel('🚀 Démarrer la Simulation dès maintenant')
+              .setStyle(ButtonStyle.Primary)
+          )
+        );
+      }
+
+      await candChan.send({
+        content: `📢 **[CONVOCATION OFFICIELLE RDV 14H00]** <@${discordUserId}>`,
+        embeds: [simEmbed],
+        components: simComponents,
+      }).catch((e: any) => console.warn('[Sim Launch Send Error]', e));
+    }
+
+    // Alert staff channel
+    const guildId = onboardingService.getConfig().guildId || this.client?.guilds.cache.first()?.id;
+    if (guildId && this.client) {
+      const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+      if (guild) {
+        const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+        if (staffChan) {
+          const chanLink = member.personalChannelId ? `<#${member.personalChannelId}>` : 'son salon privé';
+          await staffChan.send({
+            content: `📅 **[CONVOCATION SIMULATION 14H00]** Le candidat <@${discordUserId}> (**${member.username}**) a terminé ses modules. RDV fixé pour ${timingBadge} dans ${chanLink} !`,
+          }).catch(() => {});
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Check and send 14h00 HF Simulation reminders for scheduled candidates.
+   * Sends an anticipatory reminder 1 hour before (13h00 HF) and a live reminder at 14h00 HF.
    */
   private async checkSimulationReminders() {
     if (!this.client || !this.isConnected) return;
     const allMembers = store.getMembers();
     const nowMs = Date.now();
+    const ONE_HOUR_MS = 60 * 60 * 1000;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
     for (const m of allMembers) {
       if (
         m.isActive !== false &&
         m.candidateState === 'simulation' &&
-        m.simulationScheduledTimestamp &&
-        nowMs >= m.simulationScheduledTimestamp &&
-        !m.simulationReminderSent
+        m.simulationScheduledTimestamp
       ) {
-        m.simulationReminderSent = true;
-        store.saveMembers();
-        firebaseSyncService.saveMember(m).catch(() => {});
+        // 1. Anticipatory reminder (1 hour before 14h00 HF)
+        const oneHourBeforeMs = m.simulationScheduledTimestamp - ONE_HOUR_MS;
+        if (
+          nowMs >= oneHourBeforeMs &&
+          nowMs < m.simulationScheduledTimestamp &&
+          !m.simulationUpcomingReminderSent
+        ) {
+          m.simulationUpcomingReminderSent = true;
+          store.saveMembers();
+          firebaseSyncService.saveMember(m).catch(() => {});
 
-        // Skip sending notification if the scheduled date was over 12 hours ago (outdated)
-        if (nowMs - m.simulationScheduledTimestamp > TWELVE_HOURS_MS) {
-          continue;
+          const candChan = await this.getCandidateChannel(m, true);
+          if (candChan) {
+            const candMention = `<@${m.discordId || m.id.replace(/^mem-/, '')}>`;
+            const upcomingEmbed = new EmbedBuilder()
+              .setTitle('⏰ RAPPEL — RDV DE SIMULATION DANS 1 HEURE (14h00 HF)')
+              .setDescription(
+                `📢 ${candMention}, **ton RDV de Simulation commence dans 1 heure (14h00 HF) !**\n\n` +
+                `🎯 Prépare-toi tranquillement, révise tes fiches et tes règles de chatting.\n` +
+                `L'équipe Staff PAWAKO sera présente ici à 14h00 pile ! 🚀`
+              )
+              .setColor(0xf59e0b)
+              .setFooter({ text: 'PAWAKO FORMATION • Rappel RDV 14h00 HF' })
+              .setTimestamp();
+
+            await candChan.send({
+              content: `⏰ **[RAPPEL RDV 14H00 DANS 1H]** ${candMention}`,
+              embeds: [upcomingEmbed],
+            }).catch(() => {});
+          }
         }
 
-        const candChan = await this.getCandidateChannel(m, true);
-        if (candChan) {
-          const candMention = `<@${m.discordId || m.id.replace('mem-', '')}>`;
-          const reminderEmbed = new EmbedBuilder()
-            .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
-            .setDescription(
-              `📢 ${candMention}, **il est 14h00 HF !**\n\n` +
-              `C'est le moment de passer ton **Test de Simulation** en direct avec l'équipe Staff PAWAKO. L'équipe t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
-            )
-            .setColor(0x10b981)
-            .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })
-            .setTimestamp();
+        // 2. Live reminder (at 14h00 HF)
+        if (
+          nowMs >= m.simulationScheduledTimestamp &&
+          !m.simulationReminderSent
+        ) {
+          m.simulationReminderSent = true;
+          store.saveMembers();
+          firebaseSyncService.saveMember(m).catch(() => {});
 
-          await candChan.send({
-            content: `🔔 **[RAPPEL SIMULATION 14H00 HF]** ${candMention}`,
-            embeds: [reminderEmbed],
-          }).catch((e: any) => console.warn('[Simu Reminder Send Error]', e));
-        }
+          // Skip sending notification if the scheduled date was over 12 hours ago (outdated)
+          if (nowMs - m.simulationScheduledTimestamp <= TWELVE_HOURS_MS) {
+            const candChan = await this.getCandidateChannel(m, true);
+            if (candChan) {
+              const candMention = `<@${m.discordId || m.id.replace(/^mem-/, '')}>`;
+              const reminderEmbed = new EmbedBuilder()
+                .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
+                .setDescription(
+                  `📢 ${candMention}, **il est 14h00 HF !**\n\n` +
+                  `C'est le moment de passer ton **Test de Simulation** en direct avec l'équipe Staff PAWAKO. L'équipe t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
+                )
+                .setColor(0x10b981)
+                .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })
+                .setTimestamp();
 
-        const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
-        if (guildId) {
-          const guild = await this.client.guilds.fetch(guildId).catch(() => null);
-          if (guild) {
-            const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
-            if (staffChan) {
-              const chanLink = m.personalChannelId ? `<#${m.personalChannelId}>` : 'son salon privé';
-              await staffChan.send({
-                content: `🔔 **[SIMULATION 14H00 HF]** Le candidat <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**) attend son test de simulation dans ${chanLink} !`,
-              }).catch(() => {});
+              await candChan.send({
+                content: `🔔 **[RAPPEL SIMULATION 14H00 HF]** ${candMention} — Ton RDV commence maintenant !`,
+                embeds: [reminderEmbed],
+              }).catch((e: any) => console.warn('[Simu Reminder Send Error]', e));
+            }
+
+            const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
+            if (guildId) {
+              const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+              if (guild) {
+                const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+                if (staffChan) {
+                  const chanLink = m.personalChannelId ? `<#${m.personalChannelId}>` : 'son salon privé';
+                  await staffChan.send({
+                    content: `🔔 **[SIMULATION 14H00 HF]** Le candidat <@${m.discordId || m.id.replace(/^mem-/, '')}> (**${m.username}**) attend son test de simulation dans ${chanLink} !`,
+                  }).catch(() => {});
+                }
+              }
             }
           }
         }
       }
     }
+  }
+
+  /**
+   * Purges a single candidate from the local store and Firestore database when they leave the server.
+   */
+  public async purgeCandidate(discordId: string): Promise<boolean> {
+    const allMembers = store.getMembers();
+    const cleanId = discordId.replace(/^mem-/, '');
+    const target = allMembers.find((m) => m.discordId === cleanId || m.id === discordId || m.id === `mem-${cleanId}`);
+    if (!target) return false;
+
+    // Do not purge admins or lead admins
+    const isAdmin = target.roles?.some((r) => r.toLowerCase().includes('admin')) || target.username.toLowerCase().includes('admin');
+    if (isAdmin) return false;
+
+    // Remove from store
+    store.handleMemberLeave(target.discordId || cleanId);
+    store.saveMembers();
+
+    // Remove from Firestore
+    try {
+      await firebaseSyncService.deleteMember(target.id);
+    } catch (e) {
+      console.warn(`[PurgeCandidate Firestore Error for ${target.id}]`, e);
+    }
+
+    return true;
+  }
+
+  /**
+   * Purges all candidates from the store and Firestore who are no longer on the Discord server.
+   * Keeps active candidates and their full progress intact.
+   */
+  public async purgeAbsentCandidates(): Promise<{ purgedCount: number; remainingCount: number; purgedUsernames: string[] }> {
+    const allMembers = store.getMembers();
+    let activeDiscordUserIds: Set<string> | null = null;
+
+    if (this.client && this.isConnected) {
+      const cfg = onboardingService.getConfig();
+      const guildId = cfg.guildId || process.env.DISCORD_GUILD_ID || this.client.guilds.cache.first()?.id;
+      if (guildId) {
+        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          const guildMembers = await guild.members.fetch({ time: 10000 }).catch(() => guild.members.cache);
+          activeDiscordUserIds = new Set(guildMembers.map((gm) => gm.id));
+        }
+      }
+    }
+
+    // Fallback if bot client not ready: use Discord REST API with bot token
+    if (!activeDiscordUserIds) {
+      const token = process.env.DISCORD_BOT_TOKEN;
+      const guildId = process.env.DISCORD_GUILD_ID || onboardingService.getConfig().guildId;
+      if (token && guildId) {
+        const res = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members?limit=1000`, {
+          headers: { Authorization: `Bot ${token}` },
+        }).catch(() => null);
+        if (res && res.ok) {
+          const rawMembers: any[] = await res.json();
+          activeDiscordUserIds = new Set(rawMembers.map((m) => m.user?.id).filter(Boolean));
+        }
+      }
+    }
+
+    if (!activeDiscordUserIds || activeDiscordUserIds.size === 0) {
+      return { purgedCount: 0, remainingCount: allMembers.length, purgedUsernames: [] };
+    }
+
+    const purgedUsernames: string[] = [];
+    const remainingMembers: Member[] = [];
+
+    for (const m of allMembers) {
+      const isAdmin = m.roles?.some((r) => r.toLowerCase().includes('admin')) || m.username.toLowerCase().includes('admin');
+      if (isAdmin) {
+        remainingMembers.push(m);
+        continue;
+      }
+
+      const dId = (m.discordId || m.id).replace(/^mem-/, '');
+      if (activeDiscordUserIds.has(dId)) {
+        remainingMembers.push(m);
+      } else {
+        purgedUsernames.push(m.username);
+        try {
+          await firebaseSyncService.deleteMember(m.id);
+        } catch (e) {
+          console.warn(`[PurgeAbsent Firestore Error for ${m.id}]`, e);
+        }
+      }
+    }
+
+    store.setMembers(remainingMembers);
+    store.saveMembers();
+
+    store.addLog(
+      'Nettoyage Système',
+      `Purge effectuée : ${purgedUsernames.length} candidat(s) absent(s) supprimé(s).`,
+      'system',
+      undefined,
+      undefined,
+      undefined,
+      'effectué',
+      'succes',
+      `Membres retirés: ${purgedUsernames.join(', ') || 'aucun'}`
+    );
+
+    return {
+      purgedCount: purgedUsernames.length,
+      remainingCount: remainingMembers.length,
+      purgedUsernames,
+    };
   }
 
   /**
@@ -5818,53 +6100,8 @@ export class PawakoBotRunner {
             .setStyle(ButtonStyle.Success)
         );
 
-        // Guarantee candidate private channel creation / retrieval
-        const candChan = await this.getCandidateChannel(member, true);
-        if (candChan) {
-          member.candidateState = 'simulation';
-          member.simulationScheduledTimestamp = getNext14hParisTimestamp();
-          member.simulationReminderSent = false;
-          store.saveMembers();
-          firebaseSyncService.saveMember(member).catch(() => {});
-
-          const next14hDateStr = new Date(member.simulationScheduledTimestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-
-          const isAiActive = aiKnowledgeService.isSimulationEnabled();
-          const simEmbed = new EmbedBuilder()
-            .setTitle(isAiActive ? '🚀 MODULE 5 VALIDÉ — INVITATION AU TEST DE SIMULATION' : '🏆 MODULE 5 VALIDÉ — ÉPREUVE PRATIQUE DE SIMULATION')
-            .setDescription(
-              isAiActive
-                ? `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
-                    `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
-                    `Ton test de simulation est au programme pour **14h00 HF** (${next14hDateStr}).\n\n` +
-                    `💡 **Prêt(e) à passer ton test dès maintenant ?** Tu peux le lancer en direct à tout moment en cliquant sur le bouton ci-dessous ou en tapant **\`!start-simu\`** dans ce salon ! 🚀`
-                : `Félicitations encore <@${discordUserId}> pour la validation complète de ta formation théorique ! 🏆\n\n` +
-                    `🎯 **Étape Finale : Le Test de Simulation Pratique**\n` +
-                    `Ton épreuve pratique se déroulera en direct avec l'équipe Staff PAWAKO.\n\n` +
-                    `💡 Un formateur va prendre le relais directement avec toi dans ce salon pour démarrer ta mise en situation. Fais un signe dans le chat dès que tu es prêt(e) ! 🔥`
-            )
-            .setColor(0x3b82f6)
-            .setFooter({ text: isAiActive ? 'PAWAKO FORMATION • Test de Simulation IA' : 'PAWAKO FORMATION • Simulation Pratique Staff' })
-            .setTimestamp();
-
-          const simComponents: any[] = [];
-          if (isAiActive) {
-            simComponents.push(
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`launch_simu_${member.id}`)
-                  .setLabel('🚀 Démarrer la Simulation')
-                  .setStyle(ButtonStyle.Primary)
-              )
-            );
-          }
-
-          await candChan.send({
-            content: `<@${discordUserId}>`,
-            embeds: [simEmbed],
-            components: simComponents,
-          }).catch((e: any) => console.warn('[Sim Launch Send Error]', e));
-        }
+        // Schedule and send 14h RDV announcement (today if < 14h, tomorrow if >= 14h) with reminders
+        await this.scheduleAndAnnounceSimulation14h(member);
 
         // Direct MP / Staff Alert Notification
         const mpSimuEmbed = new EmbedBuilder()

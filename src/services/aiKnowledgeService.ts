@@ -1160,6 +1160,10 @@ class AiKnowledgeService {
     return this.promptConfig;
   }
 
+  public getConfig(): AiPromptConfig {
+    return this.promptConfig;
+  }
+
   public updatePromptConfig(data: Partial<AiPromptConfig>): AiPromptConfig {
     this.promptConfig = { ...this.promptConfig, ...data };
     this.saveToStorage();

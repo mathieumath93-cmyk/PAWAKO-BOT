@@ -49,6 +49,7 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
   const [isSending, setIsSending] = useState<boolean>(false);
   const [textInput, setTextInput] = useState<string>('');
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [isStaffMode, setIsStaffMode] = useState<boolean>(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -94,8 +95,12 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
   }, [messages, isLoading]);
 
   const handleSendMessage = async () => {
-    const trimmed = textInput.trim();
+    let trimmed = textInput.trim();
     if (!trimmed || isSending) return;
+
+    if (isStaffMode && !trimmed.startsWith('🛡️ [Staff]')) {
+      trimmed = `🛡️ **[Intervention Staff Pawako]** :\n${trimmed}`;
+    }
 
     setIsSending(true);
     try {
@@ -248,7 +253,13 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
             </div>
           ) : (
             messages.map((msg, idx) => {
+              const isStaffIntervention =
+                msg.content.includes('Intervention Staff') ||
+                msg.content.includes('[Staff]') ||
+                msg.content.includes('🛡️') ||
+                msg.content.includes('Staff Pawako');
               const isBotMsg = msg.author.isBot;
+              const isCandidateMsg = !isBotMsg;
               const formattedTime = new Date(msg.createdAt).toLocaleTimeString('fr-FR', {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -257,14 +268,20 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
               return (
                 <div
                   key={msg.id || idx}
-                  className={`flex items-start gap-3 text-xs ${
-                    isBotMsg ? 'bg-indigo-950/30 -mx-2 px-3 py-2 rounded-xl border border-indigo-500/20' : ''
+                  className={`flex items-start gap-3 text-xs p-2.5 rounded-xl border transition-all ${
+                    isStaffIntervention
+                      ? 'bg-amber-950/25 border-amber-500/40 text-amber-100 shadow-sm'
+                      : isBotMsg
+                      ? 'bg-indigo-950/20 border-indigo-500/20'
+                      : 'bg-slate-900/60 border-slate-800'
                   }`}
                 >
                   <img
                     src={
                       msg.author.avatarUrl ||
-                      (isBotMsg
+                      (isStaffIntervention
+                        ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'
+                        : isBotMsg
                         ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80'
                         : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80')
                     }
@@ -276,16 +293,31 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span
                         className={`font-bold ${
-                          isBotMsg ? 'text-indigo-300' : 'text-slate-200'
+                          isStaffIntervention
+                            ? 'text-amber-300'
+                            : isBotMsg
+                            ? 'text-indigo-300'
+                            : 'text-emerald-300'
                         }`}
                       >
                         {msg.author.username}
                       </span>
-                      {isBotMsg && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-600 text-white uppercase tracking-wider">
-                          BOT
+
+                      {/* Distinctive Roles Badges */}
+                      {isStaffIntervention ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                          🛡️ STAFF HUMAIN
+                        </span>
+                      ) : isBotMsg ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider flex items-center gap-1">
+                          🤖 BOT AUTO
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
+                          👤 CANDIDAT
                         </span>
                       )}
+
                       <span className="text-[10px] text-slate-500">{formattedTime}</span>
                     </div>
 
@@ -338,6 +370,23 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
 
         {/* Message Input & Send Bar */}
         <div className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800 shrink-0 space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+              <input
+                type="checkbox"
+                checked={isStaffMode}
+                onChange={(e) => setIsStaffMode(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-900 cursor-pointer"
+              />
+              <span className={`text-[11px] font-semibold flex items-center gap-1 ${isStaffMode ? 'text-amber-300' : 'text-slate-400'}`}>
+                🛡️ Intervenir en tant que Staff Humain (badge prioritaire)
+              </span>
+            </label>
+            <span className="text-[10px] text-slate-500">
+              Salon : <code className="text-slate-300">#{channelName || 'salon-prive'}</code>
+            </span>
+          </div>
+
           <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
@@ -345,7 +394,11 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={2}
-              placeholder={`Écrire une réponse manuelle à ${member.username} en tant que Pawako Formation... (Entrée pour envoyer)`}
+              placeholder={
+                isStaffMode
+                  ? `Répondre en tant que Staff Humain à ${member.username}...`
+                  : `Écrire au nom de Pawako Formation à ${member.username}...`
+              }
               className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none transition-colors"
             />
 

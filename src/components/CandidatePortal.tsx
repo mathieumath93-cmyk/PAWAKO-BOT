@@ -12,11 +12,13 @@ import {
   Sparkles,
   Zap,
   Trophy,
+  Bot,
 } from 'lucide-react';
 import { Member, TrainingModule } from '../types';
 import { memberService } from '../services/memberService';
 import { moduleService } from '../services/moduleService';
 import { gamificationService } from '../services/gamificationService';
+import { CandidateChannelChatModal } from './CandidateChannelChatModal';
 
 interface CandidatePortalProps {
   allowCandidateSwitch?: boolean;
@@ -28,6 +30,7 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
   const modules = moduleService.getModules();
 
   const [selectedMemberId, setSelectedMemberId] = useState<string>(candidates[0]?.id || members[0]?.id || '');
+  const [showChatModal, setShowChatModal] = useState<boolean>(false);
   const [selectedModule, setSelectedModule] = useState<TrainingModule | null>(null);
 
   const activeCand = members.find((m) => m.id === selectedMemberId) || candidates[0] || members[0];
@@ -64,20 +67,31 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
         </div>
 
         {allowCandidateSwitch && candidates.length > 0 && (
-          <div className="flex items-center space-x-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 w-full sm:w-auto">
-            <User className="w-4 h-4 text-indigo-400 shrink-0" />
-            <span className="text-xs text-slate-400 font-medium shrink-0">Aperçu Candidat :</span>
-            <select
-              value={activeCand.id}
-              onChange={(e) => setSelectedMemberId(e.target.value)}
-              className="bg-slate-900 text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-indigo-500 w-full sm:w-auto"
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center space-x-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 w-full sm:w-auto">
+              <User className="w-4 h-4 text-indigo-400 shrink-0" />
+              <span className="text-xs text-slate-400 font-medium shrink-0">Aperçu Candidat :</span>
+              <select
+                value={activeCand.id}
+                onChange={(e) => setSelectedMemberId(e.target.value)}
+                className="bg-slate-900 text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-indigo-500 w-full sm:w-auto cursor-pointer"
+              >
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.username} ({c.candidateState || 'Membre'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => setShowChatModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Intercepter et répondre manuellement dans le salon privé du candidat via le bot"
             >
-              {candidates.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.username} ({c.candidateState || 'Membre'})
-                </option>
-              ))}
-            </select>
+              <Bot className="w-4 h-4 text-emerald-400" />
+              <span>💬 Intercepter Salon Privé</span>
+            </button>
           </div>
         )}
       </div>
@@ -137,9 +151,26 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
           <div className="space-y-1">
             <h3 className="font-bold text-indigo-200 text-base">Étape Pratique</h3>
             {activeCand.candidateState === 'simulation' && (
-              <p className="text-sm text-indigo-300">
-                🎭 <strong>Test de Simulation IA :</strong> <span className="text-emerald-400 font-semibold">En direct dans ton salon Discord privé !</span> (Prêt 24h/24 sans attente)
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-indigo-300">
+                  🎯 <strong>RDV Test de Simulation :</strong>{' '}
+                  <span className="text-emerald-400 font-semibold">
+                    {activeCand.simulationScheduledTimestamp
+                      ? `${new Date(activeCand.simulationScheduledTimestamp).toLocaleString('fr-FR', {
+                          timeZone: 'Europe/Paris',
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'long',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })} HF`
+                      : 'Programmé à 14h00 HF dans ton salon privé Discord'}
+                  </span>
+                </p>
+                <p className="text-xs text-indigo-300/80">
+                  L'équipe Staff PAWAKO sera présente dans ton salon Discord pour animer ta simulation. Des rappels automatiques te seront envoyés 1h avant (13h00 HF) et à 14h00 HF pile.
+                </p>
+              </div>
             )}
             {activeCand.toolsFormationScheduledTimestamp && (
               <p className="text-sm text-indigo-300">
@@ -213,6 +244,16 @@ export const CandidatePortal: React.FC<CandidatePortalProps> = ({ allowCandidate
           })}
         </div>
       </div>
+
+      {/* Candidate Channel Live Intercept Chat Modal */}
+      {showChatModal && (
+        <CandidateChannelChatModal
+          member={activeCand}
+          allMembers={candidates}
+          onSelectMember={(m) => setSelectedMemberId(m.id)}
+          onClose={() => setShowChatModal(false)}
+        />
+      )}
     </div>
   );
 };

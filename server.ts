@@ -375,7 +375,25 @@ async function startServer() {
           canAssignByBot: r.position < botHighestRolePosition && !r.managed,
         }));
 
-      // Format Members
+      // Extract set of active Discord user IDs
+      const activeDiscordIds = new Set(rawMembers.map((m: any) => m.user?.id).filter(Boolean));
+      const existingStoreMembers = store.getMembers();
+
+      // Identify candidates in store who have left the server and purge from Firestore
+      const toPurge = existingStoreMembers.filter((m) => {
+        const isAdmin = m.roles?.some((r: string) => r.toLowerCase().includes('admin')) || m.username.toLowerCase().includes('admin');
+        if (isAdmin) return false;
+        const dId = (m.discordId || m.id).replace(/^mem-/, '');
+        return !activeDiscordIds.has(dId);
+      });
+
+      for (const p of toPurge) {
+        try {
+          firebaseSyncService.deleteMember(p.id).catch(() => {});
+        } catch {}
+      }
+
+      // Format & merge remaining members while strictly preserving progress
       const formattedMembers = rawMembers.map((m: any) => {
         const user = m.user || {};
         const memberRoles = (m.roles || []).map((rId: string) => {
@@ -388,6 +406,20 @@ async function startServer() {
           ? `https://cdn.discordapp.com/avatars/${user.id}/${avatarHash}.png`
           : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80';
 
+        const existing = existingStoreMembers.find(
+          (em) => em.discordId === user.id || em.id === `mem-${user.id}` || em.id === user.id
+        );
+
+        if (existing) {
+          return {
+            ...existing,
+            username: m.nick || user.global_name || user.username || existing.username,
+            avatarUrl: avatarUrl || existing.avatarUrl,
+            roles: memberRoles.length > 0 ? memberRoles : existing.roles,
+            isActive: true,
+          };
+        }
+
         return {
           id: `mem-${user.id}`,
           discordId: user.id,
@@ -396,13 +428,25 @@ async function startServer() {
           roles: memberRoles.length > 0 ? memberRoles : ['Membre'],
           joinedAt: m.joined_at ? new Date(m.joined_at).toLocaleString('fr-FR') : new Date().toLocaleString('fr-FR'),
           currentModuleId: 'mod-1',
+          candidateState: 'nouveau' as const,
           progress: {
-            'mod-1': { moduleId: 'mod-1', status: 'en_cours', attemptsCount: 0 },
+            'mod-1': { moduleId: 'mod-1', status: 'en_cours' as const, attemptsCount: 0 },
           },
           isActive: true,
           lastActiveAt: new Date().toLocaleString('fr-FR'),
         };
       });
+
+      // Update store with merged active members (plus keep any system admins)
+      const adminMembers = existingStoreMembers.filter((m) =>
+        m.roles?.some((r: string) => r.toLowerCase().includes('admin')) || m.username.toLowerCase().includes('admin')
+      );
+      const allActiveMerged = [
+        ...adminMembers.filter((a) => !formattedMembers.some((fm) => fm.id === a.id || fm.discordId === a.discordId)),
+        ...formattedMembers,
+      ];
+      store.setMembers(allActiveMerged);
+      store.saveMembers();
 
       const guildIcon = guildDetail.icon
         ? `https://cdn.discordapp.com/icons/${guildDetail.id}/${guildDetail.icon}.png`
@@ -1587,6 +1631,36 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Purge candidates who left the Discord server
+  app.post('/api/members/purge-absent', async (req: Request, res: Response) => {
+    try {
+      const result = await pawakoBot.purgeAbsentCandidates();
+      res.json({
+        success: true,
+        ...result,
+        message: `Purge effectuée : ${result.purgedCount} candidat(s) absent(s) supprimé(s), ${result.remainingCount} candidat(s) actif(s) sur le serveur.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Manually trigger or re-announce 14h00 Simulation RDV
+  app.post('/api/members/:id/schedule-14h', async (req: Request, res: Response) => {
+    try {
+      const member = store.getMember(req.params.id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable' });
+      const success = await pawakoBot.scheduleAndAnnounceSimulation14h(member);
+      res.json({
+        success,
+        member: store.getMember(req.params.id),
+        message: `Convocation RDV Simulation 14h00 programmée et envoyée pour ${member.username}.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

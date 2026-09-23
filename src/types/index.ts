@@ -197,6 +197,7 @@ export interface Member {
   lastReminderAt?: string;
   simulationScheduledTimestamp?: number | null;
   simulationReminderSent?: boolean;
+  simulationUpcomingReminderSent?: boolean;
   simulationAttemptsCount?: number; // Up to 5 attempts for simulation
   simuMpSentToStaff?: boolean;
   toolsFormationScheduledTimestamp?: number | null;

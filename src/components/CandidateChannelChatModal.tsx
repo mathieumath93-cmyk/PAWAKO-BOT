@@ -183,10 +183,10 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-4">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl h-[92vh] max-h-[850px] flex flex-col shadow-2xl overflow-hidden relative animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4">
+      <div className="bg-slate-900 border-0 sm:border border-slate-700/80 rounded-none sm:rounded-2xl w-full max-w-4xl h-full sm:h-[92vh] sm:max-h-[850px] flex flex-col shadow-2xl overflow-hidden relative animate-fadeIn">
         {/* Modal Top Header */}
-        <div className="p-3.5 sm:p-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+        <div className="p-3 sm:p-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative shrink-0">
               <img
@@ -424,13 +424,13 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
               onKeyDown={handleKeyDown}
               rows={2}
               placeholder={`Écrire directement à ${member.username}... (Entrée pour envoyer)`}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none transition-colors"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none transition-colors"
             />
 
             <button
               onClick={handleSendMessage}
               disabled={!textInput.trim() || isSending}
-              className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 shrink-0 cursor-pointer"
+              className="min-h-[44px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 shrink-0 cursor-pointer"
             >
               {isSending ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />

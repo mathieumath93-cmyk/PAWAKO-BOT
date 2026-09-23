@@ -737,7 +737,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
       {/* --- FICHE CANDIDAT MODAL DRAWER --- */}
       {selectedCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-xl h-full bg-slate-900 border-l border-slate-800 p-6 shadow-2xl overflow-y-auto space-y-6 relative flex flex-col justify-between">
+          <div className="w-full max-w-xl h-full bg-slate-900 border-l border-slate-800 p-4 sm:p-6 shadow-2xl overflow-y-auto space-y-6 relative flex flex-col justify-between">
             <div className="space-y-6">
               {/* Drawer Header */}
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -824,7 +824,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   <span>Actions Directes Discord & Administration</span>
                 </h3>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     onClick={async () => {
                       const res = await memberService.scheduleSimulation14h(selectedCandidate.id);
@@ -835,7 +835,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         onShowToast('Erreur Convocation', res.message || 'Impossible d\'envoyer la convocation', 'info');
                       }
                     }}
-                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-center gap-2 col-span-2 cursor-pointer"
+                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-center gap-2 col-span-1 sm:col-span-2 cursor-pointer min-h-[44px]"
                     title="Envoyer la convocation officielle au RDV de Simulation 14h00 HF dans son salon Discord"
                   >
                     <Calendar className="w-4 h-4 text-blue-400 shrink-0" />
@@ -844,7 +844,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                   <button
                     onClick={() => setChatChannelMember(selectedCandidate)}
-                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 col-span-2 cursor-pointer"
+                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 col-span-1 sm:col-span-2 cursor-pointer min-h-[44px]"
                   >
                     <Bot className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>💬 Ouvrir le Salon Privé & Répondre (Staff / Pawako)</span>

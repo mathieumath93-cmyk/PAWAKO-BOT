@@ -42,6 +42,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const tabLabels: Record<string, string> = {
     overview: 'Candidats & Progression',
+    'live-salons': 'Salons en Direct',
     gamification: 'Gamification & Classements',
     'member-portal': 'Espace Membre',
     members: 'Gestion des Candidats',
@@ -121,7 +122,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
 
           {isNotifDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95">
+            <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-xs sm:max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
                 <span className="text-xs font-bold text-white">Notifications Système</span>
                 <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-medium">

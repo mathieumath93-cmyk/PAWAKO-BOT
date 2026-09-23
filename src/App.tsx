@@ -1,4 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  Radio,
+  Users,
+  GraduationCap,
+  Menu,
+} from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { ToastContainer } from './components/ui/ToastContainer';
@@ -144,7 +151,7 @@ export function App() {
         />
 
         {/* View Content */}
-        <main className={`flex-1 ${activeTab === 'live-salons' ? 'p-0 w-full' : 'p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6'}`}>
+        <main className={`flex-1 ${activeTab === 'live-salons' ? 'p-0 w-full' : 'p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 pb-24 lg:pb-8'}`}>
           {activeTab === 'live-salons' && (
             <LiveChannelsMonitorView
               onShowToast={showToast}
@@ -209,6 +216,68 @@ export function App() {
           {activeTab === 'settings' && <SettingsView onShowToast={showToast} />}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 px-3 py-1.5 flex items-center justify-around shadow-2xl safe-area-bottom">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer min-h-[44px] ${
+            activeTab === 'overview'
+              ? 'text-indigo-400 font-bold'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">Dashboard</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('live-salons')}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors relative cursor-pointer min-h-[44px] ${
+            activeTab === 'live-salons'
+              ? 'text-indigo-400 font-bold'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className="relative">
+            <Radio className="w-5 h-5 mb-0.5" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </div>
+          <span className="text-[10px]">Salons Live</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('members')}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer min-h-[44px] ${
+            activeTab === 'members'
+              ? 'text-indigo-400 font-bold'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Users className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">Candidats</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('member-portal')}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer min-h-[44px] ${
+            activeTab === 'member-portal'
+              ? 'text-indigo-400 font-bold'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <GraduationCap className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">Espace Membre</span>
+        </button>
+
+        <button
+          onClick={() => setIsOpenMobileSidebar(true)}
+          className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-slate-400 hover:text-slate-200 transition-colors cursor-pointer min-h-[44px]"
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">Menu</span>
+        </button>
+      </nav>
 
       {/* Bot Token Configuration Modal */}
       <BotTokenModal

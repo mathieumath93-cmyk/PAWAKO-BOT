@@ -1298,6 +1298,118 @@ class DiscordService {
   public clearQueue() {
     this.taskQueue.clearQueue();
   }
+
+  /**
+   * Fetch all Discord action messages configuration mapping from backend
+   */
+  public async getActionMessagesConfig(): Promise<{ success: boolean; config?: any; error?: string }> {
+    try {
+      const cached = this.cacheManager.get<any>('discord_action_messages_config');
+      if (cached) {
+        return { success: true, config: cached };
+      }
+
+      const res = await safeFetchJson('/api/discord/action-messages');
+      if (res.ok && res.data && res.data.config) {
+        this.cacheManager.set('discord_action_messages_config', res.data.config, 5 * 60 * 1000);
+        return { success: true, config: res.data.config };
+      }
+      return { success: false, error: res.error || 'Impossible de récupérer la configuration des messages' };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }
+
+  /**
+   * Fetch custom role-specific and progress-relevant message strings for a selected candidate and action
+   */
+  public async getCandidateActionMessage(
+    memberId: string,
+    action: string,
+    options?: { timestamp?: number; adminName?: string; customReason?: string; dynamicNote?: string }
+  ): Promise<{
+    success: boolean;
+    roleProfile?: string;
+    username?: string;
+    message?: {
+      action: string;
+      roleProfile: string;
+      label: string;
+      title: string;
+      content: string;
+      description: string;
+      footer: string;
+      color: number;
+      suggestedDmText: string;
+    };
+    error?: string;
+  }> {
+    try {
+      const params = new URLSearchParams({ action });
+      if (options?.timestamp) params.append('timestamp', String(options.timestamp));
+      if (options?.adminName) params.append('adminName', options.adminName);
+      if (options?.customReason) params.append('customReason', options.customReason);
+      if (options?.dynamicNote) params.append('dynamicNote', options.dynamicNote);
+
+      const endpoint = `/api/discord/action-messages/candidate/${encodeURIComponent(memberId)}?${params.toString()}`;
+      const res = await safeFetchJson(endpoint);
+      if (res.ok && res.data && res.data.message) {
+        return {
+          success: true,
+          roleProfile: res.data.roleProfile,
+          username: res.data.username,
+          message: res.data.message,
+        };
+      }
+      return { success: false, error: res.error || 'Erreur récupération message' };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }
+
+  /**
+   * Fetch all candidate-contextual templates for a candidate's current role and progress
+   */
+  public async getCandidateContextualTemplates(
+    memberId: string,
+    options?: { timestamp?: number; adminName?: string }
+  ): Promise<{
+    success: boolean;
+    roleProfile?: string;
+    username?: string;
+    templates: Array<{
+      action: string;
+      roleProfile: string;
+      label: string;
+      title: string;
+      content: string;
+      description: string;
+      footer: string;
+      color: number;
+      suggestedDmText: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.timestamp) params.append('timestamp', String(options.timestamp));
+      if (options?.adminName) params.append('adminName', options.adminName);
+
+      const endpoint = `/api/discord/action-messages/candidate/${encodeURIComponent(memberId)}?${params.toString()}`;
+      const res = await safeFetchJson(endpoint);
+      if (res.ok && res.data && res.data.templates) {
+        return {
+          success: true,
+          roleProfile: res.data.roleProfile,
+          username: res.data.username,
+          templates: res.data.templates,
+        };
+      }
+      return { success: false, templates: [], error: res.error || 'Erreur récupération templates' };
+    } catch (err: any) {
+      return { success: false, templates: [], error: err?.message };
+    }
+  }
 }
 
 export const discordService = new DiscordService();

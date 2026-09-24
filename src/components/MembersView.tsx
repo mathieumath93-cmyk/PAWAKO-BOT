@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Search,
@@ -67,6 +67,34 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [dmTarget, setDmTarget] = useState<Member | null>(null);
   const [dmMessage, setDmMessage] = useState<string>('');
   const [isSendingDm, setIsSendingDm] = useState<boolean>(false);
+  const [candidateTemplates, setCandidateTemplates] = useState<any[]>([]);
+  const [selectedTemplateAction, setSelectedTemplateAction] = useState<string>('direct_message_reminder');
+  const [candidateRoleProfile, setCandidateRoleProfile] = useState<string>('');
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState<boolean>(false);
+
+  // Fetch role-specific message templates when a candidate is selected for DM
+  useEffect(() => {
+    if (dmTarget) {
+      setIsLoadingTemplates(true);
+      discordService.getCandidateContextualTemplates(dmTarget.id).then((res) => {
+        setIsLoadingTemplates(false);
+        if (res.success && res.templates && res.templates.length > 0) {
+          setCandidateTemplates(res.templates);
+          setCandidateRoleProfile(res.roleProfile || '');
+          const reminderTpl = res.templates.find((t: any) => t.action === 'direct_message_reminder') || res.templates[0];
+          if (reminderTpl) {
+            setSelectedTemplateAction(reminderTpl.action);
+            setDmMessage(reminderTpl.suggestedDmText || reminderTpl.description);
+          }
+        }
+      }).catch(() => {
+        setIsLoadingTemplates(false);
+      });
+    } else {
+      setCandidateTemplates([]);
+      setCandidateRoleProfile('');
+    }
+  }, [dmTarget]);
 
   // Badges Modal
   const [badgeModalMember, setBadgeModalMember] = useState<Member | null>(null);
@@ -976,8 +1004,8 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
       {/* --- DISCORD DM MODAL --- */}
       {dmTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl space-y-5 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl space-y-5 relative my-8 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setDmTarget(null)}
               className="absolute top-5 right-5 p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-colors"
@@ -990,8 +1018,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 <MessageSquare className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
-                  Envoyer un message DM Discord
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Envoyer un message DM Discord</span>
+                  {candidateRoleProfile && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      {candidateRoleProfile.replace('_', ' ')}
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-400">
                   Destinataire : <span className="text-indigo-300 font-semibold">{dmTarget.username}</span> (@{dmTarget.discordId})
@@ -999,10 +1032,61 @@ export const MembersView: React.FC<MembersViewProps> = ({
               </div>
             </div>
 
+            {/* Contextual role-specific templates selector */}
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-300">
-                Message personnalisé :
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Modèles contextuels selon sa progression :</span>
+                </label>
+                {isLoadingTemplates && (
+                  <span className="text-[11px] text-slate-400 animate-pulse">Chargement des modèles...</span>
+                )}
+              </div>
+
+              {candidateTemplates.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                  {candidateTemplates.map((tpl: any) => {
+                    const isSelected = selectedTemplateAction === tpl.action;
+                    return (
+                      <button
+                        key={tpl.action}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTemplateAction(tpl.action);
+                          setDmMessage(tpl.suggestedDmText || tpl.description);
+                        }}
+                        className={`p-2 rounded-xl text-left text-xs transition-all border flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-indigo-600/30 border-indigo-500 text-white shadow-sm'
+                            : 'bg-slate-950/60 hover:bg-slate-800 border-slate-800 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold truncate">{tpl.label || tpl.title}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                            {tpl.action}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate mt-1">
+                          {tpl.suggestedDmText || tpl.title}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Contenu du message :
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Transmis en DM privé et dans son salon Discord
+                </span>
+              </div>
               <textarea
                 rows={4}
                 value={dmMessage}
@@ -1011,6 +1095,23 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
               ></textarea>
             </div>
+
+            {/* Live Message Preview */}
+            {dmMessage.trim() && (
+              <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <span>Aperçu Discord :</span>
+                </div>
+                <div className="pl-2 border-l-2 border-indigo-500 text-xs text-slate-200">
+                  <p className="font-semibold text-indigo-300 text-xs mb-1">
+                    💬 [MESSAGE DE L'ÉQUIPE STAFF PAWAKO] &lt;@{dmTarget.discordId}&gt;
+                  </p>
+                  <p className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed">
+                    {dmMessage}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button
@@ -1023,7 +1124,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
               <button
                 disabled={!dmMessage.trim() || isSendingDm}
                 onClick={handleSendDiscordDm}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/20"
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/20 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>{isSendingDm ? 'Envoi...' : 'Envoyer sur Discord'}</span>

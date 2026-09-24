@@ -11,6 +11,13 @@ import { discordService } from './src/services/discordService';
 import { memberService } from './src/services/memberService';
 import { onboardingService } from './src/services/onboardingService';
 import { aiVoiceAnnouncerService } from './src/services/aiVoiceAnnouncerService';
+import {
+  DISCORD_ACTION_MESSAGES_CONFIG,
+  resolveActionMessage,
+  getCandidateActionTemplates,
+  determineCandidateRoleProfile,
+  DiscordActionType
+} from './src/config/discordActionMessages';
 
 const BOT_CONFIG_FILE = path.join(process.cwd(), 'data', 'bot_config.json');
 
@@ -1740,6 +1747,56 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  // Configuration object mapping defining unique, role-specific Discord action messages
+  app.get('/api/discord/action-messages', (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      config: DISCORD_ACTION_MESSAGES_CONFIG,
+    });
+  });
+
+  // Fetch contextual role-specific message strings for a selected candidate and action
+  app.get('/api/discord/action-messages/candidate/:id', (req: Request, res: Response) => {
+    const { id } = req.params;
+    const member = store.getMember(id);
+    if (!member) {
+      return res.status(404).json({ success: false, error: 'Membre introuvable' });
+    }
+
+    const { action, timestamp, adminName, customReason, dynamicNote } = req.query;
+    const roleProfile = determineCandidateRoleProfile(member);
+
+    if (action && typeof action === 'string') {
+      const resolved = resolveActionMessage(action as DiscordActionType, member, {
+        timestamp: timestamp ? Number(timestamp) : undefined,
+        adminName: typeof adminName === 'string' ? adminName : undefined,
+        customReason: typeof customReason === 'string' ? customReason : undefined,
+        dynamicNote: typeof dynamicNote === 'string' ? dynamicNote : undefined,
+      });
+
+      return res.json({
+        success: true,
+        memberId: member.id,
+        username: member.username,
+        roleProfile,
+        message: resolved,
+      });
+    }
+
+    const templates = getCandidateActionTemplates(member, {
+      timestamp: timestamp ? Number(timestamp) : undefined,
+      adminName: typeof adminName === 'string' ? adminName : undefined,
+    });
+
+    return res.json({
+      success: true,
+      memberId: member.id,
+      username: member.username,
+      roleProfile,
+      templates,
+    });
   });
 
   // Manually trigger or re-announce 14h00 Simulation RDV

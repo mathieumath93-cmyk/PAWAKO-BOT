@@ -217,6 +217,7 @@ export interface Member {
   kickedReason?: string;
   lastFollowupDate?: string; // "YYYY-MM-DD" of last morning followup
   lastVoiceFollowupSentAt?: string;
+  notes?: string;
 }
 
 export interface TicketMessage {

@@ -856,6 +856,10 @@ class StoreService {
     this.saveMembers();
   }
 
+  public upsertMember(updated: Member): void {
+    this.updateMember(updated);
+  }
+
   public saveUsefulLinks(): void {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       try {

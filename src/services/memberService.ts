@@ -119,12 +119,21 @@ class MemberService {
     return updated;
   }
 
-  public resetCooldown(memberId: string): Member {
+  public async resetCooldown(memberId: string): Promise<{ success: boolean; member?: Member; message?: string }> {
     const updated = store.resetCandidateCooldown(memberId);
     firebaseSyncService.saveMember(updated).catch((err) =>
       console.error('[MemberService] Firebase saveMember failed:', err)
     );
-    return updated;
+    try {
+      const res = await fetch(`/api/members/${memberId}/reset-cooldown`, { method: 'POST' });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message };
+    }
   }
 
   public resetCurrentModule(memberId: string): Member {
@@ -143,46 +152,78 @@ class MemberService {
     return updated;
   }
 
-  public validateSimulation(memberId: string, adminName: string = 'Staff'): Member {
+  public async validateSimulation(
+    memberId: string,
+    adminName: string = 'Staff'
+  ): Promise<{ success: boolean; member?: Member; botSuccess?: boolean; message?: string }> {
     const updated = store.validateCandidateSimulation(memberId, adminName);
     firebaseSyncService.saveMember(updated).catch((err) =>
       console.error('[MemberService] Firebase saveMember failed:', err)
     );
     try {
-      const { discordBot } = require('../bot/discordBot');
-      if (discordBot && typeof discordBot.validateSimulationAndTriggerToolsFormation === 'function') {
-        discordBot.validateSimulationAndTriggerToolsFormation(updated, adminName);
+      const res = await fetch(`/api/members/${memberId}/validate-simulation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminName }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
       }
-    } catch (e) {}
-    return updated;
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message || 'Erreur validation simulation' };
+    }
   }
 
-  public rescheduleSimulation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
+  public async rescheduleSimulation(
+    memberId: string,
+    timestamp: number,
+    adminName: string = 'Staff'
+  ): Promise<{ success: boolean; member?: Member; botSuccess?: boolean; message?: string }> {
     const updated = store.rescheduleCandidateSimulation(memberId, timestamp, adminName);
     firebaseSyncService.saveMember(updated).catch((err) =>
       console.error('[MemberService] Firebase saveMember failed:', err)
     );
     try {
-      const { discordBot } = require('../bot/discordBot');
-      if (discordBot && typeof discordBot.notifySimulationRescheduled === 'function') {
-        discordBot.notifySimulationRescheduled(updated, timestamp, adminName);
+      const res = await fetch(`/api/members/${memberId}/reschedule-simulation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp, adminName }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
       }
-    } catch (e) {}
-    return updated;
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message };
+    }
   }
 
-  public rescheduleToolsFormation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
+  public async rescheduleToolsFormation(
+    memberId: string,
+    timestamp: number,
+    adminName: string = 'Staff'
+  ): Promise<{ success: boolean; member?: Member; botSuccess?: boolean; message?: string }> {
     const updated = store.rescheduleCandidateToolsFormation(memberId, timestamp, adminName);
     firebaseSyncService.saveMember(updated).catch((err) =>
       console.error('[MemberService] Firebase saveMember failed:', err)
     );
     try {
-      const { discordBot } = require('../bot/discordBot');
-      if (discordBot && typeof discordBot.notifyToolsFormationRescheduled === 'function') {
-        discordBot.notifyToolsFormationRescheduled(updated, timestamp, adminName);
+      const res = await fetch(`/api/members/${memberId}/reschedule-tools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp, adminName }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
       }
-    } catch (e) {}
-    return updated;
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message };
+    }
   }
 
   public evaluateMemberBadges(memberId: string): Member {
@@ -261,18 +302,45 @@ class MemberService {
     return updated;
   }
 
-  public kickMemberForInactivity(memberId: string, reason: string = 'Inactivité 3 jours sans action'): Member | null {
+  public async kickMemberForInactivity(
+    memberId: string,
+    reason: string = 'Inactivité 3 jours sans action'
+  ): Promise<{ success: boolean; member?: Member | null; message?: string }> {
     const updated = store.kickMemberForInactivity(memberId, reason);
     if (updated) {
       firebaseSyncService.saveMember(updated).catch(() => {});
-      try {
-        const { pawakoBot } = require('../bot/discordBot');
-        if (pawakoBot && typeof pawakoBot.kickMemberAndNotify === 'function') {
-          pawakoBot.kickMemberAndNotify(updated, reason);
-        }
-      } catch (e) {}
     }
-    return updated;
+    try {
+      const res = await fetch(`/api/members/${memberId}/kick-inactivity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message };
+    }
+  }
+
+  public async sendMemberDm(
+    memberId: string,
+    message: string,
+    title?: string
+  ): Promise<{ success: boolean; dmSent?: boolean; channelSent?: boolean; message?: string }> {
+    try {
+      const res = await fetch(`/api/members/${memberId}/dm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, title }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Erreur réseau lors de l\'envoi du DM' };
+    }
   }
 
   public getModuleCandidateBreakdown() {

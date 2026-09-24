@@ -3871,15 +3871,11 @@ export class PawakoBotRunner {
 
     const candDiscordId = (member.discordId || member.id.replace('mem-', '')).replace(/[<@!>]/g, '').trim();
 
-    // Verify if candidate is still present in the Discord guild (not kicked/left)
+    // Verify if candidate is present in the Discord guild
     if (candDiscordId && /^\d{17,20}$/.test(candDiscordId)) {
       const gMember = await guild.members.fetch(candDiscordId).catch(() => null);
       if (!gMember) {
-        console.log(`[getCandidateChannel] Candidate ${member.username} (${candDiscordId}) is no longer in guild.`);
-        member.isActive = false;
-        store.saveMembers();
-        firebaseSyncService.saveMember(member).catch(() => {});
-        return null;
+        console.log(`[getCandidateChannel] Candidate ${member.username} (${candDiscordId}) not cached in guild.`);
       }
     }
     const cleanName = member.username.toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 20) || 'membre';
@@ -4071,7 +4067,42 @@ export class PawakoBotRunner {
 
     const channel = await this.getCandidateChannel(member, true);
     if (!channel) {
-      return { success: false, error: 'Impossible d\'accéder ou de créer le salon privé du candidat' };
+      const discordUserId = member.discordId || member.id.replace(/^mem-/, '');
+      if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+        try {
+          const user = await this.client.users.fetch(discordUserId).catch(() => null);
+          if (user) {
+            const sent = await user.send({ content: content.trim() });
+            const msgObj = {
+              id: sent.id,
+              channelId: user.id,
+              channelName: `mp-${member.username.toLowerCase()}`,
+              candidateId: member.id,
+              candidateUsername: member.username,
+              author: {
+                id: sent.author.id,
+                username: sent.author.displayName || sent.author.username,
+                avatarUrl: sent.author.displayAvatarURL(),
+                isBot: sent.author.bot,
+              },
+              content: sent.content,
+              createdAt: sent.createdAt.toISOString(),
+              attachments: [],
+              embeds: [],
+            };
+            this.notifyLiveMessage(msgObj);
+            return {
+              success: true,
+              channelId: user.id,
+              channelName: `mp-${member.username}`,
+              message: msgObj,
+            };
+          }
+        } catch (dmErr: any) {
+          console.warn('[sendCandidateMessage DM fallback error]', dmErr);
+        }
+      }
+      return { success: false, error: 'Impossible d\'accéder au salon privé ou d\'envoyer un MP au candidat' };
     }
 
     try {
@@ -4519,13 +4550,31 @@ export class PawakoBotRunner {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      await candChan.send({
-        content: `<@${discordUserId}>`,
-        embeds: [embed],
-        components: [simValidateRow],
-      }).catch((e: any) => console.warn('[Reschedule Sim Send Error]', e));
+      let channelSent = false;
+      if (candChan) {
+        await candChan.send({
+          content: `<@${discordUserId}>`,
+          embeds: [embed],
+          components: [simValidateRow],
+        }).then(() => { channelSent = true; }).catch((e: any) => console.warn('[Reschedule Sim Send Error]', e));
+      }
 
-      return true;
+      // Also send direct message (DM)
+      let dmSent = false;
+      if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+        try {
+          const user = await this.client.users.fetch(discordUserId).catch(() => null);
+          if (user) {
+            await user.send({
+              content: `📅 **[CONVOCATION REPROGRAMMÉE]** Ton test de simulation a été reprogrammé pour <t:${simTsSec}:F> :`,
+              embeds: [embed],
+            });
+            dmSent = true;
+          }
+        } catch (e) {}
+      }
+
+      return channelSent || dmSent;
     } catch (err) {
       console.warn('[notifySimulationRescheduled Error]', err);
       return false;
@@ -4543,8 +4592,6 @@ export class PawakoBotRunner {
     if (!this.client || !this.isConnected) return false;
     try {
       const candChan = await this.getCandidateChannel(member, true);
-      if (!candChan) return false;
-
       const discordUserId = member.discordId || member.id.replace('mem-', '');
       const toolsTsSec = Math.floor(newTimestamp / 1000);
 
@@ -4572,13 +4619,31 @@ export class PawakoBotRunner {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      await candChan.send({
-        content: `<@${discordUserId}>`,
-        embeds: [embed],
-        components: [toolsValidateRow],
-      }).catch((e: any) => console.warn('[Reschedule Tools Send Error]', e));
+      let channelSent = false;
+      if (candChan) {
+        await candChan.send({
+          content: `<@${discordUserId}>`,
+          embeds: [embed],
+          components: [toolsValidateRow],
+        }).then(() => { channelSent = true; }).catch((e: any) => console.warn('[Reschedule Tools Send Error]', e));
+      }
 
-      return true;
+      // Also send direct message (DM)
+      let dmSent = false;
+      if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+        try {
+          const user = await this.client.users.fetch(discordUserId).catch(() => null);
+          if (user) {
+            await user.send({
+              content: `📅 **[CONVOCATION REPROGRAMMÉE]** Ta session Formation Outils a été fixée pour <t:${toolsTsSec}:F> :`,
+              embeds: [embed],
+            });
+            dmSent = true;
+          }
+        } catch (e) {}
+      }
+
+      return channelSent || dmSent;
     } catch (err) {
       console.warn('[notifyToolsFormationRescheduled Error]', err);
       return false;
@@ -4638,6 +4703,136 @@ export class PawakoBotRunner {
       console.warn('[notifyBadgeUnlocked Error]', err);
       return false;
     }
+  }
+
+  /**
+   * Send a direct message (DM) and/or personal channel notification to a member on Discord
+   */
+  public async sendDirectMessageToMember(
+    memberIdOrDiscordId: string,
+    messageText: string,
+    title: string = "💬 MESSAGE DE L'ÉQUIPE STAFF PAWAKO"
+  ): Promise<{ success: boolean; dmSent: boolean; channelSent: boolean; message: string }> {
+    const allMembers = store.getMembers();
+    const cleanInput = memberIdOrDiscordId.replace(/^mem-/, '').replace(/[<@!>]/g, '').trim();
+    const member = allMembers.find(
+      (m) =>
+        m.id === memberIdOrDiscordId ||
+        m.discordId === cleanInput ||
+        m.id === `mem-${cleanInput}` ||
+        m.username.toLowerCase() === memberIdOrDiscordId.toLowerCase()
+    );
+
+    const discordUserId = member?.discordId || (/^\d{17,20}$/.test(cleanInput) ? cleanInput : null);
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(
+        `Bonjour **${member?.username || (discordUserId ? `<@${discordUserId}>` : 'Candidat')}**,\n\n` +
+        `${messageText}\n\n` +
+        `_Message officiel transmis par l'équipe d'encadrement Staff Pawako Formation._`
+      )
+      .setColor(0x6366f1)
+      .setFooter({ text: 'PAWAKO FORMATION • Encadrement & Support Staff' })
+      .setTimestamp();
+
+    let dmSent = false;
+    let channelSent = false;
+
+    // 1. Send direct message (DM) to candidate's private Discord inbox
+    if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+      try {
+        const user = await this.client.users.fetch(discordUserId).catch(() => null);
+        if (user) {
+          await user.send({
+            content: `💬 Bonjour <@${discordUserId}>, tu as reçu un message officiel du Staff Pawako :`,
+            embeds: [embed],
+          });
+          dmSent = true;
+        }
+      } catch (dmErr: any) {
+        console.warn(`[sendDirectMessageToMember DM Error]`, dmErr?.message);
+      }
+    }
+
+    // 2. Also send to candidate's private channel (#🔒-formation-...)
+    if (member) {
+      try {
+        const candChan = await this.getCandidateChannel(member, true);
+        if (candChan) {
+          await candChan.send({
+            content: discordUserId ? `💬 **[RELANCE / MESSAGE STAFF]** <@${discordUserId}>` : '💬 **[RELANCE / MESSAGE STAFF]**',
+            embeds: [embed],
+          });
+          channelSent = true;
+        }
+      } catch (chanErr: any) {
+        console.warn(`[sendDirectMessageToMember Channel Error]`, chanErr?.message);
+      }
+    }
+
+    store.addLog(
+      'Staff Pawako',
+      `💬 Relance transmise à ${member?.username || discordUserId} (DM Privé: ${dmSent ? '✅' : '❌'}, Salon Discord: ${channelSent ? '✅' : '❌'})`,
+      'member',
+      member?.username
+    );
+
+    const success = dmSent || channelSent;
+    const msg = success
+      ? `Message transmis sur Discord (${dmSent ? 'DM Privé ✅ ' : ''}${channelSent ? 'Salon privé ✅' : ''})`
+      : 'Impossible de joindre le candidat sur Discord (DM bloqués ou bot non connecté)';
+
+    return { success, dmSent, channelSent, message: msg };
+  }
+
+  /**
+   * Notify candidate in their Discord channel and via DM that their quiz cooldown has been reset
+   */
+  public async notifyCooldownReset(member: Member): Promise<boolean> {
+    const discordUserId = member.discordId || member.id.replace('mem-', '');
+    const embed = new EmbedBuilder()
+      .setTitle('⚡ DÉBLOCAGE SPÉCIAL : COOLDOWN ANNULÉ PAR LE STAFF')
+      .setDescription(
+        `📢 <@${discordUserId}>, **l'équipe Staff a levé ton délai d'attente (cooldown) !** ⚡\n\n` +
+        `Tu peux dès maintenant repasser ton évaluation / quiz sans attendre le temps restant réglementaire.\n\n` +
+        `👉 *Rends-toi dans ton espace membre Pawako pour démarrer ta tentative dès maintenant.* 🚀`
+      )
+      .setColor(0xf59e0b)
+      .setFooter({ text: 'PAWAKO FORMATION • Déblocage Exceptionnel Staff' })
+      .setTimestamp();
+
+    let sent = false;
+
+    // Send to candidate's channel
+    try {
+      const candChan = await this.getCandidateChannel(member, true);
+      if (candChan) {
+        await candChan.send({
+          content: `⚡ **[COOLDOWN LEVÉ]** <@${discordUserId}>`,
+          embeds: [embed],
+        });
+        sent = true;
+      }
+    } catch (e) {
+      console.warn('[notifyCooldownReset Channel Error]', e);
+    }
+
+    // Also send DM
+    if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+      try {
+        const user = await this.client.users.fetch(discordUserId).catch(() => null);
+        if (user) {
+          await user.send({
+            content: `⚡ **[COOLDOWN ANNULÉ]** Tu peux repasser ton quiz dès maintenant !`,
+            embeds: [embed],
+          }).catch(() => {});
+          sent = true;
+        }
+      } catch (e) {}
+    }
+
+    return sent;
   }
 
   /**
@@ -4943,30 +5138,30 @@ export class PawakoBotRunner {
       ? "📅 **AUJOURD'HUI à 14h00 HF**"
       : `📅 **DEMAIN (${formattedDate}) à 14h00 HF**`;
 
+    const isAiActive = aiKnowledgeService.isSimulationEnabled();
+    const simEmbed = new EmbedBuilder()
+      .setTitle('🏆 TOUS LES MODULES VALIDÉS — CONVOCATION RDV SIMULATION (14h00 HF)')
+      .setDescription(
+        `Félicitations <@${discordUserId}> pour la réussite complète de tes 5 modules de formation théorique ! 🎓\n\n` +
+        `🎯 **RDV Étape Finale : Le Test de Simulation Pratique**\n` +
+        `Ton rendez-vous officiel de simulation est fixé pour :\n` +
+        `👉 ${timingBadge}\n\n` +
+        (isToday
+          ? `L'équipe Staff PAWAKO sera présente dans ce salon à **14h00 HF** pour animer ton épreuve de mise en situation. Prépare tes fiches de cours et sois bien connecté(e) à l'heure ! 🚀`
+          : `L'équipe Staff PAWAKO sera présente dans ce salon demain à **14h00 HF** pour animer ton épreuve de mise en situation. Profite de la soirée pour réviser tes fiches et sois ponctuel(le) demain à 14h00 HF ! 🚀`) +
+        `\n\n⏰ **Rappels automatiques programmés :**\n` +
+        `• 1 rappel à **13h00 HF** (1h avant le début du test)\n` +
+        `• 1 rappel à **14h00 HF** (coup d'envoi en direct avec le staff)` +
+        (isAiActive
+          ? `\n\n💡 *Tu souhaites t'entraîner ou passer le test immédiatement ? Clique sur le bouton ci-dessous !*`
+          : '')
+      )
+      .setColor(isToday ? 0x10b981 : 0x3b82f6)
+      .setFooter({ text: 'PAWAKO FORMATION • Convocation Simulation 14h00 HF' })
+      .setTimestamp();
+
     const candChan = await this.getCandidateChannel(member, true);
     if (candChan) {
-      const isAiActive = aiKnowledgeService.isSimulationEnabled();
-      const simEmbed = new EmbedBuilder()
-        .setTitle('🏆 TOUS LES MODULES VALIDÉS — CONVOCATION RDV SIMULATION (14h00 HF)')
-        .setDescription(
-          `Félicitations <@${discordUserId}> pour la réussite complète de tes 5 modules de formation théorique ! 🎓\n\n` +
-          `🎯 **RDV Étape Finale : Le Test de Simulation Pratique**\n` +
-          `Ton rendez-vous officiel de simulation est fixé pour :\n` +
-          `👉 ${timingBadge}\n\n` +
-          (isToday
-            ? `L'équipe Staff PAWAKO sera présente dans ce salon à **14h00 HF** pour animer ton épreuve de mise en situation. Prépare tes fiches de cours et sois bien connecté(e) à l'heure ! 🚀`
-            : `L'équipe Staff PAWAKO sera présente dans ce salon demain à **14h00 HF** pour animer ton épreuve de mise en situation. Profite de la soirée pour réviser tes fiches et sois ponctuel(le) demain à 14h00 HF ! 🚀`) +
-          `\n\n⏰ **Rappels automatiques programmés :**\n` +
-          `• 1 rappel à **13h00 HF** (1h avant le début du test)\n` +
-          `• 1 rappel à **14h00 HF** (coup d'envoi en direct avec le staff)` +
-          (isAiActive
-            ? `\n\n💡 *Tu souhaites t'entraîner ou passer le test immédiatement ? Clique sur le bouton ci-dessous !*`
-            : '')
-        )
-        .setColor(isToday ? 0x10b981 : 0x3b82f6)
-        .setFooter({ text: 'PAWAKO FORMATION • Convocation Simulation 14h00 HF' })
-        .setTimestamp();
-
       const simComponents: any[] = [];
       if (isAiActive) {
         simComponents.push(
@@ -4984,6 +5179,19 @@ export class PawakoBotRunner {
         embeds: [simEmbed],
         components: simComponents,
       }).catch((e: any) => console.warn('[Sim Launch Send Error]', e));
+    }
+
+    // Direct Message (DM) to candidate as delivery guarantee
+    if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+      try {
+        const user = await this.client.users.fetch(discordUserId).catch(() => null);
+        if (user) {
+          await user.send({
+            content: `🏆 **[CONVOCATION RDV SIMULATION 14H00]** Félicitations pour la validation de tes 5 modules !`,
+            embeds: [simEmbed],
+          }).catch(() => {});
+        }
+      } catch (e) {}
     }
 
     // Alert staff channel
@@ -7183,23 +7391,31 @@ export class PawakoBotRunner {
       const guildId = process.env.DISCORD_GUILD_ID || this.client?.guilds.cache.first()?.id;
       const guild = guildId ? await this.client?.guilds.fetch(guildId).catch(() => null) : null;
 
-      // 1. Send final notification message to candidate's private channel
+      // 1. Send final notification message to candidate's private channel and direct DM
       try {
         const candChan = await this.getCandidateChannel(member, false);
-        if (candChan) {
-          const embed = new EmbedBuilder()
-            .setTitle('🚨 ALERTE EXPULSION')
-            .setDescription(
-              `📢 <@${discordUserId}>,\n\n` +
-              `Conformément au règlement de formation, tu as été exclu(e) du serveur Discord.\n\n` +
-              `❌ **Exclusion effectuée par la modération.**\n\n` +
-              `_Raison : ${reason}_`
-            )
-            .setColor(0xDC2626)
-            .setFooter({ text: 'PAWAKO FORMATION • Modération' })
-            .setTimestamp();
+        const embed = new EmbedBuilder()
+          .setTitle('🚨 ALERTE EXPULSION')
+          .setDescription(
+            `📢 <@${discordUserId}>,\n\n` +
+            `Conformément au règlement de formation, tu as été exclu(e) du serveur Discord.\n\n` +
+            `❌ **Exclusion effectuée par la modération.**\n\n` +
+            `_Raison : ${reason}_`
+          )
+          .setColor(0xDC2626)
+          .setFooter({ text: 'PAWAKO FORMATION • Modération' })
+          .setTimestamp();
 
+        if (candChan) {
           await candChan.send({ content: `🚨 <@${discordUserId}>`, embeds: [embed] }).catch(() => {});
+        }
+
+        // Direct DM to candidate
+        if (this.client && discordUserId && /^\d{17,20}$/.test(discordUserId)) {
+          const user = await this.client.users.fetch(discordUserId).catch(() => null);
+          if (user) {
+            await user.send({ embeds: [embed] }).catch(() => {});
+          }
         }
       } catch (e) {
         console.warn('[Kick Notification Channel Error]', e);

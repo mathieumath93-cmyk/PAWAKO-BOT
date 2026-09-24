@@ -228,6 +228,9 @@ async function startServer() {
       return res.status(400).json({ success: false, error: 'guildId requis' });
     }
     activeGuildId = guildId;
+    try {
+      onboardingService.updateConfig({ guildId });
+    } catch (e) {}
     res.json({ success: true, activeGuildId });
   });
 
@@ -685,11 +688,28 @@ async function startServer() {
     const { reason } = req.body;
 
     try {
-      const updated = memberService.kickMemberForInactivity(id, reason || 'Inactivité de 3 jours sans action (Kick manuel)');
-      if (!updated) {
-        return res.status(444).json({ success: false, error: 'Membre introuvable ou protégé (rôle Staff).' });
+      const member = store.getMember(id);
+      if (!member) {
+        return res.status(404).json({ success: false, error: 'Membre introuvable ou déjà supprimé.' });
       }
-      return res.json({ success: true, member: updated });
+      const isStaff = member.roles?.some((r) =>
+        ['admin', 'staff', 'lead admin', 'direction', 'support'].some((kw) => r.toLowerCase().includes(kw))
+      );
+      if (isStaff) {
+        return res.status(403).json({ success: false, error: 'Impossible d\'expulser un membre du Staff.' });
+      }
+
+      const botSuccess = await pawakoBot.kickMemberAndNotify(
+        member,
+        reason || 'Expulsion manuelle Staff (inactivité 3j sans action)'
+      );
+      const updated = store.getMember(id) || member;
+      return res.json({
+        success: true,
+        botSuccess,
+        member: updated,
+        message: `${member.username} a été expulsé(e) du serveur Discord et notifié(e).`
+      });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Erreur lors du kick' });
     }
@@ -1735,6 +1755,128 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Direct DM Discord to Member (with private channel mirroring)
+  app.post('/api/members/:id/dm', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { message, title } = req.body;
+      if (!message || !message.trim()) {
+        return res.status(400).json({ success: false, error: 'Le message est requis.' });
+      }
+      const result = await pawakoBot.sendDirectMessageToMember(id, message.trim(), title);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de l\'envoi du DM' });
+    }
+  });
+
+  // Validate Simulation & Trigger Formation Outils 10h00 HF
+  app.post('/api/members/:id/validate-simulation', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { adminName } = req.body;
+      const member = store.getMember(id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+
+      // Update store state
+      const updated = store.validateCandidateSimulation(id, adminName || 'Staff Dashboard');
+      firebaseSyncService.saveMember(updated).catch(() => {});
+
+      // Trigger Discord bot notification & setup
+      const botSuccess = await pawakoBot.validateSimulationAndTriggerToolsFormation(updated, adminName || 'Staff Dashboard');
+      const latestMember = store.getMember(id) || updated;
+
+      res.json({
+        success: true,
+        botSuccess,
+        member: latestMember,
+        message: `Simulation validée avec succès pour ${latestMember.username}. Convocation Formation Outils 10h00 HF transmise sur Discord !`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la validation' });
+    }
+  });
+
+  // Reschedule Simulation
+  app.post('/api/members/:id/reschedule-simulation', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { timestamp, adminName } = req.body;
+      const member = store.getMember(id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+      if (!timestamp || isNaN(Number(timestamp))) {
+        return res.status(400).json({ success: false, error: 'Horodatage invalide' });
+      }
+
+      const updated = store.rescheduleCandidateSimulation(id, Number(timestamp), adminName || 'Staff');
+      firebaseSyncService.saveMember(updated).catch(() => {});
+
+      const botSuccess = await pawakoBot.notifySimulationRescheduled(updated, Number(timestamp), adminName || 'Staff');
+      const latestMember = store.getMember(id) || updated;
+
+      res.json({
+        success: true,
+        botSuccess,
+        member: latestMember,
+        message: `Simulation reprogrammée pour ${latestMember.username} et notifiée sur Discord.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur de reprogrammation' });
+    }
+  });
+
+  // Reschedule Tools Formation
+  app.post('/api/members/:id/reschedule-tools', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { timestamp, adminName } = req.body;
+      const member = store.getMember(id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+      if (!timestamp || isNaN(Number(timestamp))) {
+        return res.status(400).json({ success: false, error: 'Horodatage invalide' });
+      }
+
+      const updated = store.rescheduleCandidateToolsFormation(id, Number(timestamp), adminName || 'Staff');
+      firebaseSyncService.saveMember(updated).catch(() => {});
+
+      const botSuccess = await pawakoBot.notifyToolsFormationRescheduled(updated, Number(timestamp), adminName || 'Staff');
+      const latestMember = store.getMember(id) || updated;
+
+      res.json({
+        success: true,
+        botSuccess,
+        member: latestMember,
+        message: `Formation Outils reprogrammée pour ${latestMember.username} et notifiée sur Discord.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur de reprogrammation' });
+    }
+  });
+
+  // Cancel Quiz Cooldown
+  app.post('/api/members/:id/reset-cooldown', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const member = store.getMember(id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+
+      const updated = store.resetCandidateCooldown(id);
+      firebaseSyncService.saveMember(updated).catch(() => {});
+
+      const botSuccess = await pawakoBot.notifyCooldownReset(updated);
+      const latestMember = store.getMember(id) || updated;
+
+      res.json({
+        success: true,
+        botSuccess,
+        member: latestMember,
+        message: `Cooldown annulé pour ${latestMember.username} et notification transmise sur Discord.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur d\'annulation du cooldown' });
     }
   });
 

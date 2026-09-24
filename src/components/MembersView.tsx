@@ -139,31 +139,28 @@ export const MembersView: React.FC<MembersViewProps> = ({
     if (!dmTarget || !dmMessage.trim()) return;
     setIsSendingDm(true);
 
-    const res = await discordService.sendCustomEmbed(
-      dmTarget.personalChannelId || dmTarget.discordId,
-      '💬 MESSAGE DIRECT DE L\'ÉQUIPE STAFF PAWAKO',
+    const res = await memberService.sendMemberDm(
+      dmTarget.id,
       dmMessage,
-      0x6366f1,
-      `<@${dmTarget.discordId}>`
+      "💬 MESSAGE DIRECT DE L'ÉQUIPE STAFF PAWAKO"
     );
 
     setIsSendingDm(false);
     if (res.success) {
       onShowToast(
-        '💬 Message Envoyé',
-        `Le message a été transmis à ${dmTarget.username} sur Discord.`,
+        '💬 Message Transmis sur Discord',
+        res.message || `Le message a été transmis à ${dmTarget.username} sur Discord.`,
         'success'
       );
       setDmTarget(null);
       setDmMessage('');
+      onRefresh();
     } else {
       onShowToast(
-        '⚠️ Info Envoi',
-        res.message || 'Message transmis ou consigné dans le journal.',
-        'info'
+        '⚠️ Erreur Envoi Discord',
+        res.message || 'Impossible d\'envoyer le message au candidat sur Discord.',
+        'error'
       );
-      setDmTarget(null);
-      setDmMessage('');
     }
   };
 
@@ -862,14 +859,18 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   </button>
 
                   <button
-                    onClick={() => {
-                      if (confirm(`Valider la simulation pour ${selectedCandidate.username} et programmer la Formation Outils à 10h00 HF ?`)) {
-                        memberService.validateSimulation(selectedCandidate.id, 'Staff Dashboard');
+                    onClick={async () => {
+                      if (confirm(`Valider la simulation pour ${selectedCandidate.username} et programmer la Formation Outils à 10h00 HF sur Discord ?`)) {
+                        const res = await memberService.validateSimulation(selectedCandidate.id, 'Staff Dashboard');
                         onRefresh();
-                        onShowToast('🏆 Simulation Validée', `${selectedCandidate.username} convoqué(e) à 10h00 HF`, 'success');
+                        if (res.success) {
+                          onShowToast('🏆 Simulation Validée & Notifiée Discord', res.message || `${selectedCandidate.username} convoqué(e) à 10h00 HF sur Discord`, 'success');
+                        } else {
+                          onShowToast('⚠️ Erreur Discord', res.message || 'Erreur lors de la validation sur Discord', 'error');
+                        }
                       }
                     }}
-                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2"
+                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
                   >
                     <Award className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>🏆 Valider Simu (10h HF)</span>
@@ -880,7 +881,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                       setRescheduleTarget({ member: selectedCandidate, type: 'simulation' });
                       setCustomDatetime('');
                     }}
-                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-center gap-2"
+                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
                   >
                     <Calendar className="w-4 h-4 text-blue-400 shrink-0" />
                     <span>📅 Reprog Simu (14h)</span>
@@ -891,33 +892,38 @@ export const MembersView: React.FC<MembersViewProps> = ({
                       setRescheduleTarget({ member: selectedCandidate, type: 'tools' });
                       setCustomDatetime('');
                     }}
-                    className="p-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all text-left flex items-center gap-2"
+                    className="p-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
                   >
                     <Calendar className="w-4 h-4 text-purple-400 shrink-0" />
                     <span>📅 Reprog Outils (10h)</span>
                   </button>
 
                   <button
-                    onClick={() => {
-                      memberService.resetCooldown(selectedCandidate.id);
+                    onClick={async () => {
+                      const res = await memberService.resetCooldown(selectedCandidate.id);
                       onRefresh();
-                      onShowToast('⚡ Cooldown Annulé', `Le candidat ${selectedCandidate.username} peut repasser son quiz`, 'success');
+                      onShowToast('⚡ Cooldown Annulé sur Discord', res?.message || `Le candidat ${selectedCandidate.username} a été débloqué et notifié sur Discord`, 'success');
                     }}
-                    className="p-3 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all text-left flex items-center gap-2"
+                    className="p-3 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
                   >
                     <Zap className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>⚡ Annuler Cooldown</span>
                   </button>
 
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm(`Expulser le candidat ${selectedCandidate.username} du serveur Discord pour inactivité de 3 jours ?`)) {
-                        memberService.kickMemberForInactivity(selectedCandidate.id, 'Expulsion manuelle Staff (inactivité 3j)');
+                        const res = await memberService.kickMemberForInactivity(selectedCandidate.id, 'Expulsion manuelle Staff (inactivité 3j)');
                         onRefresh();
-                        onShowToast('🚨 Kick-off Exécuté', `${selectedCandidate.username} a été expulsé(e).`, 'warning');
+                        if (res.success) {
+                          onShowToast('🚨 Kick-off Exécuté sur Discord', res.message || `${selectedCandidate.username} a été expulsé(e) du serveur Discord.`, 'warning');
+                          setSelectedCandidate(null);
+                        } else {
+                          onShowToast('⚠️ Erreur Expulsion', res.message || 'Impossible d\'expulser le membre de Discord.', 'error');
+                        }
                       }
                     }}
-                    className="p-3 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 text-xs font-bold transition-all text-left flex items-center gap-2"
+                    className="p-3 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
                   >
                     <UserX className="w-4 h-4 text-red-400 shrink-0" />
                     <span>🚨 Kick Inactivité 3j</span>
@@ -1061,53 +1067,49 @@ export const MembersView: React.FC<MembersViewProps> = ({
             <div className="space-y-4 my-5">
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const now = new Date();
                     const nextDay = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
                     nextDay.setDate(nextDay.getDate() + 1);
                     nextDay.setHours(rescheduleTarget.type === 'simulation' ? 14 : 10, 0, 0, 0);
 
                     const ts = nextDay.getTime();
-                    if (rescheduleTarget.type === 'simulation') {
-                      memberService.rescheduleSimulation(rescheduleTarget.member.id, ts, 'Staff Dashboard');
-                    } else {
-                      memberService.rescheduleToolsFormation(rescheduleTarget.member.id, ts, 'Staff Dashboard');
-                    }
+                    const res = rescheduleTarget.type === 'simulation'
+                      ? await memberService.rescheduleSimulation(rescheduleTarget.member.id, ts, 'Staff Dashboard')
+                      : await memberService.rescheduleToolsFormation(rescheduleTarget.member.id, ts, 'Staff Dashboard');
                     onRefresh();
                     onShowToast(
-                      '📅 Session Reprogrammée',
-                      `Fixé à demain ${rescheduleTarget.type === 'simulation' ? '14h00' : '10h00'} HF.`,
+                      '📅 Session Reprogrammée sur Discord',
+                      res?.message || `Fixé à demain ${rescheduleTarget.type === 'simulation' ? '14h00' : '10h00'} HF et notifié sur Discord.`,
                       'success'
                     );
                     setRescheduleTarget(null);
                   }}
-                  className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-left transition-colors"
+                  className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-left transition-colors cursor-pointer"
                 >
                   <span className="font-bold text-white block">Demain {rescheduleTarget.type === 'simulation' ? '14h00' : '10h00'} HF</span>
                   <span className="text-[10px] text-slate-400">Créneau standard</span>
                 </button>
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const now = new Date();
                     const today = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
                     today.setHours(rescheduleTarget.type === 'simulation' ? 14 : 10, 0, 0, 0);
 
                     const ts = today.getTime();
-                    if (rescheduleTarget.type === 'simulation') {
-                      memberService.rescheduleSimulation(rescheduleTarget.member.id, ts, 'Staff Dashboard');
-                    } else {
-                      memberService.rescheduleToolsFormation(rescheduleTarget.member.id, ts, 'Staff Dashboard');
-                    }
+                    const res = rescheduleTarget.type === 'simulation'
+                      ? await memberService.rescheduleSimulation(rescheduleTarget.member.id, ts, 'Staff Dashboard')
+                      : await memberService.rescheduleToolsFormation(rescheduleTarget.member.id, ts, 'Staff Dashboard');
                     onRefresh();
                     onShowToast(
-                      '📅 Session Reprogrammée',
-                      `Fixé à aujourd'hui ${rescheduleTarget.type === 'simulation' ? '14h00' : '10h00'} HF.`,
+                      '📅 Session Reprogrammée sur Discord',
+                      res?.message || `Fixé à aujourd'hui ${rescheduleTarget.type === 'simulation' ? '14h00' : '10h00'} HF et notifié sur Discord.`,
                       'success'
                     );
                     setRescheduleTarget(null);
                   }}
-                  className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-left transition-colors"
+                  className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-left transition-colors cursor-pointer"
                 >
                   <span className="font-bold text-white block">Aujourd'hui {rescheduleTarget.type === 'simulation' ? '14h00' : '10h00'} HF</span>
                   <span className="text-[10px] text-slate-400">Rendez-vous aujourd'hui</span>
@@ -1130,28 +1132,30 @@ export const MembersView: React.FC<MembersViewProps> = ({
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 onClick={() => setRescheduleTarget(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors cursor-pointer"
               >
                 Annuler
               </button>
 
               <button
                 disabled={!customDatetime}
-                onClick={() => {
+                onClick={async () => {
                   if (!customDatetime) return;
                   const selectedTs = new Date(customDatetime).getTime();
                   if (isNaN(selectedTs)) return;
 
-                  if (rescheduleTarget.type === 'simulation') {
-                    memberService.rescheduleSimulation(rescheduleTarget.member.id, selectedTs, 'Staff Dashboard');
-                  } else {
-                    memberService.rescheduleToolsFormation(rescheduleTarget.member.id, selectedTs, 'Staff Dashboard');
-                  }
+                  const res = rescheduleTarget.type === 'simulation'
+                    ? await memberService.rescheduleSimulation(rescheduleTarget.member.id, selectedTs, 'Staff Dashboard')
+                    : await memberService.rescheduleToolsFormation(rescheduleTarget.member.id, selectedTs, 'Staff Dashboard');
                   onRefresh();
-                  onShowToast('📅 Session Reprogrammée', 'Horaires enregistrés et notifiés.', 'success');
+                  onShowToast(
+                    '📅 Session Reprogrammée sur Discord',
+                    res?.message || 'Horaires enregistrés et transmis au candidat sur Discord.',
+                    'success'
+                  );
                   setRescheduleTarget(null);
                 }}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-colors"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-colors cursor-pointer"
               >
                 Valider
               </button>

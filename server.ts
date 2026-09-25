@@ -1964,6 +1964,31 @@ async function startServer() {
     }
   });
 
+  // Unblock Quiz after 3 failures
+  app.post('/api/members/:id/unblock-quiz', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { moduleId, adminName } = req.body;
+      const member = store.getMember(id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+
+      const updated = store.unblockCandidateQuiz(id, moduleId, adminName || 'Staff Dashboard');
+      firebaseSyncService.saveMember(updated).catch(() => {});
+
+      const botSuccess = await pawakoBot.notifyQuizUnblocked(updated, moduleId, adminName || 'Staff Dashboard');
+      const latestMember = store.getMember(id) || updated;
+
+      res.json({
+        success: true,
+        botSuccess,
+        member: latestMember,
+        message: `Quiz débloqué avec succès pour ${latestMember.username}. Tentatives réinitialisées et notifiées sur Discord !`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors du déblocage du quiz' });
+    }
+  });
+
   // Tickets Endpoints
   app.get('/api/tickets', (req: Request, res: Response) => {
     res.json(store.getTickets());

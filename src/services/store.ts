@@ -1674,7 +1674,7 @@ ${statusText}
   /**
    * Reset candidate cooldown timer
    */
-  public resetCandidateCooldown(memberId: string): Member {
+  public resetCandidateCooldown(memberId: string, adminName: string = 'Staff'): Member {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Membre non trouvé');
     member.cooldownUntilTimestamp = null;
@@ -1682,9 +1682,65 @@ ${statusText}
     member.candidateState = 'quiz_disponible';
     if (member.currentModuleId && member.progress && member.progress[member.currentModuleId]) {
       member.progress[member.currentModuleId].cooldownUntilTimestamp = null;
+      member.progress[member.currentModuleId].quizBlockedByFailures = false;
     }
     this.saveMembers();
-    this.addLog('Anthony (Admin)', `Réinitialisation du cooldown pour ${member.username}`, 'member', member.username);
+    this.addLog(adminName, `Réinitialisation du cooldown pour ${member.username}`, 'member', member.username);
+    return member;
+  }
+
+  /**
+   * Unblock candidate quiz after 3 accumulated failures
+   */
+  public unblockCandidateQuiz(memberId: string, moduleId?: string, adminName: string = 'Staff'): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+
+    // Identify target module to unblock
+    let targetModId = moduleId;
+    if (!targetModId) {
+      for (const [mId, prog] of Object.entries(member.progress || {})) {
+        if (prog.quizBlockedByFailures || (prog.attemptsCount >= 3 && !prog.quizPassed)) {
+          targetModId = mId;
+          break;
+        }
+      }
+      if (!targetModId) targetModId = member.currentModuleId || this.modules[0]?.id;
+    }
+
+    if (targetModId && member.progress && member.progress[targetModId]) {
+      member.progress[targetModId].quizBlockedByFailures = false;
+      member.progress[targetModId].attemptsCount = 0;
+      member.progress[targetModId].cooldownUntilTimestamp = null;
+      member.progress[targetModId].unblockedAt = Date.now();
+    }
+
+    // Clear any blocked flags across modules
+    for (const prog of Object.values(member.progress || {})) {
+      if (prog.quizBlockedByFailures) {
+        prog.quizBlockedByFailures = false;
+        prog.attemptsCount = 0;
+        prog.unblockedAt = Date.now();
+      }
+    }
+
+    member.cooldownUntilTimestamp = null;
+    member.currentQuizAvailableAtTimestamp = 0;
+    if (member.candidateState === 'bloque_quiz_3_echecs' || member.candidateState === 'cooldown_actif') {
+      member.candidateState = 'module_en_cours';
+    }
+
+    const mod = this.getModule(targetModId || '');
+    const modTitle = mod?.title || targetModId || 'Module';
+
+    this.saveMembers();
+    this.addLog(
+      adminName,
+      `🔓 [DEBLOCAGE_QUIZ] Quiz du module "${modTitle}" débloqué pour ${member.username} par ${adminName}. Tentatives réinitialisées.`,
+      'member',
+      member.username
+    );
+
     return member;
   }
 

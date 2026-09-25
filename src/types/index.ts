@@ -47,6 +47,7 @@ export type CandidateState =
   | 'module_en_cours'
   | 'quiz_disponible'
   | 'cooldown_actif'
+  | 'bloque_quiz_3_echecs'
   | 'simulation'
   | 'simulation_validee'
   | 'formation_outils'
@@ -167,6 +168,9 @@ export interface MemberProgress {
   score?: number;
   attemptsCount: number;
   cooldownUntilTimestamp?: number | null;
+  quizBlockedByFailures?: boolean;
+  quizBlockedAt?: string;
+  unblockedAt?: number;
 }
 
 export interface Member {

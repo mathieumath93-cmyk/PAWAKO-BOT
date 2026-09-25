@@ -23,7 +23,7 @@ import { discordSyncService } from '../services/discordSyncService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService } from '../services/onboardingService';
 import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
-import { QuizQuestion, Member, Quiz, MemberBadge } from '../types';
+import { QuizQuestion, Member, Quiz, MemberBadge, MemberProgress } from '../types';
 import { voiceRadioService, RADIO_STATIONS, RadioStation } from '../services/voiceRadioService';
 import { resolveActionMessage } from '../config/discordActionMessages';
 import {
@@ -364,6 +364,19 @@ function buildQuizButton(member: Member, quiz: Quiz | undefined, defaultTitle: s
   const quizId = quiz?.id || 'quiz-1';
   const now = Date.now();
 
+  const isAnyQuizBlocked =
+    member.candidateState === 'bloque_quiz_3_echecs' ||
+    Object.values(member.progress || {}).some(
+      (p) => p.quizBlockedByFailures || (p.attemptsCount >= 3 && !p.quizPassed)
+    );
+
+  if (isAnyQuizBlocked) {
+    return new ButtonBuilder()
+      .setCustomId(`launch_quiz_${quizId}`)
+      .setLabel('🚫 Quiz Bloqué (3 échecs — Contacter Staff)')
+      .setStyle(ButtonStyle.Danger);
+  }
+
   if (member.cooldownUntilTimestamp && now < member.cooldownUntilTimestamp) {
     const remainingMs = member.cooldownUntilTimestamp - now;
     const mins = Math.floor(remainingMs / 60000);
@@ -662,6 +675,7 @@ export class PawakoBotRunner {
               `• \`!valider-outils @candidat\` (ou \`!valider-formation\`) : ✅ Valider la formation outils et envoyer le formulaire d'intégration.\n` +
               `• \`!reprogrammer-simu @candidat [date]\` : 📅 Reprogrammer le test de simulation (SANS valider).\n` +
               `• \`!reprogrammer-outils @candidat [date]\` : 📅 Reprogrammer la session outils (SANS diplômer).\n` +
+              `• \`!debloquer-quiz @candidat\` : 🔓 Débloquer le quiz d'un candidat bloqué après 3 échecs.\n` +
               `• \`!relancer @candidat\` : Renvoyer le formulaire d'intégration.\n` +
               `• \`!reset-candidat @candidat\` : Réinitialiser le parcours à zéro.\n` +
               `• \`!fermer-formation\` : Clôturer la session vocale de formation outils.\n` +
@@ -1675,6 +1689,53 @@ export class PawakoBotRunner {
               content: `📩 **[CONFIRMATION STAFF]** Formulaire relancé avec succès pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}>.`
             }).catch(() => {});
           }
+          return;
+        }
+
+        // --- COMMAND: DEBLOQUER QUIZ (APRES 3 ECHECS) ---
+        if (content.startsWith('!debloquer-quiz') || content.startsWith('!unblock-quiz') || content.startsWith('!debloquer')) {
+          const mentionedUser = message.mentions.users.first();
+          const args = content.split(' ').slice(1).filter(Boolean);
+          const rawId = mentionedUser ? mentionedUser.id : args[0];
+
+          if (!rawId) {
+            await message.reply('⚠️ Veuillez spécifier un candidat (ex: `!debloquer-quiz @candidat` ou `!debloquer-quiz @candidat module-2`).').catch(() => {});
+            return;
+          }
+
+          const cleanId = rawId.replace('<@!', '').replace('<@', '').replace('>', '');
+          const targetMember =
+            store.getMember(cleanId) ||
+            store.getMembers().find(
+              (m) =>
+                m.id === cleanId ||
+                m.discordId === cleanId ||
+                m.id.replace('mem-', '') === cleanId.replace('mem-', '') ||
+                m.username.toLowerCase() === cleanId.toLowerCase()
+            );
+
+          if (!targetMember) {
+            await message.reply(`⚠️ Candidat non trouvé pour \`${cleanId}\`.`).catch(() => {});
+            return;
+          }
+
+          const targetModuleId = args[1] || undefined;
+          store.unblockCandidateQuiz(targetMember.id, targetModuleId, `@${message.author.username}`);
+          firebaseSyncService.saveMember(targetMember).catch(() => {});
+          await this.notifyQuizUnblocked(targetMember, targetModuleId, `@${message.author.username}`);
+
+          const unblockLogEmbed = new EmbedBuilder()
+            .setTitle('🔓 DÉBLOCAGE QUIZ EFFECTUÉ')
+            .setColor(0x10b981)
+            .setDescription(
+              `🔓 **Le quiz a été débloqué avec succès par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\n\n` +
+              `• Le compteur d'échecs a été remis à zéro.\n` +
+              `• Le candidat a été notifié dans son salon privé et peut lancer le quiz dès maintenant.`
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Déblocage Quiz Staff' })
+            .setTimestamp();
+
+          await message.reply({ embeds: [unblockLogEmbed] }).catch(() => {});
           return;
         }
 
@@ -2904,6 +2965,87 @@ export class PawakoBotRunner {
             return;
           }
 
+          // --- 2a. CANDIDATE ALERT STAFF (QUIZ BLOCKED / SUPPORT TICKET) ---
+          if (customId === 'btn_ticket' || customId.startsWith('btn_ticket_blocked_') || customId.startsWith('btn_ticket_')) {
+            const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+            let targetModId = customId.startsWith('btn_ticket_blocked_')
+              ? customId.replace('btn_ticket_blocked_', '')
+              : (customId.startsWith('btn_ticket_') ? customId.replace('btn_ticket_', '') : undefined);
+
+            if (!targetModId) {
+              for (const [mId, prog] of Object.entries(member.progress || {})) {
+                if (prog.quizBlockedByFailures || (prog.attemptsCount >= 3 && !prog.quizPassed)) {
+                  targetModId = mId;
+                  break;
+                }
+              }
+            }
+            if (!targetModId) {
+              targetModId = member.currentModuleId || 'module-1';
+            }
+
+            const mod = store.getModule(targetModId);
+            const modTitle = mod?.title || `Module (${targetModId})`;
+
+            // Create ticket in store
+            const ticket = store.createTicket(
+              member.id,
+              `Demande de déblocage quiz (${modTitle})`,
+              'quiz',
+              `Le candidat a terminé ses révisions pour ${modTitle} suite à 3 échecs et sollicite le Staff pour débloquer son quiz.`
+            );
+
+            await interaction.editReply({
+              content: `✅ **Ton signalement a été transmis au Staff avec succès !**\n\n` +
+                `• **Module concerné :** **${modTitle}**\n` +
+                `• **Statut :** Tes révisions sont terminées, la demande de déblocage est transmise au Staff.\n` +
+                `• **Ticket :** \`#${ticket.ticketNumber}\`\n\n` +
+                `Un formateur Staff va examiner ton dossier et débloquera ton quiz dès que possible. Reste attentif(ve) dans ce salon !`
+            });
+
+            // Post in staff-alerts channel with 1-click unlock button
+            if (this.client) {
+              const cfg = onboardingService.getConfig();
+              const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+              if (guildId) {
+                const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+                if (guild) {
+                  const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+                  if (staffChan) {
+                    const chanLink = member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé';
+                    const alertEmbed = new EmbedBuilder()
+                      .setTitle(`🔔 SIGNALEMENT CANDIDAT — DÉBLOCAGE QUIZ DEMANDÉ`)
+                      .setDescription(
+                        `📢 <@${user.id}> (**${member.username}**) a terminé ses révisions pour **${modTitle}** et demande le déblocage de son quiz !\n\n` +
+                        `• **Candidat :** <@${user.id}> (${member.username})\n` +
+                        `• **Salon :** ${chanLink}\n` +
+                        `• **Module à débloquer :** **${modTitle}**\n` +
+                        `• **Ticket :** #${ticket.ticketNumber}\n\n` +
+                        `👉 *Cliquez sur le bouton vert ci-dessous pour débloquer immédiatement le candidat :*`
+                      )
+                      .setColor(0xf59e0b)
+                      .setFooter({ text: 'PAWAKO FORMATION • Demande de Déblocage Candidat' })
+                      .setTimestamp();
+
+                    const staffRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                      new ButtonBuilder()
+                        .setCustomId(`staff_unblock_quiz_${member.id}_${targetModId}`)
+                        .setLabel(`🔓 Débloquer Quiz (${member.username})`)
+                        .setStyle(ButtonStyle.Success)
+                    );
+
+                    await staffChan.send({
+                      content: `🔔 **[DEMANDE DÉBLOCAGE]** <@${user.id}> demande le déblocage de son quiz sur **${modTitle}**`,
+                      embeds: [alertEmbed],
+                      components: [staffRow],
+                    }).catch(() => {});
+                  }
+                }
+              }
+            }
+            return;
+          }
+
           // --- 2b. STAFF ALERT INTERACTIONS ---
           if (customId.startsWith('staff_reset_cooldown_')) {
             const targetId = customId.replace('staff_reset_cooldown_', '');
@@ -3140,6 +3282,37 @@ export class PawakoBotRunner {
             return;
           }
 
+          if (customId.startsWith('staff_unblock_quiz_')) {
+            const raw = customId.replace('staff_unblock_quiz_', '');
+            const parts = raw.split('_');
+            const targetId = parts[0];
+            const targetModuleId = parts.slice(1).join('_') || undefined;
+
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '') ||
+                  (m.discordId && m.discordId.replace('mem-', '') === targetId.replace('mem-', ''))
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat non trouvé dans la base de données.' });
+              return;
+            }
+
+            store.unblockCandidateQuiz(member.id, targetModuleId, `@${user.username}`);
+            firebaseSyncService.saveMember(member).catch(() => {});
+            await this.notifyQuizUnblocked(member, targetModuleId, `@${user.username}`);
+
+            await interaction.editReply({
+              content: `🔓 **Quiz débloqué avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe candidat a été notifié dans son salon privé et peut relancer son quiz.`
+            });
+            return;
+          }
+
           // --- 3. LAUNCH OR RETRY QUIZ ---
           if (customId.startsWith('launch_quiz') || customId.startsWith('retry_quiz')) {
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
@@ -3152,6 +3325,69 @@ export class PawakoBotRunner {
             }
             if (!quiz) {
               quiz = store.getQuiz('quiz-1') || defaultQuizzes[0];
+            }
+
+            // 3-0. Strict Block Check: 3 failures accumulated on ANY module
+            let blockedModId: string | null = null;
+            let blockedModProgress: MemberProgress | null = null;
+
+            for (const [mId, prog] of Object.entries(member.progress || {})) {
+              if (prog.quizBlockedByFailures || (prog.attemptsCount >= 3 && !prog.quizPassed)) {
+                blockedModId = mId;
+                blockedModProgress = prog;
+                break;
+              }
+            }
+
+            if (!blockedModId && member.candidateState === 'bloque_quiz_3_echecs') {
+              blockedModId = member.currentModuleId || quiz?.moduleId || 'module-1';
+              blockedModProgress = member.progress?.[blockedModId] || null;
+            }
+
+            if (blockedModId) {
+              const blockedMod = store.getModule(blockedModId);
+              const blockedModTitle = blockedMod?.title || `Module (${blockedModId})`;
+              const stepCfg = onboardingService.getStepConfigForModule(blockedModId);
+              const externalLink = (blockedMod?.url && blockedMod.url.trim() !== '' ? blockedMod.url : (stepCfg?.externalLinkUrl && stepCfg.externalLinkUrl.trim() !== '' ? stepCfg.externalLinkUrl : (blockedMod?.resources && blockedMod?.resources[0]?.url))) || '';
+              const contentSnippet = blockedMod?.content
+                ? (blockedMod.content.length > 1000 ? blockedMod.content.slice(0, 997) + '...' : blockedMod.content)
+                : '';
+
+              const blockedEmbed = new EmbedBuilder()
+                .setTitle(`🚫 ACCÈS STRICTEMENT REFUSÉ — QUIZ BLOQUÉ (3 ÉCHECS CUMULÉS)`)
+                .setDescription(
+                  `📢 <@${user.id}>, **tu as échoué 3 fois au quiz du ${blockedModTitle} !**\n\n` +
+                  `🔒 **Toutes les tentatives de quiz sont désormais strictement verrouillées.**\n` +
+                  `Même si tu cliques sur d'autres boutons, tu ne peux pas lancer de quiz tant que le Staff n'a pas validé ton déblocage.\n\n` +
+                  `📚 **Consignes obligatoires de révision :**\n` +
+                  `1. Reprends le temps d'étudier très sérieusement l'ensemble des cours et fiches du **${blockedModTitle}** ci-dessous.\n` +
+                  `2. Dès que tes révisions sont achevées, **fais signe au Staff** (clique sur "🎫 Faire signe au Staff" ci-dessous ou écris dans ce salon) pour demander ton déblocage.\n\n` +
+                  (contentSnippet ? `📖 **Rappel du cours (${blockedModTitle}) :**\n${contentSnippet}\n\n` : '') +
+                  (externalLink ? `🔗 **Support complet :** [Consulter le document de cours (${blockedModTitle})](${externalLink})\n\n` : '') +
+                  `⚠️ *Inutile de cliquer sur d'autres boutons : aucun quiz ne démarrera tant qu'un formateur Staff n'aura pas validé ton déblocage.*`
+                )
+                .setColor(0xef4444)
+                .setFooter({ text: 'PAWAKO FORMATION • Autorisation Staff Obligatoire' })
+                .setTimestamp();
+
+              const blockedButtons: ButtonBuilder[] = [];
+              if (externalLink) {
+                blockedButtons.push(
+                  new ButtonBuilder()
+                    .setLabel(`🔗 Support (${blockedModTitle.slice(0, 20)})`)
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(externalLink)
+                );
+              }
+              blockedButtons.push(
+                new ButtonBuilder().setCustomId(`btn_ticket_blocked_${blockedModId}`).setLabel('🎫 Faire signe au Staff').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+              );
+
+              const blockedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(blockedButtons);
+
+              await interaction.editReply({ embeds: [blockedEmbed], components: [blockedRow] }).catch(() => {});
+              return;
             }
 
             // 3a. Cooldown Check
@@ -5182,6 +5418,75 @@ export class PawakoBotRunner {
   }
 
   /**
+   * Notify candidate in their Discord channel and via DM that their blocked quiz has been unblocked by staff
+   */
+  public async notifyQuizUnblocked(
+    memberInput: Member,
+    moduleId?: string,
+    adminName: string = 'Staff'
+  ): Promise<boolean> {
+    try {
+      const member = store.getMember(memberInput.id) || memberInput;
+      const targetModId = moduleId || member.currentModuleId || store.getModules()[0]?.id;
+      const mod = store.getModule(targetModId || '');
+      const quiz = store.getQuiz(mod?.quizId || targetModId || '') || store.getQuizzes().find((q) => q.moduleId === targetModId);
+
+      const discordUserId = member.discordId || member.id.replace('mem-', '');
+      const unblockEmbed = new EmbedBuilder()
+        .setTitle('🎉 TON QUIZ A ÉTÉ DÉBLOQUÉ PAR LE STAFF !')
+        .setDescription(
+          `Bonne nouvelle <@${discordUserId}> ! L'équipe Staff (**${adminName}**) a validé tes révisions et vient de **débloquer ton quiz** pour le **${mod?.title || 'Module'}** ! 🚀\n\n` +
+          `Tes tentatives ont été réinitialisées. Prends une grande inspiration, relis bien chaque question, et donne le meilleur de toi-même !\n\n` +
+          `👉 *Clique sur le bouton vert ci-dessous pour lancer ton quiz dès maintenant :*`
+        )
+        .setColor(0x10b981)
+        .setFooter({ text: 'PAWAKO FORMATION • Quiz Débloqué par le Staff' })
+        .setTimestamp();
+
+      const quizBtn = new ButtonBuilder()
+        .setCustomId(`launch_quiz_${quiz?.id || 'quiz-1'}`)
+        .setLabel(`📝 Lancer le Quiz (${quiz?.title || mod?.title || 'Quiz'})`)
+        .setStyle(ButtonStyle.Success);
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        quizBtn,
+        new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+      );
+
+      await this.sendCandidateActionMessage(member, `🎉 **[QUIZ DÉBLOQUÉ]** <@${discordUserId}>`, unblockEmbed, [row]);
+
+      // Also notify staff alerts channel
+      if (this.client) {
+        const cfg = onboardingService.getConfig();
+        const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+        if (guildId) {
+          const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+          if (guild) {
+            const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+            if (staffChan) {
+              await staffChan.send({
+                content: `🔓 **[QUIZ DÉBLOQUÉ]** Le quiz de **${mod?.title || 'Module'}** a été débloqué pour <@${discordUserId}> (**${member.username}**) par **${adminName}**.`
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      store.addLog(
+        adminName,
+        `🔓 Quiz du module ${mod?.title || targetModId} débloqué pour ${member.username} et notifié sur Discord.`,
+        'member',
+        member.username
+      );
+
+      return true;
+    } catch (err) {
+      console.warn('[notifyQuizUnblocked Error]', err);
+      return false;
+    }
+  }
+
+  /**
    * Auto-create / update #classement-formation channel on Discord server
    */
   public async updateLeaderboardChannel(): Promise<boolean> {
@@ -7001,106 +7306,239 @@ export class PawakoBotRunner {
         new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
       );
     } else {
-      // Quiz Failed - Activate Cooldown
-      const cooldownMins = quiz?.cooldownMinutes ?? onboardingService.getConfig().cooldownMinutes ?? 15;
-      member.cooldownUntilTimestamp = Date.now() + cooldownMins * 60 * 1000;
-      member.candidateState = 'cooldown_actif';
-
-      // store.addQuizAttempt already incremented attemptsCount in member.progress
-      const currentAttempts = member.progress[quiz.moduleId]?.attemptsCount || 1;
-      member.progress[quiz.moduleId] = {
-        ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
-        attemptsCount: currentAttempts,
-        score: finalScore,
-        quizPassed: false,
-      };
-
-      store.saveMembers();
-      firebaseSyncService.saveMember(member).catch(() => {});
-
-      // Trigger Staff Alert if candidate fails 2 or more times in a row
-      if (currentAttempts >= 2) {
-        this.sendStaffAlert(
-          member,
-          quiz.title,
-          finalScore,
-          totalQuestions,
-          currentAttempts,
-          'consecutive_failures'
-        ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
-      }
-
-      // Send automatic pedagogical advice message if candidate fails 2+ times
-      let adviceMessageFormatted = '';
-      if (currentAttempts >= 2) {
-        try {
-          const cfg = onboardingService.getConfig();
-          const advicePool = cfg.repeatedFailurePool && cfg.repeatedFailurePool.length > 0
-            ? cfg.repeatedFailurePool
-            : [
-                "⚠️ **Conseil Formation PAWAKO**\n\n<@{discordId}>, nous avons remarqué que tu as 2 échecs ou plus au quiz **{quizTitle}**.\n💡 Prends le temps de bien relire et maîtriser l'intégralité du module avant de retenter ta chance ! 📚"
-              ];
-
-          const rawAdvice = advicePool[Math.floor(Math.random() * advicePool.length)];
-          adviceMessageFormatted = rawAdvice
-            .replace(/\{discordId\}/g, member.discordId || member.id.replace('mem-', ''))
-            .replace(/\{quizTitle\}/g, quiz.title)
-            .replace(/\{username\}/g, member.username);
-
-          // Find candidate channel in priority order
-          let targetChan: any = null;
-          if (member.personalChannelId && this.client) {
-            targetChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+      // Quiz Failed: calculate cumulative failed attempts across all sessions, even on separate days
+      const unblockedAt = member.progress[quiz.moduleId]?.unblockedAt || 0;
+      const pastFailedAttempts = store.getQuizAttempts().filter((att) => {
+        const isTarget =
+          (att.memberId === member.id || att.memberId === discordUserId) &&
+          (att.quizId === quiz.id || att.quizTitle === quiz.title) &&
+          !att.passed;
+        if (!isTarget) return false;
+        if (unblockedAt > 0) {
+          const tsMatch = att.id.match(/\d{10,}/);
+          if (tsMatch && parseInt(tsMatch[0], 10) <= unblockedAt) {
+            return false;
           }
-          if (!targetChan && session.channelId && this.client) {
-            targetChan = await this.client.channels.fetch(session.channelId).catch(() => null);
-          }
-          if (!targetChan && interaction?.channel) {
-            targetChan = interaction.channel;
-          }
-
-          if (targetChan && 'send' in targetChan) {
-            const adviceEmbed = new EmbedBuilder()
-              .setTitle(`📖 CONSEIL PÉDAGOGIQUE — TENTATIVE N°${currentAttempts}`)
-              .setDescription(adviceMessageFormatted)
-              .setColor(0xf59e0b)
-              .setFooter({ text: 'PAWAKO FORMATION • Conseil & Pédagogie (2+ Échecs)' })
-              .setTimestamp();
-
-            await targetChan.send({
-              content: `📖 <@${member.discordId || member.id.replace('mem-', '')}>`,
-              embeds: [adviceEmbed],
-            }).catch((err: any) => console.warn('[Send Advice Error]', err));
-          }
-        } catch (err) {
-          console.warn('[2+ Fails Advice Error]', err);
         }
+        return true;
+      }).length;
+
+      const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
+      const currentAttempts = Math.max(prevAttempts + 1, pastFailedAttempts);
+      const mod = store.getModule(quiz.moduleId);
+      const modTitle = mod?.title || quiz.title;
+      const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
+      const externalLink = (mod?.url && mod.url.trim() !== '' ? mod.url : (stepCfg?.externalLinkUrl && stepCfg.externalLinkUrl.trim() !== '' ? stepCfg.externalLinkUrl : (mod?.resources && mod?.resources[0]?.url))) || '';
+
+      if (currentAttempts >= 3) {
+        // --- 3 OR MORE CUMULATIVE FAILURES: STRICT LOCKOUT UNTIL STAFF UNBLOCKS ---
+        member.cooldownUntilTimestamp = null;
+        member.currentQuizAvailableAtTimestamp = null;
+        member.candidateState = 'bloque_quiz_3_echecs';
+        member.progress[quiz.moduleId] = {
+          ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
+          attemptsCount: currentAttempts,
+          score: finalScore,
+          quizPassed: false,
+          quizBlockedByFailures: true,
+          quizBlockedAt: store.getFormattedNow(),
+        };
+
+        store.saveMembers();
+        firebaseSyncService.saveMember(member).catch(() => {});
+
+        // Build summary of the module content to review
+        const contentSnippet = mod?.content
+          ? (mod.content.length > 1200 ? mod.content.slice(0, 1197) + '...' : mod.content)
+          : '';
+
+        resultEmbed = new EmbedBuilder()
+          .setTitle(`🚫 QUIZ BLOQUÉ — 3 ÉCHECS CUMULÉS SUR ${modTitle.toUpperCase()}`)
+          .setDescription(
+            `📢 <@${discordUserId}>, **tu as échoué 3 fois au quiz de ce module (${modTitle}) !**\n\n` +
+            `🔒 **Toutes les tentatives de quiz sont désormais strictement verrouillées.**\n` +
+            `Même en cliquant sur d'autres boutons, tu ne pourras pas lancer de quiz tant que le Staff n'a pas validé ton déblocage.\n\n` +
+            `📚 **Consignes obligatoires de révision :**\n` +
+            `1. Relis et étudie très sérieusement l'intégralité du cours ci-dessous (**${modTitle}**).\n` +
+            `2. Prends des notes et assure-toi de maîtriser toutes les notions clés.\n` +
+            `3. Dès que tes révisions sont achevées, **fais signe au Staff** (clique sur "🎫 Faire signe au Staff" ci-dessous ou écris dans ce salon) pour demander le déblocage de ton quiz.\n\n` +
+            (contentSnippet ? `📖 **Rappel du cours (${modTitle}) :**\n${contentSnippet}\n\n` : '') +
+            (externalLink ? `🔗 **Support complet :** [Consulter le document de cours (${modTitle})](${externalLink})\n\n` : '') +
+            `⚠️ *Inutile de cliquer sur d'autres boutons : le quiz restera inactif tant qu'un membre du Staff n'aura pas validé ton déblocage.*`
+          )
+          .setColor(0xef4444)
+          .setFooter({ text: 'PAWAKO FORMATION • 3 Échecs Cumulés — Autorisation Staff Requise' })
+          .setTimestamp();
+
+        const candButtons: ButtonBuilder[] = [];
+        if (externalLink) {
+          candButtons.push(
+            new ButtonBuilder()
+              .setLabel(`🔗 Support (${modTitle.slice(0, 20)})`)
+              .setStyle(ButtonStyle.Link)
+              .setURL(externalLink)
+          );
+        }
+        candButtons.push(
+          new ButtonBuilder().setCustomId(`btn_ticket_blocked_${quiz.moduleId}`).setLabel('🎫 Faire signe au Staff').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+        );
+
+        resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(candButtons);
+
+        // Immediate Staff Alert with 1-click Unlock Button
+        if (this.client) {
+          const cfg = onboardingService.getConfig();
+          const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+          if (guildId) {
+            const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+            if (guild) {
+              const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+              if (staffChan) {
+                const chanLink = member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé';
+                const staffBlockEmbed = new EmbedBuilder()
+                  .setTitle(`🚨 ALERTE STAFF — CANDIDAT BLOQUÉ (3 ÉCHECS CUMULÉS)`)
+                  .setDescription(
+                    `📢 **Un candidat a atteint la limite de 3 échecs sur un quiz :**\n\n` +
+                    `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
+                    `• **Module en échec :** **${modTitle}** (${quiz.title})\n` +
+                    `• **Dernier score :** **${finalScore}/${totalQuestions}** (Requis: ${minScore}/${totalQuestions})\n` +
+                    `• **Nombre d'échecs cumulés :** **${currentAttempts}**\n` +
+                    `• **Salon du candidat :** ${chanLink}\n\n` +
+                    `👉 *Vérifiez qu'il a bien revu ses cours, puis débloquez son quiz ci-dessous :*`
+                  )
+                  .setColor(0xef4444)
+                  .setFooter({ text: 'PAWAKO FORMATION • Gestion des Échecs Staff' })
+                  .setTimestamp();
+
+                const staffRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`staff_unblock_quiz_${member.id}_${quiz.moduleId}`)
+                    .setLabel(`🔓 Débloquer Quiz (${member.username})`)
+                    .setStyle(ButtonStyle.Success),
+                  new ButtonBuilder()
+                    .setCustomId(`staff_send_help_${member.id}`)
+                    .setLabel("💬 Message d'aide")
+                    .setStyle(ButtonStyle.Secondary)
+                );
+
+                await staffChan.send({
+                  content: `🚨 **[3 ÉCHECS QUIZ]** <@${discordUserId}> (**${member.username}**) bloqué(e) sur **${modTitle}**`,
+                  embeds: [staffBlockEmbed],
+                  components: [staffRow],
+                }).catch((err: any) => console.warn('[Send Staff 3 Fails Error]', err));
+              }
+            }
+          }
+        }
+
+        store.addLog(
+          'System',
+          `🚫 [BLOCAGE_3_ECHECS] ${member.username} bloqué sur le quiz "${quiz.title}" après ${currentAttempts} échecs cumulés. Staff notifié sur Discord.`,
+          'quiz',
+          member.username,
+          quiz.title,
+          quiz.moduleId
+        );
+      } else {
+        // Less than 3 failures: regular timer cooldown
+        const cooldownMins = quiz?.cooldownMinutes ?? onboardingService.getConfig().cooldownMinutes ?? 15;
+        member.cooldownUntilTimestamp = Date.now() + cooldownMins * 60 * 1000;
+        member.candidateState = 'cooldown_actif';
+
+        member.progress[quiz.moduleId] = {
+          ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
+          attemptsCount: currentAttempts,
+          score: finalScore,
+          quizPassed: false,
+        };
+
+        store.saveMembers();
+        firebaseSyncService.saveMember(member).catch(() => {});
+
+        // Trigger Staff Alert if candidate fails 2 times
+        if (currentAttempts === 2) {
+          this.sendStaffAlert(
+            member,
+            quiz.title,
+            finalScore,
+            totalQuestions,
+            currentAttempts,
+            'consecutive_failures'
+          ).catch((err) => console.warn('[Staff Alert Fail Trigger Error]', err));
+        }
+
+        // Send automatic pedagogical advice message if candidate fails 2 times
+        let adviceMessageFormatted = '';
+        if (currentAttempts === 2) {
+          try {
+            const cfg = onboardingService.getConfig();
+            const advicePool = cfg.repeatedFailurePool && cfg.repeatedFailurePool.length > 0
+              ? cfg.repeatedFailurePool
+              : [
+                  "⚠️ **Conseil Formation PAWAKO**\n\n<@{discordId}>, nous avons remarqué que tu as 2 échecs au quiz **{quizTitle}**.\n💡 Prends le temps de bien relire et maîtriser l'intégralité du module avant de retenter ta chance ! 📚"
+                ];
+
+            const rawAdvice = advicePool[Math.floor(Math.random() * advicePool.length)];
+            adviceMessageFormatted = rawAdvice
+              .replace(/\{discordId\}/g, member.discordId || member.id.replace('mem-', ''))
+              .replace(/\{quizTitle\}/g, quiz.title)
+              .replace(/\{username\}/g, member.username);
+
+            let targetChan: any = null;
+            if (member.personalChannelId && this.client) {
+              targetChan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+            }
+            if (!targetChan && session.channelId && this.client) {
+              targetChan = await this.client.channels.fetch(session.channelId).catch(() => null);
+            }
+            if (!targetChan && interaction?.channel) {
+              targetChan = interaction.channel;
+            }
+
+            if (targetChan && 'send' in targetChan) {
+              const adviceEmbed = new EmbedBuilder()
+                .setTitle(`📖 CONSEIL PÉDAGOGIQUE — TENTATIVE N°${currentAttempts}`)
+                .setDescription(adviceMessageFormatted)
+                .setColor(0xf59e0b)
+                .setFooter({ text: 'PAWAKO FORMATION • Conseil & Pédagogie (2 Échecs)' })
+                .setTimestamp();
+
+              await targetChan.send({
+                content: `📖 <@${member.discordId || member.id.replace('mem-', '')}>`,
+                embeds: [adviceEmbed],
+              }).catch((err: any) => console.warn('[Send Advice Error]', err));
+            }
+          } catch (err) {
+            console.warn('[2 Fails Advice Error]', err);
+          }
+        }
+
+        const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
+        resultEmbed = new EmbedBuilder()
+          .setTitle(`❌ QUIZ NON VALIDÉ (${finalScore}/${totalQuestions})`)
+          .setDescription(
+            `Score obtenu : **${finalScore}/${totalQuestions}**\nScore minimum requis : **${minScore}/${totalQuestions}**.\n\n` +
+            `⏳ Un cooldown de **${cooldownMins} minutes** est activé.\nTu pourras retenter ce quiz <t:${cooldownTsSec}:R> (dans **${cooldownMins} minutes**).\n` +
+            `Prends le temps de relire les fiches de formation avant ta prochaine tentative.`
+          )
+          .addFields({ name: '⏱️ Déblocage du Quiz', value: `<t:${cooldownTsSec}:R>` })
+          .setColor(0xef4444)
+          .setFooter({ text: 'PAWAKO FORMATION • Révision Requise' })
+          .setTimestamp();
+
+        if (adviceMessageFormatted) {
+          resultEmbed.addFields({
+            name: '📖 Conseil de Révision Automatique',
+            value: adviceMessageFormatted.length > 1024 ? adviceMessageFormatted.slice(0, 1021) + '...' : adviceMessageFormatted,
+          });
+        }
+
+        resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          buildQuizButton(member, quiz, quiz.title),
+          new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+        );
       }
-
-      const cooldownTsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
-      resultEmbed = new EmbedBuilder()
-        .setTitle(`❌ QUIZ NON VALIDÉ (${finalScore}/${totalQuestions})`)
-        .setDescription(
-          `Score obtenu : **${finalScore}/${totalQuestions}**\nScore minimum requis : **${minScore}/${totalQuestions}**.\n\n` +
-          `⏳ Un cooldown de **${cooldownMins} minutes** est activé.\nTu pourras retenter ce quiz <t:${cooldownTsSec}:R> (dans **${cooldownMins} minutes**).\n` +
-          `Prends le temps de relire les fiches de formation avant ta prochaine tentative.`
-        )
-        .addFields({ name: '⏱️ Déblocage du Quiz', value: `<t:${cooldownTsSec}:R>` })
-        .setColor(0xef4444)
-        .setFooter({ text: 'PAWAKO FORMATION • Révision Requise' })
-        .setTimestamp();
-
-      if (adviceMessageFormatted) {
-        resultEmbed.addFields({
-          name: '📖 Conseil de Révision Automatique',
-          value: adviceMessageFormatted.length > 1024 ? adviceMessageFormatted.slice(0, 1021) + '...' : adviceMessageFormatted,
-        });
-      }
-
-      resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        buildQuizButton(member, quiz, quiz.title),
-        new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
-      );
     }
 
     // Send or Edit message cleanly with fallback to direct message edit

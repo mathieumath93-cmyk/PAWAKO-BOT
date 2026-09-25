@@ -18,6 +18,7 @@ import {
   Medal,
   Sparkles,
   Lock,
+  Unlock,
   Trophy,
   GraduationCap,
   Wrench,
@@ -536,6 +537,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                             {/* Status Tags & Auto-Reminders */}
                             <div className="flex flex-wrap items-center gap-1 pt-1">
+                              {(member.candidateState === 'bloque_quiz_3_echecs' || Object.values(member.progress || {}).some(p => p.quizBlockedByFailures || (p.attemptsCount >= 3 && !p.quizPassed && p.status === 'en_cours'))) && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse flex items-center gap-1">
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>Quiz Bloqué (3 échecs)</span>
+                                </span>
+                              )}
+
                               {member.autoReminderFlag && (
                                 <span
                                   className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 ${
@@ -845,6 +853,64 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     </span>
                   </div>
                 )}
+
+                {/* 3 FAILURES BLOCKED QUIZ BANNER */}
+                {(() => {
+                  const isBlocked =
+                    selectedCandidate.candidateState === 'bloque_quiz_3_echecs' ||
+                    Object.values(selectedCandidate.progress || {}).some(
+                      (p: any) => p?.quizBlockedByFailures || (p?.attemptsCount >= 3 && !p?.quizPassed)
+                    );
+                  if (!isBlocked) return null;
+
+                  let targetModId: string | null = null;
+                  for (const [mId, prog] of Object.entries(selectedCandidate.progress || {}) as [string, any][]) {
+                    if (prog?.quizBlockedByFailures || (prog?.attemptsCount >= 3 && !prog?.quizPassed)) {
+                      targetModId = mId;
+                      break;
+                    }
+                  }
+                  if (!targetModId) targetModId = selectedCandidate.currentModuleId || 'module-1';
+                  const modTitle = store.getModule(targetModId)?.title || targetModId;
+
+                  return (
+                    <div className="p-3.5 rounded-xl bg-red-950/60 border border-red-500/50 space-y-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 animate-pulse" />
+                          <div>
+                            <div className="text-xs font-bold text-red-200">
+                              🚫 Quiz Bloqué (3 Échecs Cumulés)
+                            </div>
+                            <div className="text-[11px] text-red-300">
+                              Module en blocage : <strong className="text-white">{modTitle}</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`Débloquer le quiz de ${selectedCandidate.username} pour le ${modTitle} et renvoyer le bouton vert de quiz sur Discord ?`)) {
+                              const res = await memberService.unblockQuiz(selectedCandidate.id, targetModId, 'Staff Dashboard');
+                              onRefresh();
+                              if (res.success) {
+                                onShowToast('🔓 Quiz Débloqué !', res.message || `Le quiz de ${selectedCandidate.username} a été débloqué et réinitialisé sur Discord`, 'success');
+                              } else {
+                                onShowToast('⚠️ Erreur', res.message || 'Impossible de débloquer le quiz', 'error');
+                              }
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950 shrink-0 cursor-pointer"
+                        >
+                          <Unlock className="w-3.5 h-3.5" />
+                          <span>Débloquer Quiz</span>
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-red-200/80 leading-relaxed">
+                        Le candidat a atteint la limite de 3 échecs (même sur des jours séparés). Toutes ses tentatives sont verrouillées sur Discord tant que vous ne débloquez pas son quiz.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Discord Actions Panel */}
@@ -975,6 +1041,35 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   >
                     <Zap className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>⚡ Annuler Cooldown</span>
+                  </button>
+
+                  {/* 5. DÉBLOQUER QUIZ (3 ÉCHECS CUMULÉS) */}
+                  <button
+                    onClick={async () => {
+                      let targetModId: string | null = null;
+                      for (const [mId, prog] of Object.entries(selectedCandidate.progress || {}) as [string, any][]) {
+                        if (prog?.quizBlockedByFailures || (prog?.attemptsCount >= 3 && !prog?.quizPassed)) {
+                          targetModId = mId;
+                          break;
+                        }
+                      }
+                      if (!targetModId) targetModId = selectedCandidate.currentModuleId || 'module-1';
+                      const modTitle = store.getModule(targetModId)?.title || targetModId;
+
+                      if (confirm(`Débloquer le quiz (${modTitle}) pour ${selectedCandidate.username} et réinitialiser ses tentatives sur Discord ?`)) {
+                        const res = await memberService.unblockQuiz(selectedCandidate.id, targetModId, 'Staff Dashboard');
+                        onRefresh();
+                        if (res.success) {
+                          onShowToast('🔓 Quiz Débloqué !', res.message || `Le quiz de ${selectedCandidate.username} a été débloqué avec succès`, 'success');
+                        } else {
+                          onShowToast('⚠️ Erreur', res.message || 'Impossible de débloquer le quiz', 'error');
+                        }
+                      }
+                    }}
+                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
+                  >
+                    <Unlock className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>🔓 Débloquer Quiz (3 Échecs)</span>
                   </button>
 
                   <button

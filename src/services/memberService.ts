@@ -136,6 +136,31 @@ class MemberService {
     }
   }
 
+  public async unblockQuiz(
+    memberId: string,
+    moduleId?: string,
+    adminName: string = 'Staff'
+  ): Promise<{ success: boolean; member?: Member; botSuccess?: boolean; message?: string }> {
+    const updated = store.unblockCandidateQuiz(memberId, moduleId, adminName);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    try {
+      const res = await fetch(`/api/members/${memberId}/unblock-quiz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moduleId, adminName }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message || 'Erreur lors du déblocage du quiz' };
+    }
+  }
+
   public resetCurrentModule(memberId: string): Member {
     const updated = store.resetCandidateCurrentModule(memberId);
     firebaseSyncService.saveMember(updated).catch((err) =>

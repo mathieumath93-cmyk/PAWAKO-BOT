@@ -1857,6 +1857,33 @@ async function startServer() {
     }
   });
 
+  // Validate Tools Formation & Send Integration Form
+  app.post('/api/members/:id/validate-tools', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { adminName } = req.body;
+      const member = store.getMember(id);
+      if (!member) return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+
+      // Update store state
+      const updated = store.validateCandidateToolsFormation(id, adminName || 'Staff Dashboard');
+      firebaseSyncService.saveMember(updated).catch(() => {});
+
+      // Trigger Discord bot notification & setup (integration form)
+      const botResult = await pawakoBot.validateToolsFormationAndSendIntegrationForm([updated], adminName || 'Staff Dashboard');
+      const latestMember = store.getMember(id) || updated;
+
+      res.json({
+        success: true,
+        botSuccess: botResult?.validated?.length > 0,
+        member: latestMember,
+        message: `Formation Outils validée avec succès pour ${latestMember.username}. Formulaire d'intégration transmis sur Discord !`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la validation des outils' });
+    }
+  });
+
   // Reschedule Simulation
   app.post('/api/members/:id/reschedule-simulation', async (req: Request, res: Response) => {
     try {

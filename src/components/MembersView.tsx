@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Users,
   Search,
+  CheckCircle,
   CheckCircle2,
   Clock,
   RotateCcw,
@@ -213,13 +214,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
       onRefresh();
       onShowToast('Convocation Simulation 14h00', `${member.username} passe en Simulation & convoqué(e) à 14h00 HF`, 'success');
     } else if (targetStage === 'formation_outils') {
-      memberService.validateSimulation(member.id, 'Staff Kanban');
-      onRefresh();
-      onShowToast('Formation Outils', `${member.username} convoqué(e) à la Formation Outils`, 'success');
+      if (confirm(`🏆 Valider la simulation pour ${member.username} et le/la convoquer à la Formation Outils (10h00 HF) sur Discord ?`)) {
+        memberService.validateSimulation(member.id, 'Staff Kanban');
+        onRefresh();
+        onShowToast('Formation Outils', `${member.username} : simulation validée, convoqué(e) à 10h00 HF sur Discord`, 'success');
+      }
     } else if (targetStage === 'formation_terminee') {
-      store.updateCandidateState(member.id, 'formation_terminee');
-      onRefresh();
-      onShowToast('Diplômé / Intégré', `${member.username} marqué comme formateur/diplômé !`, 'success');
+      if (confirm(`✅ Valider la Formation Outils pour ${member.username} et lui envoyer le Formulaire d'Intégration sur Discord ?`)) {
+        memberService.validateToolsFormation(member.id, 'Staff Kanban');
+        onRefresh();
+        onShowToast('Diplômé / Intégré', `${member.username} : formation outils validée & formulaire d'intégration envoyé !`, 'success');
+      }
     } else if (targetStage === 'reset') {
       memberService.resetProgress(member.id);
       onRefresh();
@@ -886,9 +891,10 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     <span>💬 Relance DM Discord</span>
                   </button>
 
+                  {/* 1. VALIDER SIMULATION */}
                   <button
                     onClick={async () => {
-                      if (confirm(`Valider la simulation pour ${selectedCandidate.username} et programmer la Formation Outils à 10h00 HF sur Discord ?`)) {
+                      if (confirm(`🏆 VALIDER LA SIMULATION pour ${selectedCandidate.username} ?\n\nCela confirmera la réussite de sa simulation et le convoquera à la Formation Outils demain à 10h00 HF sur Discord.`)) {
                         const res = await memberService.validateSimulation(selectedCandidate.id, 'Staff Dashboard');
                         onRefresh();
                         if (res.success) {
@@ -898,32 +904,65 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         }
                       }
                     }}
-                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
+                    className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-start gap-2 cursor-pointer"
                   >
-                    <Award className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>🏆 Valider Simu (10h HF)</span>
+                    <Award className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="block text-emerald-200">🏆 Valider la Simulation</span>
+                      <span className="text-[10px] text-emerald-400/80 font-normal">Passe en Formation Outils (10h00 HF)</span>
+                    </div>
                   </button>
 
+                  {/* 2. VALIDER FORMATION OUTILS */}
+                  <button
+                    onClick={async () => {
+                      if (confirm(`✅ VALIDER LA FORMATION AUX OUTILS pour ${selectedCandidate.username} ?\n\nCela validera définitivement sa formation et lui enverra le Formulaire d'Intégration (Étape 3) sur Discord.`)) {
+                        const res = await memberService.validateToolsFormation(selectedCandidate.id, 'Staff Dashboard');
+                        onRefresh();
+                        if (res.success) {
+                          onShowToast('✅ Formation Outils Validée !', res.message || `${selectedCandidate.username} diplômé(e) et formulaire envoyé sur Discord`, 'success');
+                        } else {
+                          onShowToast('⚠️ Erreur Discord', res.message || 'Erreur lors de la validation des outils sur Discord', 'error');
+                        }
+                      }
+                    }}
+                    className="p-3 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 border border-teal-500/30 text-teal-300 text-xs font-bold transition-all text-left flex items-start gap-2 cursor-pointer"
+                  >
+                    <CheckCircle className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="block text-teal-200">✅ Valider la Formation Outils</span>
+                      <span className="text-[10px] text-teal-400/80 font-normal">Diplômé & envoie le Formulaire d'Intégration</span>
+                    </div>
+                  </button>
+
+                  {/* 3. REPROGRAMMER SIMULATION */}
                   <button
                     onClick={() => {
                       setRescheduleTarget({ member: selectedCandidate, type: 'simulation' });
                       setCustomDatetime('');
                     }}
-                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
+                    className="p-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-bold transition-all text-left flex items-start gap-2 cursor-pointer"
                   >
-                    <Calendar className="w-4 h-4 text-blue-400 shrink-0" />
-                    <span>📅 Reprog Simu (14h)</span>
+                    <Calendar className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="block text-blue-200">📅 Reprogrammer la Simulation</span>
+                      <span className="text-[10px] text-blue-400/80 font-normal">Reporte l'épreuve simu (ex: 14h) — SANS valider</span>
+                    </div>
                   </button>
 
+                  {/* 4. REPROGRAMMER FORMATION OUTILS */}
                   <button
                     onClick={() => {
                       setRescheduleTarget({ member: selectedCandidate, type: 'tools' });
                       setCustomDatetime('');
                     }}
-                    className="p-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
+                    className="p-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all text-left flex items-start gap-2 cursor-pointer"
                   >
-                    <Calendar className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>📅 Reprog Outils (10h)</span>
+                    <Calendar className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="block text-purple-200">📅 Reprogrammer Formation Outils</span>
+                      <span className="text-[10px] text-purple-400/80 font-normal">Reporte la session visio (ex: 10h) — SANS diplômer</span>
+                    </div>
                   </button>
 
                   <button
@@ -1157,11 +1196,21 @@ export const MembersView: React.FC<MembersViewProps> = ({
               </div>
               <div>
                 <h3 className="font-bold text-lg text-white">
-                  Reprogrammer {rescheduleTarget.type === 'simulation' ? 'la Simulation' : 'la Formation Outils'}
+                  Reprogrammer {rescheduleTarget.type === 'simulation' ? 'la Simulation (14h00 HF)' : 'la Formation Outils (10h00 HF)'}
                 </h3>
                 <p className="text-xs text-slate-400">
                   Candidat : <span className="font-semibold text-slate-200">{rescheduleTarget.member.username}</span>
                 </p>
+              </div>
+            </div>
+
+            {/* Avertissement clair pour le Staff */}
+            <div className="p-3 mb-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold block">⚠️ Modification de créneau uniquement :</span>
+                Cette action modifie la date/heure de convocation et notifie le candidat sur Discord. 
+                <span className="font-bold text-white"> Elle NE valide PAS</span> {rescheduleTarget.type === 'simulation' ? 'la simulation' : 'la formation outils'}.
               </div>
             </div>
 
@@ -1258,7 +1307,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 }}
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-colors cursor-pointer"
               >
-                Valider
+                📅 Enregistrer la reprogrammation {rescheduleTarget.type === 'simulation' ? 'Simulation' : 'Outils'}
               </button>
             </div>
           </div>

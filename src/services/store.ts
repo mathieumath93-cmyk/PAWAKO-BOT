@@ -1740,7 +1740,7 @@ ${statusText}
     this.saveMembers();
     this.addLog(
       adminName,
-      `Validation de la simulation pour ${member.username}. Formation Outils programmée pour 10h00 HF.`,
+      `🏆 [VALIDATION_SIMULATION] Validation de la simulation pour ${member.username}. Formation Outils programmée pour 10h00 HF.`,
       'member',
       member.username
     );
@@ -1749,23 +1749,62 @@ ${statusText}
   }
 
   /**
-   * Reschedule simulation session for a candidate
+   * Validate tools formation for a candidate (Fin du parcours & prêt pour intégration)
+   */
+  public validateCandidateToolsFormation(memberId: string, adminName: string = 'Staff'): Member {
+    const member = this.getMember(memberId);
+    if (!member) throw new Error('Membre non trouvé');
+
+    member.candidateState = 'formation_terminee';
+    member.toolsFormationValidatedAt = new Date().toLocaleString('fr-FR');
+    member.lastActiveAt = this.getFormattedNow();
+
+    // Validate all modules if not already done
+    const allMods = this.getModules();
+    if (!member.progress) member.progress = {};
+    for (const mod of allMods) {
+      if (!member.progress[mod.id] || member.progress[mod.id].status !== 'valide') {
+        member.progress[mod.id] = {
+          moduleId: mod.id,
+          status: 'valide',
+          score: 20,
+          attemptsCount: member.progress[mod.id]?.attemptsCount || 1,
+          validatedAt: member.toolsFormationValidatedAt,
+        };
+      }
+    }
+    member.cooldownUntilTimestamp = null;
+    member.currentQuizAvailableAtTimestamp = null;
+
+    this.saveMembers();
+    this.addLog(
+      adminName,
+      `🏆 [VALIDATION_OUTILS] Formation Outils validée pour ${member.username}. Prêt(e) pour intégration et envoi du formulaire.`,
+      'member',
+      member.username
+    );
+
+    return member;
+  }
+
+  /**
+   * Reschedule simulation session for a candidate (REPOGRAMMER SIMULATION - SANS VALIDER)
    */
   public rescheduleCandidateSimulation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Membre non trouvé');
 
+    // Mettre à jour l'horodatage et remettre le statut en 'simulation' non validée
     member.simulationScheduledTimestamp = timestamp;
     member.simulationReminderSent = false;
-    if (member.candidateState !== 'formation_outils' && member.candidateState !== 'formation_terminee') {
-      member.candidateState = 'simulation';
-    }
+    member.candidateState = 'simulation';
+    member.simulationValidatedAt = undefined;
 
     const dateStr = new Date(timestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
     this.saveMembers();
     this.addLog(
       adminName,
-      `📅 [REPROGRAMMATION_SIMULATION] Test de simulation reprogrammé pour ${member.username} le ${dateStr} HF.`,
+      `📅 [REPROGRAMMATION_SIMULATION] Test de simulation reprogrammé pour ${member.username} le ${dateStr} HF (Statut: En attente de simulation - non validée).`,
       'member',
       member.username
     );
@@ -1774,7 +1813,7 @@ ${statusText}
   }
 
   /**
-   * Reschedule tools formation session for a candidate
+   * Reschedule tools formation session for a candidate (REPROGRAMMER OUTILS - SANS DIPLÔMER)
    */
   public rescheduleCandidateToolsFormation(memberId: string, timestamp: number, adminName: string = 'Staff'): Member {
     const member = this.getMember(memberId);
@@ -1782,15 +1821,14 @@ ${statusText}
 
     member.toolsFormationScheduledTimestamp = timestamp;
     member.toolsFormationReminderSent = false;
-    if (member.candidateState !== 'formation_terminee') {
-      member.candidateState = 'formation_outils';
-    }
+    member.candidateState = 'formation_outils';
+    member.toolsFormationValidatedAt = undefined;
 
     const dateStr = new Date(timestamp).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
     this.saveMembers();
     this.addLog(
       adminName,
-      `📅 [REPROGRAMMATION_OUTILS] Formation Outils reprogrammée pour ${member.username} le ${dateStr} HF.`,
+      `📅 [REPROGRAMMATION_OUTILS] Formation Outils reprogrammée pour ${member.username} le ${dateStr} HF (Statut: En attente de session outils - non validée).`,
       'member',
       member.username
     );

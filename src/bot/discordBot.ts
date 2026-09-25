@@ -658,8 +658,10 @@ export class PawakoBotRunner {
               `🛡️ **GESTION STAFF & FORMATEURS**\n` +
               `• \`!infos @candidat\` : Dossier complet, statut, WhatsApp, email et actions rapides.\n` +
               `• \`!creer-radio\` : Créer ou synchroniser le salon vocal Radio Focus 24/7.\n` +
-              `• \`!valider-simu @candidat\` : Valider manuellement la simulation et convoquer à la formation outils.\n` +
-              `• \`!valider-formation @candidat\` : Valider le parcours complet et envoyer le formulaire d'intégration.\n` +
+              `• \`!valider-simu @candidat\` : 🏆 Valider la simulation et convoquer à la formation outils (10h00 HF).\n` +
+              `• \`!valider-outils @candidat\` (ou \`!valider-formation\`) : ✅ Valider la formation outils et envoyer le formulaire d'intégration.\n` +
+              `• \`!reprogrammer-simu @candidat [date]\` : 📅 Reprogrammer le test de simulation (SANS valider).\n` +
+              `• \`!reprogrammer-outils @candidat [date]\` : 📅 Reprogrammer la session outils (SANS diplômer).\n` +
               `• \`!relancer @candidat\` : Renvoyer le formulaire d'intégration.\n` +
               `• \`!reset-candidat @candidat\` : Réinitialiser le parcours à zéro.\n` +
               `• \`!fermer-formation\` : Clôturer la session vocale de formation outils.\n` +
@@ -1287,6 +1289,126 @@ export class PawakoBotRunner {
               content: `🏆 **[CONFIRMATION STAFF]** Simulation validée pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}>. Le log a été transmis dans le salon **#alertes-staff**.`
             }).catch(() => {});
           }
+          return;
+        }
+
+        // --- 2c. COMMAND: REPROGRAMMER SIMULATION (SANS VALIDER) ---
+        if (content.startsWith('!reprogrammer-simu') || content.startsWith('!reprog-simu') || content.startsWith('!reschedule-simu')) {
+          const mentionedUser = message.mentions.users.first();
+          const parts = content.split(' ');
+          const rawTarget = mentionedUser ? mentionedUser.id : parts[1];
+
+          if (!rawTarget) {
+            await message.reply('⚠️ Veuillez spécifier le candidat (ex: `!reprogrammer-simu @candidat Demain 14:00` ou `!reprog-simu @candidat`).').catch(() => {});
+            return;
+          }
+
+          let targetMember: Member | undefined = undefined;
+          if (mentionedUser) {
+            targetMember = store.getOrCreateCandidate(mentionedUser.id, mentionedUser.username, mentionedUser.displayAvatarURL());
+          } else {
+            targetMember =
+              store.getMember(rawTarget) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === rawTarget ||
+                  m.discordId === rawTarget ||
+                  m.id.replace('mem-', '') === rawTarget.replace('mem-', '') ||
+                  m.username.toLowerCase() === rawTarget.toLowerCase()
+              );
+          }
+
+          if (!targetMember) {
+            await message.reply(`⚠️ Candidat non trouvé pour \`${rawTarget}\`.`).catch(() => {});
+            return;
+          }
+
+          // Parse date or default to next 14h00
+          const rawDateStr = parts.slice(2).join(' ').trim();
+          const targetTs = rawDateStr ? parseFrenchDateTimeInput(rawDateStr, 14) : getNext14hParisTimestamp();
+          if (!targetTs) {
+            await message.reply('⚠️ Format de date/heure non reconnu. Exemples valides : `Demain 14:00`, `30/08/2026 14:00`, `14h00`.').catch(() => {});
+            return;
+          }
+
+          store.rescheduleCandidateSimulation(targetMember.id, targetTs, `@${message.author.username}`);
+          firebaseSyncService.saveMember(targetMember).catch(() => {});
+          await this.notifySimulationRescheduled(targetMember, targetTs, `@${message.author.username}`);
+
+          const tsSec = Math.floor(targetTs / 1000);
+          const resimEmbed = new EmbedBuilder()
+            .setTitle('📅 REPROGRAMMATION SIMULATION — CONFIRMATION STAFF')
+            .setColor(0x3b82f6)
+            .setDescription(
+              `📅 **Session de Simulation reprogrammée par <@${message.author.id}> !**\n\n` +
+              `• **Candidat :** <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> (**${targetMember.username}**)\n` +
+              `• **Nouveau créneau :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n\n` +
+              `⚠️ *Rappel : Le candidat n'est PAS validé, il reste en attente de passer sa simulation.*`
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Reprogrammation Simulation' })
+            .setTimestamp();
+
+          await message.reply({ embeds: [resimEmbed] }).catch(() => {});
+          return;
+        }
+
+        // --- 2d. COMMAND: REPROGRAMMER FORMATION OUTILS (SANS DIPLÔMER) ---
+        if (content.startsWith('!reprogrammer-outils') || content.startsWith('!reprog-outils') || content.startsWith('!reschedule-tools')) {
+          const mentionedUser = message.mentions.users.first();
+          const parts = content.split(' ');
+          const rawTarget = mentionedUser ? mentionedUser.id : parts[1];
+
+          if (!rawTarget) {
+            await message.reply('⚠️ Veuillez spécifier le candidat (ex: `!reprogrammer-outils @candidat Demain 10:00` ou `!reprog-outils @candidat`).').catch(() => {});
+            return;
+          }
+
+          let targetMember: Member | undefined = undefined;
+          if (mentionedUser) {
+            targetMember = store.getOrCreateCandidate(mentionedUser.id, mentionedUser.username, mentionedUser.displayAvatarURL());
+          } else {
+            targetMember =
+              store.getMember(rawTarget) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === rawTarget ||
+                  m.discordId === rawTarget ||
+                  m.id.replace('mem-', '') === rawTarget.replace('mem-', '') ||
+                  m.username.toLowerCase() === rawTarget.toLowerCase()
+              );
+          }
+
+          if (!targetMember) {
+            await message.reply(`⚠️ Candidat non trouvé pour \`${rawTarget}\`.`).catch(() => {});
+            return;
+          }
+
+          // Parse date or default to next 10h00
+          const rawDateStr = parts.slice(2).join(' ').trim();
+          const targetTs = rawDateStr ? parseFrenchDateTimeInput(rawDateStr, 10) : getNext10hParisTimestamp();
+          if (!targetTs) {
+            await message.reply('⚠️ Format de date/heure non reconnu. Exemples valides : `Demain 10:00`, `30/08/2026 10:00`, `10h00`.').catch(() => {});
+            return;
+          }
+
+          store.rescheduleCandidateToolsFormation(targetMember.id, targetTs, `@${message.author.username}`);
+          firebaseSyncService.saveMember(targetMember).catch(() => {});
+          await this.notifyToolsFormationRescheduled(targetMember, targetTs, `@${message.author.username}`);
+
+          const tsSec = Math.floor(targetTs / 1000);
+          const retoolsEmbed = new EmbedBuilder()
+            .setTitle('📅 REPROGRAMMATION OUTILS — CONFIRMATION STAFF')
+            .setColor(0x8b5cf6)
+            .setDescription(
+              `📅 **Session Formation Outils reprogrammée par <@${message.author.id}> !**\n\n` +
+              `• **Candidat :** <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> (**${targetMember.username}**)\n` +
+              `• **Nouveau créneau :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n\n` +
+              `⚠️ *Rappel : Le candidat n'est PAS diplômé, il reste en attente de sa formation outils.*`
+            )
+            .setFooter({ text: 'PAWAKO FORMATION • Reprogrammation Outils' })
+            .setTimestamp();
+
+          await message.reply({ embeds: [retoolsEmbed] }).catch(() => {});
           return;
         }
 
@@ -2290,6 +2412,13 @@ export class PawakoBotRunner {
 
         // --- HANDLER FOR STAFF CLICKING "📅 Reprogrammer Simu / Outils" ---
         if (interaction.isButton() && customId.startsWith('staff_reprogram_simu_')) {
+          if (!this.isStaffUser(user, interaction.member)) {
+            await interaction.reply({
+              content: '❌ Cette action est strictement réservée au Staff.',
+              flags: MessageFlags.Ephemeral,
+            }).catch(() => {});
+            return;
+          }
           const targetId = customId.replace('staff_reprogram_simu_', '');
           const member = store.getMember(targetId) || store.getMembers().find((m) => m.discordId === targetId || m.id === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
 
@@ -2310,6 +2439,13 @@ export class PawakoBotRunner {
         }
 
         if (interaction.isButton() && customId.startsWith('staff_reprogram_tools_')) {
+          if (!this.isStaffUser(user, interaction.member)) {
+            await interaction.reply({
+              content: '❌ Cette action est strictement réservée au Staff.',
+              flags: MessageFlags.Ephemeral,
+            }).catch(() => {});
+            return;
+          }
           const targetId = customId.replace('staff_reprogram_tools_', '');
           const member = store.getMember(targetId) || store.getMembers().find((m) => m.discordId === targetId || m.id === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
 
@@ -2330,6 +2466,13 @@ export class PawakoBotRunner {
         }
 
         if (interaction.isModalSubmit() && customId.startsWith('modal_reprogram_simu_')) {
+          if (!this.isStaffUser(user, interaction.member)) {
+            await interaction.reply({
+              content: '❌ Cette action est strictement réservée au Staff.',
+              flags: MessageFlags.Ephemeral,
+            }).catch(() => {});
+            return;
+          }
           await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
           const targetId = customId.replace('modal_reprogram_simu_', '');
           const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
@@ -2351,12 +2494,19 @@ export class PawakoBotRunner {
 
           const tsSec = Math.floor(ts / 1000);
           await interaction.editReply({
-            content: `📅 **Session de Simulation reprogrammée avec succès !**\n\n• **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n• **Nouveau rendez-vous :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n\nLe candidat a été notifié dans son salon privé Discord.`
+            content: `📅 **Session de Simulation reprogrammée avec succès !**\n\n• **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n• **Nouveau rendez-vous :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n• **Statut actuel :** 🎯 *En attente du test de simulation (Non validé)*\n\nLe candidat a été notifié dans son salon privé Discord.`
           }).catch(() => {});
           return;
         }
 
         if (interaction.isModalSubmit() && customId.startsWith('modal_reprogram_tools_')) {
+          if (!this.isStaffUser(user, interaction.member)) {
+            await interaction.reply({
+              content: '❌ Cette action est strictement réservée au Staff.',
+              flags: MessageFlags.Ephemeral,
+            }).catch(() => {});
+            return;
+          }
           await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
           const targetId = customId.replace('modal_reprogram_tools_', '');
           const member = store.getMember(targetId) || store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
@@ -2377,7 +2527,7 @@ export class PawakoBotRunner {
           this.notifyToolsFormationRescheduled(member, ts, `@${user.username}`).catch(() => {});
           const tsSec = Math.floor(ts / 1000);
           await interaction.editReply({
-            content: `📅 **Session Formation Outils reprogrammée avec succès !**\n\n• **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n• **Nouveau rendez-vous :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n\nLe candidat a été notifié dans son salon privé Discord.`
+            content: `📅 **Session Formation Outils reprogrammée avec succès !**\n\n• **Candidat :** <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)\n• **Nouveau rendez-vous :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n• **Statut actuel :** 🛠️ *En attente de session outils (Non diplômé)*\n\nLe candidat a été notifié dans son salon privé Discord.`
           }).catch(() => {});
           return;
         }
@@ -2403,6 +2553,15 @@ export class PawakoBotRunner {
           }
 
           console.log(`[PAWAKO BOT Interaction 🔘] Button clicked: "${customId}" by @${user.username} (ID: ${user.id})`);
+
+          if (customId.startsWith('staff_')) {
+            if (!this.isStaffUser(user, interaction.member)) {
+              await interaction.editReply({
+                content: '❌ Cette action est strictement réservée au Staff.',
+              }).catch(() => {});
+              return;
+            }
+          }
 
           // --- 1. START ONBOARDING & PERSONAL CHANNEL CREATION ---
           if (isStartOnboarding) {
@@ -2654,7 +2813,7 @@ export class PawakoBotRunner {
 
             const cooldownNoticeFriendly = getMemberAccessStatusFormatted(member);
 
-            const isStaffViewer = user.id !== member.discordId && user.id !== member.id.replace('mem-', '');
+            const isStaffViewer = this.isStaffUser(user, interaction.member);
 
             const memberAttempts = store.getQuizAttemptsForMember(member.id);
             let quizResultsFormatted = 'Aucun quiz effectué pour le moment.';
@@ -2721,14 +2880,22 @@ export class PawakoBotRunner {
                   new ButtonBuilder()
                     .setCustomId(`staff_validate_simu_${member.id}`)
                     .setLabel('🏆 Valider Simulation')
-                    .setStyle(ButtonStyle.Success)
+                    .setStyle(ButtonStyle.Success),
+                  new ButtonBuilder()
+                    .setCustomId(`staff_reprogram_simu_${member.id}`)
+                    .setLabel('📅 Reprogrammer Simu')
+                    .setStyle(ButtonStyle.Secondary)
                 );
               } else if (member.candidateState === 'formation_outils') {
                 row.addComponents(
                   new ButtonBuilder()
                     .setCustomId(`staff_validate_tools_${member.id}`)
                     .setLabel('✅ Valider Formation Outils')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary),
+                  new ButtonBuilder()
+                    .setCustomId(`staff_reprogram_tools_${member.id}`)
+                    .setLabel('📅 Reprogrammer Outils')
+                    .setStyle(ButtonStyle.Secondary)
                 );
               }
             }
@@ -3822,6 +3989,41 @@ export class PawakoBotRunner {
     );
   }
 
+  /**
+   * Helper to verify if a Discord User or GuildMember belongs to Staff
+   */
+  public isStaffUser(user: any, member?: any): boolean {
+    if (!user) return false;
+    const cfg = onboardingService.getConfig();
+    const userId = user.id || String(user);
+    if (
+      userId === '1179090626027151390' ||
+      userId === '1178783478982348821' ||
+      (cfg.mahsaDiscordId && userId === cfg.mahsaDiscordId) ||
+      (cfg.mathieuDiscordId && userId === cfg.mathieuDiscordId)
+    ) {
+      return true;
+    }
+    if (member) {
+      if (
+        member.permissions?.has?.(PermissionFlagsBits.Administrator) ||
+        member.permissions?.has?.(PermissionFlagsBits.ManageGuild)
+      ) {
+        return true;
+      }
+      if (
+        member.roles?.cache?.some?.((r: any) =>
+          ['staff', 'coach', 'fondateur', 'admin', 'modérateur', 'moderateur', 'formateur'].some((roleKeyword) =>
+            r.name?.toLowerCase().includes(roleKeyword)
+          )
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   public async sendStaffLogNotification(embed: EmbedBuilder, textContent?: string): Promise<void> {
     if (!this.client) return;
     try {
@@ -4648,6 +4850,7 @@ export class PawakoBotRunner {
         .setFooter({ text: resolved.footer })
         .setTimestamp();
 
+      // Buttons reserved strictly for Staff:
       const simValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`staff_validate_simu_${member.id}`)
@@ -4659,7 +4862,45 @@ export class PawakoBotRunner {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      await this.sendCandidateActionMessage(member, resolved.content, embed, [simValidateRow]);
+      // 1. Send informational message to candidate (WITHOUT staff buttons!)
+      await this.sendCandidateActionMessage(member, resolved.content, embed);
+
+      // 2. Send staff alert with action buttons strictly to #staff-alerts & Staff DMs
+      const tsSec = Math.floor(newTimestamp / 1000);
+      const discordUserId = member.discordId || member.id.replace('mem-', '');
+      const staffResimEmbed = new EmbedBuilder()
+        .setTitle('📅 SIMULATION REPROGRAMMÉE — ESPACE STAFF')
+        .setDescription(
+          `📢 **Session de Simulation reprogrammée**\n\n` +
+          `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
+          `• **Nouveau RDV :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
+          `• **Reprogrammé par :** **${adminName}**\n` +
+          `• **Salon du candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé'}\n\n` +
+          `👉 *Actions Staff disponibles ci-dessous :*`
+        )
+        .setColor(0x3b82f6)
+        .setFooter({ text: 'PAWAKO FORMATION • Gestion Staff' })
+        .setTimestamp();
+
+      if (this.client) {
+        const cfg = onboardingService.getConfig();
+        const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+        if (guildId) {
+          const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+          if (guild) {
+            const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+            if (staffChan) {
+              await staffChan.send({
+                content: `📅 **[SIMULATION REPROGRAMMÉE]** <@${discordUserId}> (**${member.username}**) au <t:${tsSec}:F>`,
+                embeds: [staffResimEmbed],
+                components: [simValidateRow],
+              }).catch((e: any) => console.warn('[Staff Alert Resim Error]', e));
+            }
+          }
+        }
+      }
+
+      await this.sendDirectMessageToStaff(staffResimEmbed, [simValidateRow]).catch(() => {});
 
       store.addLog(
         adminName,
@@ -4698,6 +4939,7 @@ export class PawakoBotRunner {
         .setFooter({ text: resolved.footer })
         .setTimestamp();
 
+      // Buttons reserved strictly for Staff:
       const toolsValidateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`staff_validate_tools_${member.id}`)
@@ -4709,7 +4951,45 @@ export class PawakoBotRunner {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      await this.sendCandidateActionMessage(member, resolved.content, embed, [toolsValidateRow]);
+      // 1. Send informational message to candidate (WITHOUT staff buttons!)
+      await this.sendCandidateActionMessage(member, resolved.content, embed);
+
+      // 2. Send staff alert with action buttons strictly to #staff-alerts & Staff DMs
+      const tsSec = Math.floor(newTimestamp / 1000);
+      const discordUserId = member.discordId || member.id.replace('mem-', '');
+      const staffToolsReschedEmbed = new EmbedBuilder()
+        .setTitle('📅 FORMATION OUTILS REPROGRAMMÉE — ESPACE STAFF')
+        .setDescription(
+          `📢 **Session Formation Outils reprogrammée**\n\n` +
+          `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
+          `• **Nouveau RDV :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
+          `• **Reprogrammé par :** **${adminName}**\n` +
+          `• **Salon du candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé'}\n\n` +
+          `👉 *Actions Staff disponibles ci-dessous :*`
+        )
+        .setColor(0x3b82f6)
+        .setFooter({ text: 'PAWAKO FORMATION • Gestion Staff' })
+        .setTimestamp();
+
+      if (this.client) {
+        const cfg = onboardingService.getConfig();
+        const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+        if (guildId) {
+          const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+          if (guild) {
+            const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+            if (staffChan) {
+              await staffChan.send({
+                content: `📅 **[FORMATION OUTILS REPROGRAMMÉE]** <@${discordUserId}> (**${member.username}**) au <t:${tsSec}:F>`,
+                embeds: [staffToolsReschedEmbed],
+                components: [toolsValidateRow],
+              }).catch((e: any) => console.warn('[Staff Alert Re-tools Error]', e));
+            }
+          }
+        }
+      }
+
+      await this.sendDirectMessageToStaff(staffToolsReschedEmbed, [toolsValidateRow]).catch(() => {});
 
       store.addLog(
         adminName,
@@ -5233,7 +5513,7 @@ export class PawakoBotRunner {
 
     await this.sendCandidateActionMessage(member, resolved.content, simEmbed, simComponents);
 
-    // Alert staff channel
+    // Alert staff channel (Staff Only)
     const guildId = onboardingService.getConfig().guildId || this.client?.guilds.cache.first()?.id;
     if (guildId && this.client) {
       const guild = await this.client.guilds.fetch(guildId).catch(() => null);
@@ -5241,8 +5521,19 @@ export class PawakoBotRunner {
         const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
         if (staffChan) {
           const chanLink = member.personalChannelId ? `<#${member.personalChannelId}>` : 'son salon privé';
+          const simStaffRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`staff_validate_simu_${member.id}`)
+              .setLabel(`🏆 Valider Simu (${member.username})`)
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId(`staff_reprogram_simu_${member.id}`)
+              .setLabel(`📅 Reprogrammer Simu`)
+              .setStyle(ButtonStyle.Secondary)
+          );
           await staffChan.send({
             content: `📅 **[CONVOCATION SIMULATION 14H00]** Le candidat <@${discordUserId}> (**${member.username}**) a terminé ses modules. RDV fixé pour ${timingBadge} dans ${chanLink} !`,
+            components: [simStaffRow],
           }).catch(() => {});
         }
       }
@@ -5539,10 +5830,18 @@ export class PawakoBotRunner {
       ? scheduledMembers.map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`).join('\n')
       : `1. <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**)`;
 
-    const closeVoiceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    const staffToolsActionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`staff_validate_tools_${member.id}`)
+        .setLabel(`✅ Valider Outils (${member.username})`)
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`staff_reprogram_tools_${member.id}`)
+        .setLabel(`📅 Reprogrammer Outils`)
+        .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId('staff_close_voice_session')
-        .setLabel('🏁 Terminer / Fermer le Salon Vocal')
+        .setLabel('🏁 Fermer Salon Vocal')
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -5574,7 +5873,7 @@ export class PawakoBotRunner {
             await staffChan.send({
               content: `🔔 **[FORMATION OUTILS 10H00 HF]** ${mahsaMention} ${mathieuMention}`,
               embeds: [staffAlertEmbed],
-              components: [closeVoiceRow],
+              components: [staffToolsActionRow],
             }).catch((e) => console.warn('[Staff Alert Simu Validated Error]', e));
           }
         }
@@ -5591,13 +5890,13 @@ export class PawakoBotRunner {
         `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n` +
         `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
         `📋 **Candidats inscrits pour cette session :**\n${scheduledListStr}\n\n` +
-        `*(Cliquez sur le bouton ci-dessous une fois la réunion terminée pour fermer l'accès au vocal)*`
+        `*(Actions Staff disponibles ci-dessous)*`
       )
       .setColor(0x10b981)
       .setFooter({ text: 'PAWAKO FORMATION • Notification MP Staff' })
       .setTimestamp();
 
-    await this.sendDirectMessageToStaff(mpEmbed, [closeVoiceRow]);
+    await this.sendDirectMessageToStaff(mpEmbed, [staffToolsActionRow]);
 
     // 4. Log event
     store.addLog(

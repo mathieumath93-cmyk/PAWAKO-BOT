@@ -176,6 +176,30 @@ class MemberService {
     }
   }
 
+  public async validateToolsFormation(
+    memberId: string,
+    adminName: string = 'Staff'
+  ): Promise<{ success: boolean; member?: Member; botSuccess?: boolean; message?: string }> {
+    const updated = store.validateCandidateToolsFormation(memberId, adminName);
+    firebaseSyncService.saveMember(updated).catch((err) =>
+      console.error('[MemberService] Firebase saveMember failed:', err)
+    );
+    try {
+      const res = await fetch(`/api/members/${memberId}/validate-tools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminName }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message || 'Erreur validation outils' };
+    }
+  }
+
   public async rescheduleSimulation(
     memberId: string,
     timestamp: number,

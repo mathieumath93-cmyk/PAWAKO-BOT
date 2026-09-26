@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   Radio,
   Search,
@@ -62,6 +62,8 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastChannelIdRef = useRef<string | null>(null);
+  const shouldForceScrollRef = useRef<boolean>(true);
 
   const quickTemplates = [
     '👋 Bonjour ! As-tu besoin d\'aide sur ce module ?',
@@ -109,6 +111,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
   }, []);
 
   useEffect(() => {
+    shouldForceScrollRef.current = true;
     if (selectedChannelId && selectedChannelId !== 'global') {
       loadActiveMessages(selectedChannelId);
     }
@@ -193,19 +196,39 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
     };
   }, [selectedChannelId, soundEnabled]);
 
-  // Auto-scroll on new message
-  useEffect(() => {
-    if (chatScrollContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = chatScrollContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-      if (isNearBottom) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        setHasNewScrollMessages(false);
-      } else {
-        setHasNewScrollMessages(true);
-      }
+  // Auto-scroll directly to latest message on load, channel change and new messages
+  useLayoutEffect(() => {
+    if (!chatScrollContainerRef.current) return;
+
+    const isChannelSwitch = lastChannelIdRef.current !== selectedChannelId;
+    if (isChannelSwitch) {
+      lastChannelIdRef.current = selectedChannelId;
+      shouldForceScrollRef.current = true;
     }
-  }, [messages, globalStream]);
+
+    // Force instant scroll to bottom on channel switch, initial load, or when messages finish loading
+    if (shouldForceScrollRef.current || isChannelSwitch) {
+      scrollToBottom('auto');
+      const timer1 = setTimeout(() => scrollToBottom('auto'), 40);
+      const timer2 = setTimeout(() => {
+        scrollToBottom('auto');
+        shouldForceScrollRef.current = false;
+      }, 150);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+    }
+
+    // When new real-time messages arrive in current channel
+    const { scrollTop, scrollHeight, clientHeight } = chatScrollContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 250;
+    if (isNearBottom) {
+      scrollToBottom('smooth');
+    } else {
+      setHasNewScrollMessages(true);
+    }
+  }, [messages, globalStream, selectedChannelId, isLoadingMessages]);
 
   const activeChannel = useMemo(() => {
     if (selectedChannelId === 'global') return null;
@@ -254,6 +277,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
         if (res.message) {
           setMessages((prev) => [...prev, res.message!]);
         }
+        setTimeout(() => scrollToBottom('smooth'), 40);
         onShowToast('🚀 Message Envoyé', `Posté en direct dans #${activeChannel?.name || 'salon'}`, 'success');
       } else {
         onShowToast('⚠️ Erreur', res?.error || 'Échec de l\'envoi', 'error');
@@ -273,9 +297,21 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    if (chatScrollContainerRef.current) {
+      chatScrollContainerRef.current.scrollTop = chatScrollContainerRef.current.scrollHeight;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior });
     setHasNewScrollMessages(false);
+  };
+
+  const handleScroll = () => {
+    if (!chatScrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatScrollContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+    if (isNearBottom) {
+      setHasNewScrollMessages(false);
+    }
   };
 
   const currentDisplayMessages = selectedChannelId === 'global' ? globalStream : messages;
@@ -632,6 +668,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
           {/* Messages Scroll Feed */}
           <div
             ref={chatScrollContainerRef}
+            onScroll={handleScroll}
             className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-950/60"
           >
             {isLoadingMessages && currentDisplayMessages.length === 0 ? (

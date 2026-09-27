@@ -63,7 +63,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastChannelIdRef = useRef<string | null>(null);
-  const shouldForceScrollRef = useRef<boolean>(true);
+  const userScrolledUpRef = useRef<boolean>(false);
 
   const quickTemplates = [
     '👋 Bonjour ! As-tu besoin d\'aide sur ce module ?',
@@ -90,6 +90,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
   const loadActiveMessages = async (chanId: string) => {
     if (chanId === 'global') return;
     setIsLoadingMessages(true);
+    userScrolledUpRef.current = false;
     try {
       const history = await liveChannelService.getChannelMessages(chanId, 50);
       setMessages(history);
@@ -103,6 +104,13 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
       console.error(err);
     } finally {
       setIsLoadingMessages(false);
+      userScrolledUpRef.current = false;
+      requestAnimationFrame(() => {
+        scrollToBottom('auto');
+        setTimeout(() => scrollToBottom('auto'), 40);
+        setTimeout(() => scrollToBottom('auto'), 120);
+        setTimeout(() => scrollToBottom('auto'), 280);
+      });
     }
   };
 
@@ -111,7 +119,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
   }, []);
 
   useEffect(() => {
-    shouldForceScrollRef.current = true;
+    userScrolledUpRef.current = false;
     if (selectedChannelId && selectedChannelId !== 'global') {
       loadActiveMessages(selectedChannelId);
     }
@@ -203,28 +211,22 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
     const isChannelSwitch = lastChannelIdRef.current !== selectedChannelId;
     if (isChannelSwitch) {
       lastChannelIdRef.current = selectedChannelId;
-      shouldForceScrollRef.current = true;
+      userScrolledUpRef.current = false;
     }
 
-    // Force instant scroll to bottom on channel switch, initial load, or when messages finish loading
-    if (shouldForceScrollRef.current || isChannelSwitch) {
+    // If user has not intentionally scrolled up, ALWAYS position at bottom!
+    if (!userScrolledUpRef.current) {
       scrollToBottom('auto');
-      const timer1 = setTimeout(() => scrollToBottom('auto'), 40);
-      const timer2 = setTimeout(() => {
-        scrollToBottom('auto');
-        shouldForceScrollRef.current = false;
-      }, 150);
+      const rAf = requestAnimationFrame(() => scrollToBottom('auto'));
+      const t1 = setTimeout(() => scrollToBottom('auto'), 40);
+      const t2 = setTimeout(() => scrollToBottom('auto'), 120);
+      const t3 = setTimeout(() => scrollToBottom('auto'), 280);
       return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
+        cancelAnimationFrame(rAf);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
       };
-    }
-
-    // When new real-time messages arrive in current channel
-    const { scrollTop, scrollHeight, clientHeight } = chatScrollContainerRef.current;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 250;
-    if (isNearBottom) {
-      scrollToBottom('smooth');
     } else {
       setHasNewScrollMessages(true);
     }
@@ -297,21 +299,30 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
     }
   };
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    if (chatScrollContainerRef.current) {
-      chatScrollContainerRef.current.scrollTop = chatScrollContainerRef.current.scrollHeight;
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+    const el = chatScrollContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
     }
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
     setHasNewScrollMessages(false);
   };
 
   const handleScroll = () => {
     if (!chatScrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatScrollContainerRef.current;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-    if (isNearBottom) {
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    if (distanceFromBottom < 100) {
+      userScrolledUpRef.current = false;
       setHasNewScrollMessages(false);
+    } else if (distanceFromBottom > 250) {
+      userScrolledUpRef.current = true;
     }
+  };
+
+  const onJumpToBottom = () => {
+    userScrolledUpRef.current = false;
+    scrollToBottom('smooth');
   };
 
   const currentDisplayMessages = selectedChannelId === 'global' ? globalStream : messages;
@@ -800,7 +811,7 @@ export const LiveChannelsMonitorView: React.FC<LiveChannelsMonitorViewProps> = (
           {/* New Messages Jump Button */}
           {hasNewScrollMessages && (
             <button
-              onClick={scrollToBottom}
+              onClick={onJumpToBottom}
               className="absolute bottom-24 right-6 px-3 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition-all animate-bounce"
             >
               <ArrowDown className="w-3.5 h-3.5" />

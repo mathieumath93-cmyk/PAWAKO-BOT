@@ -8,10 +8,25 @@ import { aiKnowledgeService, getDefaultOpenRouterApiKey } from './aiKnowledgeSer
 export type VoiceCapsuleType = 'spam_warning' | 'morning_relance' | 'motivation_shift' | 'level_congrats' | 'custom';
 export type VoiceEngineType = 'google_fr' | 'gemini';
 
+export interface CandidateVoiceContext {
+  memberId?: string;
+  username?: string;
+  currentModuleId?: string;
+  currentModuleTitle?: string;
+  candidateState?: string;
+  validatedModulesCount?: number;
+  totalModulesCount?: number;
+  isBlockedByQuizFailures?: boolean;
+  blockedQuizTitle?: string;
+  simulationScheduledAt?: string;
+  daysActive?: number;
+}
+
 export interface VoiceCapsuleConfig {
   type: VoiceCapsuleType;
   customText?: string;
   targetName?: string;
+  candidateContext?: CandidateVoiceContext;
   voiceName?: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' | 'French_Natural';
   engine?: VoiceEngineType;
   channelId?: string;
@@ -28,6 +43,7 @@ export interface GeneratedVoiceCapsule {
   mimeType: string;
   durationEstimateSeconds: number;
   timestamp: string;
+  candidateContext?: CandidateVoiceContext;
 }
 
 /**
@@ -171,8 +187,11 @@ class AiVoiceAnnouncerService {
   /**
    * Generates natural French speech scripts based on action type
    */
-  public getPresetScript(type: VoiceCapsuleType, targetName?: string): { title: string; script: string; defaultVoice: any } {
-    const name = targetName || 'candidat';
+  /**
+   * Generates natural French speech scripts based on action type and candidate context
+   */
+  public getPresetScript(type: VoiceCapsuleType, targetName?: string, candidateContext?: CandidateVoiceContext): { title: string; script: string; defaultVoice: any } {
+    const name = targetName || candidateContext?.username || 'candidat';
     switch (type) {
       case 'spam_warning':
         return {
@@ -180,12 +199,14 @@ class AiVoiceAnnouncerService {
           script: `Alerte modération Pawako ! Le flood et l'envoi de messages répétés sont strictement interdits. Merci de respecter la tranquillité du salon et d'attendre les réponses.`,
           defaultVoice: 'Fenrir',
         };
-      case 'morning_relance':
+      case 'morning_relance': {
+        const modTitle = candidateContext?.currentModuleTitle ? ` — ${candidateContext.currentModuleTitle}` : '';
         return {
-          title: '☀️ Relance Matinale Coach Pawako',
-          script: `Bonjour ${name} ! C'est ton coach vocal Pawako. N'oublie pas de valider ton module du jour et de te concentrer sur tes relances. La régularité bat le talent ! Bon courage pour ta journée.`,
+          title: `☀️ Relance Matinale Coach Pawako${modTitle}`,
+          script: this.getContextualFallbackScript(type, name, candidateContext),
           defaultVoice: 'French_Natural',
         };
+      }
       case 'motivation_shift':
         return {
           title: '⚡ Capsule Énergie & Motivation Chatting',
@@ -209,20 +230,216 @@ class AiVoiceAnnouncerService {
   }
 
   /**
-   * Uses OpenRouter API with resilient free-tier models (Llama 3.3, Mistral 7B, etc.)
-   * to dynamically create crisp, punchy, human French coaching speech scripts.
+   * Multi-variation contextual fallback pool with deterministic daily rotation.
+   * Guarantees that the candidate hears a DIFFERENT phrase every day of the week,
+   * specifically adapted to their current module and exact progression stage.
+   */
+  public getContextualFallbackScript(
+    type: VoiceCapsuleType,
+    targetName?: string,
+    context?: CandidateVoiceContext
+  ): string {
+    const name = targetName || context?.username || 'candidat';
+
+    // 1. Calculate deterministic Day-of-Year and candidate seed hash
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    const candidateSeed = (context?.memberId || name || 'pawako').toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < candidateSeed.length; i++) {
+      hash = ((hash << 5) - hash) + candidateSeed.charCodeAt(i);
+      hash |= 0;
+    }
+    const daySeed = Math.abs(dayOfYear + hash);
+
+    if (type !== 'morning_relance') {
+      const nonMorningPools: Record<string, string[]> = {
+        spam_warning: [
+          `Alerte modération Pawako ! Merci de ne pas inonder le salon de messages répétés et de patienter tranquillement.`,
+          `Attention modération. Merci d'éviter les envois successifs et de respecter le calme du salon.`,
+          `Rappel de modération Pawako. Les messages multiples à la suite sont proscrits, merci d'attendre la réponse du staff.`,
+        ],
+        motivation_shift: [
+          `Flash motivation Pawako ! Les meilleurs chatteurs gardent une cadence soutenue et soignée. Soyez réactifs et dépassez vos objectifs !`,
+          `Énergie au maximum pour l'équipe Pawako ! Appliquez les techniques du guide et faites la différence aujourd'hui !`,
+          `Focus et rigueur pour tous les chatteurs ! Chaque échange compte, personnalisez vos approches et montez en puissance !`,
+          `La régularité bat le talent ! Restez constants, soignez votre orthographe et gardez le lead sur vos conversations !`,
+        ],
+        level_congrats: [
+          `Bravo ${name} pour ton nouveau palier franchi ! Tes efforts et ton sérieux portent leurs fruits, continue comme ça !`,
+          `Félicitations ${name} ! Ce niveau validé confirme ta progression. Fonce vers la prochaine étape !`,
+          `Super travail ${name} ! Tu passes au palier supérieur avec brio. Reste concentré pour la suite de ton aventure !`,
+        ],
+        custom: [
+          `Message d'annonce officiel de la formation Pawako. Restez concentrés et attentifs aux prochaines consignes.`,
+        ],
+      };
+      const p = nonMorningPools[type] || nonMorningPools.custom;
+      return p[daySeed % p.length];
+    }
+
+    // 2. Morning Relance: Route according to candidate's exact module and state
+
+    // A) Blocked by 3 quiz failures
+    if (context?.isBlockedByQuizFailures) {
+      const blockedPool = [
+        `Salut ${name}, c'est ton coach vocal. Un échec au quiz est juste une étape d'ajustement. Revois tes fiches clés et fais signe au Staff pour retenter avec succès !`,
+        `Hello ${name} ! Pas d'inquiétude sur ton dernier quiz, la persévérance forge les meilleurs profils. Relis calmement le cours et demande ton déblocage dès que tu es prêt.`,
+        `Bonjour ${name} ! Garde confiance. Les erreurs au quiz permettent d'ancrer les bons réflexes de chatting. Revois tes fiches et sollicite le Staff pour débloquer ton test.`,
+        `Salut ${name} ! Prends quelques minutes aujourd'hui pour réviser les notions qui ont posé souci. Montre ta détermination au Staff et valide ton module !`,
+      ];
+      return blockedPool[daySeed % blockedPool.length];
+    }
+
+    // B) Simulation Stage
+    const isSimu = context?.candidateState === 'simulation' || ((context?.validatedModulesCount || 0) >= (context?.totalModulesCount || 5) && (context?.totalModulesCount || 0) > 0);
+    if (isSimu) {
+      if (context?.simulationScheduledAt) {
+        const sched = context.simulationScheduledAt;
+        const simuScheduledPool = [
+          `Rappel important ${name} : ton rendez-vous de simulation est programmé pour ${sched}. Sois connecté en avance, concentré et prêt à briller en direct !`,
+          `Bonjour ${name} ! Dernière ligne droite avant ton test de simulation prévu ${sched}. Respire, relis les consignes de chatting et donne le meilleur de toi-même !`,
+          `Salut ${name} ! N'oublie pas ton rendez-vous de simulation ${sched}. Sois ponctuel, réactif sur tes réponses et applique les techniques de vente avec assurance.`,
+          `Hello ${name} ! Ton créneau de simulation est confirmé pour ${sched}. Prépare tes arguments, ta concentration et montre au coach ton niveau !`,
+        ];
+        return simuScheduledPool[daySeed % simuScheduledPool.length];
+      } else {
+        const simuGeneralPool = [
+          `Félicitations pour tes modules ${name} ! Tu es désormais aux portes de la simulation. Reste naturel, réactif et applique les techniques de closing !`,
+          `Salut ${name} ! C'est le moment de vérité avec la simulation pratique. Mets-toi dans la peau d'un chatteur d'élite, sois rapide et crée du lien avec le fan.`,
+          `Bonjour ${name} ! Tous tes cours théoriques sont validés. Prépare-toi mentalement pour la simulation : gestion de la pression, relances vives et empathie !`,
+          `Hello ${name} ! Prêt pour la simulation ? Reste calme, réponds avec précision et applique la méthode Pawako. On a hâte de voir tes performances !`,
+          `Salut ${name} ! La simulation approche. Revois tes techniques de teasing et de relance, c'est l'occasion idéale de prouver ta valeur à l'équipe !`,
+        ];
+        return simuGeneralPool[daySeed % simuGeneralPool.length];
+      }
+    }
+
+    // C) Tools / Outils Stage
+    if (context?.candidateState === 'formation_outils' || context?.candidateState === 'outils') {
+      const toolsPool = [
+        `Bravo pour ta simulation validée ${name} ! Concentre-toi maintenant sur la prise en main des outils et logiciels de l'agence. La rigueur technique fait la différence !`,
+        `Salut ${name} ! Tu es sur l'étape finale des outils professionnels. Maîtrise les fonctionnalités clés pour être opérationnel dès tes premières sessions.`,
+        `Bonjour ${name} ! L'apprentissage des outils de l'agence est primordial pour ta productivité. Prends le temps de tout explorer et valide cette ultime étape !`,
+        `Hello ${name} ! Dernière ligne droite sur la formation outils. Sois attentif aux consignes pour intégrer rapidement nos plannings de shift !`,
+      ];
+      return toolsPool[daySeed % toolsPool.length];
+    }
+
+    // D) Per Module Specific Pools
+    const mId = (context?.currentModuleId || '').toLowerCase();
+    const mTitle = (context?.currentModuleTitle || '').toLowerCase();
+
+    // Module 1 : Mindset & Bases
+    if (mId.includes('1') || mTitle.includes('mindset') || mTitle.includes('base')) {
+      const mod1Pool = [
+        `Bonjour ${name} ! Le Module 1 pose les fondations de ton succès : ponctualité, constance et rigueur. Prends un quart d'heure ce matin et valide ton premier quiz !`,
+        `Salut ${name} ! En chatting, la régularité bat le talent dès le premier jour. Termine le cours sur les bases et débloque le quiz pour avancer !`,
+        `Hello ${name} ! Une nouvelle journée pour poser de solides bases. Imprègne-toi des règles professionnelles du Module 1 et fonce valider ton test !`,
+        `Bonjour ${name} ! C'est ton coach vocal. Chaque minute passée sur les bases renforce ton niveau futur. Avance sur ton premier module aujourd'hui !`,
+        `Salut ${name} ! Première étape cruciale : assimiler l'état d'esprit des chatteurs d'élite. Concentre-toi sur le Module 1 et valide ton score ce matin !`,
+      ];
+      return mod1Pool[daySeed % mod1Pool.length];
+    }
+
+    // Module 2 : Psychologie du Fan & Storytelling
+    if (mId.includes('2') || mTitle.includes('psycho') || mTitle.includes('story') || mTitle.includes('fan')) {
+      const mod2Pool = [
+        `Hello ${name} ! En plein Module 2 ? Rappelle-toi qu'un fan recherche avant tout une connexion émotionnelle sincère. Maîtrise le storytelling et valide ton quiz !`,
+        `Salut ${name} ! Ton coach Pawako à l'écoute. La personnalisation des messages est la clé secrète du Module 2. Replonge dans tes fiches et réussis ton quiz aujourd'hui !`,
+        `Bonjour ${name} ! Apprends à écouter et cerner les attentes de ton interlocuteur. Le Module 2 t'ouvre les secrets de la fidélisation. Bonne session !`,
+        `Hello ${name} ! Crée du lien, captive ton fan avec des histoires immersives. Travaille ton Module 2 ce matin et passe ton quiz avec brio !`,
+        `Salut ${name} ! L'immersion émotionnelle transforme un simple échange en relation durable. Concentre-toi sur le Module 2 et fais la différence !`,
+      ];
+      return mod2Pool[daySeed % mod2Pool.length];
+    }
+
+    // Module 3 : Techniques de Vente & Pricing PPV
+    if (mId.includes('3') || mTitle.includes('vente') || mTitle.includes('pricing') || mTitle.includes('ppv')) {
+      const mod3Pool = [
+        `Flash coaching ${name} ! Le Module 3 est le moteur de tes revenus : le pricing des médias et l'art du teasing. Ne brade jamais la valeur et valide ton quiz !`,
+        `Bonjour ${name} ! Un bon chatteur n'attend pas que le fan réclame : il crée le désir. Revois les étapes de vente du Module 3 et passe à l'action !`,
+        `Salut ${name} ! Valorise chaque média, dose ton teasing et applique les paliers de prix. Le Module 3 demande de l'audace, valide-le aujourd'hui !`,
+        `Hello ${name} ! La vente en chatting est un art subtil. Concentre-toi sur les mécanismes de monétisation du Module 3 et valide ton quiz ce matin !`,
+        `Bonjour ${name} ! Prépare-toi à devenir un closer d'élite. Termine tes révisions sur le Module 3 et montre ta maîtrise au quiz !`,
+      ];
+      return mod3Pool[daySeed % mod3Pool.length];
+    }
+
+    // Module 4 : Objections & Rétention
+    if (mId.includes('4') || mTitle.includes('objection') || mTitle.includes('rétention') || mTitle.includes('retention')) {
+      const mod4Pool = [
+        `Bonjour ${name} ! Une objection n'est pas un refus définitif, mais une demande d'attention. Maîtrise les techniques du Module 4 et valide ton test !`,
+        `Salut ${name} ! Savoir désamorcer les doutes avec empathie transforme les hésitants en fans fidèles. Concentre-toi sur le Module 4 aujourd'hui !`,
+        `Hello ${name} ! Garde toujours ton calme face aux objections. La patience et les bonnes relances paient toujours. Valide ton quiz du Module 4 !`,
+        `Flash coaching ${name} ! Rebondis avec élégance sur chaque frein du fan. Le Module 4 est ton bouclier de closing, valide-le sans attendre !`,
+        `Salut ${name} ! Ne prends jamais une objection personnellement. Applique la formule Pawako et sécurise ta progression sur le Module 4 !`,
+      ];
+      return mod4Pool[daySeed % mod4Pool.length];
+    }
+
+    // Module 5 : Routine & Outils
+    if (mId.includes('5') || mTitle.includes('routine') || mTitle.includes('pro')) {
+      const mod5Pool = [
+        `Bonjour ${name} ! Le Module 5 t'apprend l'organisation des pros : rapidité de frappe, réactivité et hygiène de travail. Valide-le pour viser la simulation !`,
+        `Salut ${name} ! La vitesse et l'attention aux détails font exploser les conversions. Maîtrise ta routine de travail avec le Module 5 et décroche ton quiz !`,
+        `Hello ${name} ! Dernier module théorique avant la simulation. Sois méthodique, organise ton espace et valide ton score parfait au Module 5 !`,
+        `Bonjour ${name} ! L'excellence est une habitude quotidienne. Assimile les bonnes routines du Module 5 et franchis la porte de la simulation !`,
+        `Salut ${name} ! Rigueur, raccourcis et organisation : voilà les armes du Module 5. Termine tes cours ce matin et lance ton quiz !`,
+      ];
+      return mod5Pool[daySeed % mod5Pool.length];
+    }
+
+    // General / Onboarding Fallback Pool
+    const generalPool = [
+      `Bonjour ${name} ! C'est ton coach vocal Pawako. Une nouvelle journée commence : consacre du temps à ta formation et fais un pas de plus vers ton objectif !`,
+      `Salut ${name} ! La constance et la rigueur battent tous les talents. Connecte-toi sur ton espace et avance sur ton parcours de formation aujourd'hui !`,
+      `Hello ${name} ! Chaque module complété te rapproche du statut de chatteur professionnel. Garde le rythme et donne le maximum aujourd'hui !`,
+      `Bonjour ${name} ! Réveille ton potentiel, lis attentivement tes cours et viens valider tes acquis sur Discord. Excellente journée à toi !`,
+      `Salut ${name} ! C'est ton coach Pawako. L'apprentissage régulier est la seule garantie de réussite. Avance sur ton planning ce matin !`,
+    ];
+    return generalPool[daySeed % generalPool.length];
+  }
+
+  /**
+   * Uses OpenRouter API with resilient free-tier models (Llama 3.3, Mistral 7B, Gemini Flash)
+   * to dynamically create crisp, punchy, human French coaching speech scripts tailored to candidate context.
    */
   public async generateOpenRouterSpeechScript(
     type: VoiceCapsuleType,
-    targetName?: string
+    targetName?: string,
+    candidateContext?: CandidateVoiceContext
   ): Promise<string> {
-    const name = targetName && targetName.trim() ? targetName.trim() : 'candidat';
+    const name = targetName && targetName.trim() ? targetName.trim() : (candidateContext?.username || 'candidat');
     const cfgKey = aiKnowledgeService.getConfig()?.openRouterApiKey;
     const apiKey = cfgKey || process.env.OPENROUTER_API_KEY || getDefaultOpenRouterApiKey();
 
     let contextPrompt = '';
     if (type === 'morning_relance') {
-      contextPrompt = `Tu es le Coach Vocal d'élite de PAWAKO Formation. Rédige un message audio de relance matinale percutant et très court (1 à 2 phrases percutantes, maximum 25 mots) pour le candidat "${name}". Motive-le à valider ses modules de formation et à rester régulier sur ses relances de chatting. Sois dynamique, positif et axé résultats. Pas d'émojis, pas de guillemets, juste le texte exact à prononcer.`;
+      let stageDetail = '';
+      if (candidateContext?.isBlockedByQuizFailures) {
+        stageDetail = `Le candidat est temporairement bloqué suite à des échecs au quiz du ${candidateContext.currentModuleTitle || 'module'}. Encourage-le chaleureusement à relire ses fiches de révision et à contacter le Staff pour débloquer sa progression.`;
+      } else if (candidateContext?.candidateState === 'simulation' || ((candidateContext?.validatedModulesCount || 0) >= (candidateContext?.totalModulesCount || 5) && (candidateContext?.totalModulesCount || 0) > 0)) {
+        if (candidateContext?.simulationScheduledAt) {
+          stageDetail = `Le candidat a validé tous ses modules théoriques et a son RDV de simulation programmé (${candidateContext.simulationScheduledAt}). Rappelle-lui d'être ponctuel, concentré et prêt à prouver ses compétences en direct.`;
+        } else {
+          stageDetail = `Le candidat a terminé tous ses modules de cours ! Il doit maintenant se préparer à la simulation pratique de chatting (relances dynamiques, gestion des fans, closing).`;
+        }
+      } else if (candidateContext?.candidateState === 'formation_outils' || candidateContext?.candidateState === 'outils') {
+        stageDetail = `Le candidat a réussi la simulation et apprend désormais la prise en main des outils professionnels et de la plateforme.`;
+      } else if (candidateContext?.currentModuleTitle) {
+        stageDetail = `Le candidat étudie actuellement le ${candidateContext.currentModuleTitle}. Donne-lui un conseil clé en 1 phrase percutante sur ce thème et motive-le à valider son quiz du jour pour franchir l'étape suivante.`;
+      } else {
+        stageDetail = `Le candidat avance dans sa formation de chatting chez Pawako. Encourage-le à garder le rythme, à relancer régulièrement et à valider ses étapes.`;
+      }
+
+      contextPrompt = `Tu es le Coach Vocal d'élite de PAWAKO Formation (agence de chatting premium). Rédige une relance vocale matinale percutante, positive et très courte (1 à 2 phrases parlées naturelles, maximum 28 mots) pour le candidat "${name}".
+Contexte actuel : ${stageDetail}
+Style : Dynamique, professionnel, bienveillant mais axé discipline et passage à l'action.
+RÈGLES STRICTES :
+- Pas de guillemets, pas de préambule, pas d'émojis, pas de balises markdown.
+- Uniquement le texte brut en français direct prêt à être lu par la synthèse vocale.`;
     } else if (type === 'spam_warning') {
       contextPrompt = `Tu es la voix de modération de PAWAKO. Rédige un avertissement audio très court (1 phrase ferme et courtoise, maximum 18 mots) rappelant de ne pas inonder le salon de messages répétés. Pas d'émojis, pas de guillemets.`;
     } else if (type === 'motivation_shift') {
@@ -260,8 +477,8 @@ class AiVoiceAnnouncerService {
                 },
                 { role: 'user', content: contextPrompt },
               ],
-              temperature: 0.85,
-              max_tokens: 80,
+              temperature: 0.88,
+              max_tokens: 85,
             }),
           });
 
@@ -282,51 +499,34 @@ class AiVoiceAnnouncerService {
       }
     }
 
-    // Dynamic varied presets as instant backup
-    const fallbacks: Record<VoiceCapsuleType, string[]> = {
-      morning_relance: [
-        `Bonjour ${name} ! C'est ton coach Pawako. Concentre-toi sur tes relances et valide ton module du jour, la constance bat le talent !`,
-        `Salut ${name} ! Nouvelle journée, nouvelles opportunités. Donne le meilleur sur tes sessions de formation aujourd'hui !`,
-        `Hello ${name} ! Rappel du jour : garde le rythme, relance avec méthode et avance vers tes objectifs !`,
-      ],
-      spam_warning: [
-        `Alerte modération Pawako ! Merci de ne pas inonder le salon de messages répétés et de patienter tranquillement.`,
-        `Attention modération. Merci d'éviter les envois successifs et de respecter le calme du salon.`,
-      ],
-      motivation_shift: [
-        `Flash motivation Pawako ! Les meilleurs chatteurs gardent une cadence soutenue et soignée. Soyez réactifs et dépassez vos objectifs !`,
-        `Énergie au maximum pour l'équipe Pawako ! Appliquez les techniques du guide et faites la différence aujourd'hui !`,
-      ],
-      level_congrats: [
-        `Bravo ${name} pour ton nouveau palier franchi ! Tes efforts et ton sérieux portent leurs fruits, continue comme ça !`,
-        `Félicitations ${name} ! Ce niveau validé confirme ta progression. Fonce vers la prochaine étape !`,
-      ],
-      custom: [
-        `Message d'annonce officiel de la formation Pawako. Restez concentrés et attentifs aux prochaines consignes.`,
-      ],
-    };
-
-    const list = fallbacks[type] || fallbacks.custom;
-    return list[Math.floor(Math.random() * list.length)];
+    // Seamless fallback on deterministic rotating contextual bank
+    return this.getContextualFallbackScript(type, name, candidateContext);
   }
 
   /**
-   * Generates a voice capsule using the reliable French voice engine with Gemini TTS support & automatic quota fallback
+   * Generates a voice capsule using OpenRouter AI or the rotating contextual fallback bank,
+   * synthesized through the reliable French voice engine with Gemini TTS support & quota fallback.
    */
   public async generateVoiceCapsule(config: VoiceCapsuleConfig): Promise<GeneratedVoiceCapsule> {
-    const preset = this.getPresetScript(config.type, config.targetName);
+    const preset = this.getPresetScript(config.type, config.targetName, config.candidateContext);
     
-    // Use OpenRouter to generate fresh, dynamic, intelligent coaching voice scripts
+    // 1. If explicit customText provided, use it directly
     let script = config.customText && config.customText.trim().length > 0
       ? config.customText.trim()
       : null;
 
+    // 2. Otherwise generate dynamically with OpenRouter AI using full candidate context
     if (!script) {
       try {
-        script = await this.generateOpenRouterSpeechScript(config.type, config.targetName);
-      } catch {
-        script = preset.script;
+        script = await this.generateOpenRouterSpeechScript(config.type, config.targetName, config.candidateContext);
+      } catch (err) {
+        console.warn('[AiVoice] OpenRouter failed, using contextual fallback pool:', err);
       }
+    }
+
+    // 3. If OpenRouter returned empty, use contextual fallback pool
+    if (!script || script.length < 10) {
+      script = this.getContextualFallbackScript(config.type, config.targetName, config.candidateContext);
     }
     const requestedVoice = config.voiceName || preset.defaultVoice || this.preferredVoice;
     const engine = config.engine || this.engine;
@@ -400,6 +600,7 @@ class AiVoiceAnnouncerService {
       mimeType,
       durationEstimateSeconds,
       timestamp: new Date().toISOString(),
+      candidateContext: config.candidateContext,
     };
   }
 
@@ -433,7 +634,8 @@ class AiVoiceAnnouncerService {
         title = '🚨 Rappel Modération Vocale';
         color = 0xef4444; // Red
       } else if (capsule.type === 'morning_relance') {
-        title = '☀️ Relance Matinale — Coach Pawako';
+        const modTitle = capsule.candidateContext?.currentModuleTitle ? ` — ${capsule.candidateContext.currentModuleTitle}` : '';
+        title = `☀️ Relance Matinale — Coach Pawako${modTitle}`;
         color = 0xf59e0b; // Amber
       } else if (capsule.type === 'motivation_shift') {
         title = '⚡ Flash Énergie & Motivation';

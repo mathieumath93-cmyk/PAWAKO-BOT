@@ -6622,10 +6622,29 @@ export class PawakoBotRunner {
             // AI Voice Announcer: If enabled, also generate and attach morning coaching audio capsule
             if (aiVoiceAnnouncerService.getSettings().morningRelanceVoiceEnabled) {
               try {
+                const currModId = m.currentModuleId || 'module-1';
+                const currMod = store.getModule(currModId);
+                const isBlocked =
+                  m.candidateState === 'bloque_quiz_3_echecs' ||
+                  Object.values(m.progress || {}).some(
+                    (p: any) => p?.quizBlockedByFailures || (p?.attemptsCount >= 3 && !p?.quizPassed)
+                  );
+
                 const voiceCapsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
                   type: 'morning_relance',
                   targetName: m.username,
                   voiceName: 'Kore',
+                  candidateContext: {
+                    memberId: m.id,
+                    username: m.username,
+                    currentModuleId: currModId,
+                    currentModuleTitle: currMod?.title || 'Formation Pawako',
+                    candidateState: m.candidateState,
+                    validatedModulesCount: validatedCount,
+                    totalModulesCount: modules.length || 5,
+                    isBlockedByQuizFailures: isBlocked,
+                    simulationScheduledAt: (m as any).simulationScheduledAt || (m as any).simulationDate,
+                  },
                 });
                 await aiVoiceAnnouncerService.sendToTextChannel(channel as TextChannel, voiceCapsule, 'Coach Vocal Pawako');
               } catch (vErr) {

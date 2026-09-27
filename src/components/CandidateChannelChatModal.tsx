@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   X,
   Send,
@@ -71,7 +71,16 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+    const el = chatScrollContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+  };
 
   const quickTemplates = [
     '👋 Bonjour ! Comment avance ton apprentissage sur ce module ?',
@@ -101,6 +110,12 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
       setStatusNotice(`Erreur de connexion : ${e?.message}`);
     } finally {
       setIsLoading(false);
+      requestAnimationFrame(() => {
+        scrollToBottom('auto');
+        setTimeout(() => scrollToBottom('auto'), 40);
+        setTimeout(() => scrollToBottom('auto'), 120);
+        setTimeout(() => scrollToBottom('auto'), 280);
+      });
     }
   };
 
@@ -119,6 +134,7 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
           if (prev.some((m) => m.id === newMsg.id)) return prev;
           return [...prev, newMsg as any];
         });
+        setTimeout(() => scrollToBottom('smooth'), 40);
       }
     });
 
@@ -128,9 +144,19 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
     };
   }, [member.id, channelId]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  useLayoutEffect(() => {
+    scrollToBottom('auto');
+    const rAf = requestAnimationFrame(() => scrollToBottom('auto'));
+    const t1 = setTimeout(() => scrollToBottom('auto'), 40);
+    const t2 = setTimeout(() => scrollToBottom('auto'), 120);
+    const t3 = setTimeout(() => scrollToBottom('auto'), 280);
+    return () => {
+      cancelAnimationFrame(rAf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [messages.length, isLoading]);
 
   const handleSendMessage = async () => {
     const trimmed = textInput.trim();
@@ -268,7 +294,7 @@ export const CandidateChannelChatModal: React.FC<CandidateChannelChatModalProps>
         )}
 
         {/* Messages Feed Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/40">
+        <div ref={chatScrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/40">
           {isLoading && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
               <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />

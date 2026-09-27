@@ -2289,11 +2289,39 @@ async function startServer() {
   // AI Voice Announcer: Preview synthesis (generate audio)
   app.post('/api/discord/voice-announcer/generate', async (req: Request, res: Response) => {
     try {
-      const { type, customText, targetName, voiceName, engine } = req.body || {};
+      const { type, customText, targetName, voiceName, engine, candidateContext, memberId } = req.body || {};
+      let resolvedContext = candidateContext;
+      if (!resolvedContext && memberId) {
+        const m = store.getMember(memberId);
+        if (m) {
+          const modules = store.getModules();
+          const currModId = m.currentModuleId || 'module-1';
+          const currMod = store.getModule(currModId);
+          const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+          const isBlocked =
+            m.candidateState === 'bloque_quiz_3_echecs' ||
+            Object.values(m.progress || {}).some(
+              (p: any) => p?.quizBlockedByFailures || (p?.attemptsCount >= 3 && !p?.quizPassed)
+            );
+          resolvedContext = {
+            memberId: m.id,
+            username: m.username,
+            currentModuleId: currModId,
+            currentModuleTitle: currMod?.title || 'Formation Pawako',
+            candidateState: m.candidateState,
+            validatedModulesCount: validatedCount,
+            totalModulesCount: modules.length || 5,
+            isBlockedByQuizFailures: isBlocked,
+            simulationScheduledAt: (m as any).simulationScheduledAt || (m as any).simulationDate,
+          };
+        }
+      }
+
       const capsule = await aiVoiceAnnouncerService.generateVoiceCapsule({
         type: type || 'custom',
         customText,
-        targetName,
+        targetName: targetName || resolvedContext?.username,
+        candidateContext: resolvedContext,
         voiceName,
         engine,
       });

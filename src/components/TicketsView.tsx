@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -26,6 +26,19 @@ export const TicketsView: React.FC<TicketsViewProps> = ({
   const [replyContent, setReplyContent] = useState('');
   const [statusFilter, setStatusFilter] = useState<'tous' | 'ouvert' | 'ferme'>('tous');
   const [transcriptModalTicket, setTranscriptModalTicket] = useState<Ticket | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+    const t = setTimeout(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    }, 50);
+    return () => clearTimeout(t);
+  }, [selectedTicket?.id, selectedTicket?.messages?.length]);
 
   const filteredTickets = tickets.filter((t) => {
     if (statusFilter === 'tous') return true;
@@ -166,7 +179,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({
               </div>
 
               {/* Messages History Stream */}
-              <div className="py-4 space-y-3 flex-1 overflow-y-auto max-h-[380px] pr-2 scrollbar-thin">
+              <div ref={messagesContainerRef} className="py-4 space-y-3 flex-1 overflow-y-auto max-h-[380px] pr-2 scrollbar-thin">
                 {selectedTicket.messages.map((m) => (
                   <div
                     key={m.id}

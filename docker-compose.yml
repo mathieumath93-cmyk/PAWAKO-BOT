@@ -1,0 +1,14 @@
+services:
+  pawako:
+    build: .
+    container_name: pawako-app
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - pawako_data:/app/data
+
+volumes:
+  pawako_data:

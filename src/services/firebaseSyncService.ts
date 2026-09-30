@@ -292,16 +292,21 @@ class FirebaseSyncService {
     try {
       const handleStreamError = (collectionLabel: string, err: any) => {
         const msg = String(err?.message || err || '');
+        const code = String(err?.code || '');
         if (
-          err?.code === 13 ||
+          code === '13' ||
+          code === 'unavailable' ||
+          code === 'cancelled' ||
+          code === 'deadline-exceeded' ||
           msg.includes('RST_STREAM') ||
           msg.includes('INTERNAL') ||
-          err?.code === 'unavailable'
+          msg.includes('internal error') ||
+          msg.includes('Listen')
         ) {
           // Normal Firestore stream idle reset; Firestore client automatically reconnects with exponential backoff
           return;
         }
-        console.warn(`⚠️ [onSnapshot ${collectionLabel} Warning]`, msg);
+        console.warn(`⚠️ [onSnapshot ${collectionLabel} Notice]`, msg);
       };
 
       // 1. Modules listener

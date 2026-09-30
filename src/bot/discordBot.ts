@@ -662,9 +662,9 @@ export class PawakoBotRunner {
               `• \`!stop\` (ou \`!fin-simu\`, \`!eval\`) : Arrêter la simulation et générer l'évaluation du Coach.\n` +
               `• \`!notes\` (ou \`!mes-notes\`) : Consulter le relevé détaillé de ta dernière simulation.\n\n` +
               `💡 **COACHING, ASSISTANT & COMMUNITY MANAGER**\n` +
-              `• \`!astuce\` : Recevoir une technique de vente / chatting OnlyFans concrète.\n` +
+              `• \`!astuce\` : Recevoir une technique de vente / chatting VIP concrète.\n` +
               `• \`!francais\` : Règle d'orthographe ou de style essentielle avec exemple faux/bon.\n` +
-              `• \`!corriger <texte>\` : Corrige ton orthographe ET reformule en style sexy & vendeur.\n` +
+              `• \`!corriger <texte>\` : Corrige ton orthographe ET reformule en style engageant & vendeur.\n` +
               `• \`!playlist [genre]\` (ou \`!musique\`) : Recommandation YouTube & Spotify (100% gratuit sans compte, ex: \`!playlist rap\`, \`lofi\`, \`house\`, \`liste\`).\n` +
               `• \`!radio\` (ou \`!focus-radio\`) : Accéder au salon vocal Radio Focus 24/7 & lecteur direct Discord.\n` +
               `• \`!jeu\` (ou \`!challenge\`) : Mini-jeu / challenge de mise en situation avec boutons interactifs.\n\n` +

@@ -1978,7 +1978,7 @@ export const DiscordSyncView: React.FC = () => {
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!astuce / !hack</div>
-                      <div className="text-slate-400 text-[11px]">Donne une astuce de chatting OnlyFans / Vente.</div>
+                      <div className="text-slate-400 text-[11px]">Donne une astuce de chatting VIP / Vente.</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!francais / !style</div>
@@ -1986,7 +1986,7 @@ export const DiscordSyncView: React.FC = () => {
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!corriger &lt;texte&gt;</div>
-                      <div className="text-slate-400 text-[11px]">Analyse, corrige et reformule en style sexy & vendeur.</div>
+                      <div className="text-slate-400 text-[11px]">Analyse, corrige et reformule en style engageant & vendeur.</div>
                     </div>
                     <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                       <div className="font-mono text-indigo-400 font-bold mb-1">!jeu / !challenge</div>

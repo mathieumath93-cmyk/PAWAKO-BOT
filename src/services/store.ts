@@ -252,9 +252,9 @@ Maintenant, vous allez apprendre à faire payer.
 
 ⚠️ La vérité que personne ne vous dit
 
-Un fan n’achète pas parce que tu es sexy.
+Un abonné n’achète pas par simple hasard.
 
-👉 Il achète parce que tu l’as amené exactement au bon niveau d’excitation.
+👉 Il achète parce que tu l’as amené exactement au bon niveau d’engagement et de désir.
 
 Et ça…
 👉 ça ne s’improvise pas.
@@ -313,9 +313,9 @@ Maintenant, vous allez apprendre à faire payer.
 
 ⚠️ La vérité que personne ne vous dit
 
-Un fan n’achète pas parce que tu es sexy.
+Un abonné n’achète pas par simple hasard.
 
-👉 Il achète parce que tu l’as amené exactement au bon niveau d’excitation.
+👉 Il achète parce que tu l’as amené exactement au bon niveau d’engagement et de désir.
 
 Et ça…
 👉 ça ne s’improvise pas.
@@ -603,10 +603,10 @@ export const defaultQuizzes: Quiz[] = [
     questions: [
       {
         id: 'q3-1',
-        text: 'Pourquoi un fan achète-t-il selon le Module 3 ?',
-        options: ['Parce que tu es sexy', 'Parce que tu l\'as amené au bon niveau d\'excitation', 'Par hasard', 'Parce qu\'il n\'a rien d\'autre à faire'],
+        text: 'Pourquoi un abonné achète-t-il selon le Module 3 ?',
+        options: ['Par simple hasard', 'Parce que tu l\'as amené au bon niveau d\'engagement et de désir', 'Par obligation', 'Parce qu\'il n\'a rien d\'autre à faire'],
         correctAnswer: 1,
-        explanation: 'Le closing repose sur la montée progressive d\'excitation.',
+        explanation: 'Le closing repose sur la montée progressive du désir et de l\'intérêt.',
       },
       {
         id: 'q3-2',

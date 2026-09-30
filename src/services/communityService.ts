@@ -182,7 +182,7 @@ class CommunityService {
 
     const text = await callOpenRouterOrGemini(
       getCmSystemPromptContext(),
-      'Génère 1 astuce de chatting OnlyFans / Vente par message extrêmement percutante, courte (3-4 phrases max), motivante, drôle et ultra-pro pour des chatter professionnels Pawako. Titre explicite avec emoji.'
+      'Génère 1 astuce de chatting VIP / Vente par message extrêmement percutante, courte (3-4 phrases max), motivante, drôle et ultra-pro pour des chatter professionnels Pawako. Titre explicite avec emoji.'
     );
 
     if (text) {
@@ -204,17 +204,17 @@ class CommunityService {
     enhanced: string;
     explanation: string;
   }> {
-    const systemPrompt = `Tu es le Coach Français & Expert Chatting OnlyFans chez Pawako Formation.`;
+    const systemPrompt = `Tu es le Coach Français & Expert Chatting Professionnel chez Pawako Formation.`;
     const userPrompt = `Analyse ce message de chatter : "${rawInput}"
 
 1. Corrige l'orthographe, la grammaire et la ponctuation.
-2. Propose une reformulation sexy, fluide, vendeuse et naturelle (style modèle/créatrice OnlyFans, chaleureuse, sans fautes, avec emojis bien placés).
+2. Propose une reformulation engageante, fluide, vendeuse et naturelle (style créatrice / influenceuse VIP, chaleureuse, sans fautes, avec emojis bien placés).
 3. Donne un conseil rapide de 1-2 phrases sur l'amélioration.
 
 Réponds strict sous ce format JSON :
 {
   "corrected": "version sans fautes",
-  "enhanced": "version optimisée vendeuse & sexy",
+  "enhanced": "version optimisée vendeuse & engageante",
   "explanation": "explication courte"
 }`;
 
@@ -254,7 +254,7 @@ Réponds strict sous ce format JSON :
 Tu réponds aux candidats dans les salons de communauté Discord (HORS SIMULATION).
         
 Règles :
-- Domaine : Formation Pawako, chatting OnlyFans, modules, quiz, astuces de vente, règles de l'agence, organisation, outils (InFlow, Telegram).
+- Domaine : Formation Pawako, chatting professionnel, modules, quiz, astuces de vente, règles de l'agence, organisation, outils (InFlow, Telegram).
 - Sois clair, concis (maximum 2-3 paragraphes), utilise des emojis.
 - Si le candidat pose une question sur un module ou un quiz, guide-le sans lui donner directement les réponses des quiz.
 - La formation se fait dans son salon privé via des boutons interactifs (ne jamais inventer d'URL externe ni mentionner la commande !formation).`;
@@ -445,7 +445,7 @@ Rédige directement le message en Markdown Discord adressé au candidat.`;
     const userPrompt = `Génère le contenu complet d'animation communautaire du jour pour le serveur Discord.
 
 Inclus :
-1. Une astuce de chatting OnlyFans / Vente par message inédite, percutante et concrète (méthode de qualification, teasing, relance, bouclier tarifaire, etc.).
+1. Une astuce de chatting / Vente par message inédite, percutante et concrète (méthode de qualification, teasing, relance, bouclier tarifaire, etc.).
 2. Une règle d'orthographe ou de style indispensable en chatting (ex: ça/sa, c'est/s'est, majuscules, ton chaleureux).
 3. Une citation motivante et percutante de coach pour accompagner la playlist musicale du jour : "${verifiedPlaylist.title}" (${verifiedPlaylist.genre || 'Focus'}, description : "${verifiedPlaylist.description}").
 4. Un mini-jeu / challenge de mise en situation avec scenario et 3 options (A, B, C) dont une seule est la réponse parfaite selon les méthodes Pawako.
@@ -531,8 +531,8 @@ Réponds strict sous ce format JSON :
     }
 
     const systemPrompt = getCmSystemPromptContext();
-    const userPrompt = `Génère 1 mini-jeu de mise en situation pour un chatter professionnel OnlyFans chez Pawako Agency.
-Le scenario doit être réaliste (ex: fan qui demande du gratuit, négociation de vidéo, fan jaloux, relance d'un abonné inactif).
+    const userPrompt = `Génère 1 mini-jeu de mise en situation pour un chatter professionnel chez Pawako Agency.
+Le scenario doit être réaliste (ex: fan qui demande du gratuit, négociation de média exclusif, fan jaloux, relance d'un abonné inactif).
 Donne 3 options A, B, C avec explications et indique la bonne réponse.
 
 Réponds au format JSON :
@@ -596,7 +596,7 @@ Réponds au format JSON :
         id: 'game-2',
         title: '🧩 Challenge Chatting #2 : La Qualification',
         scenario:
-          'Un nouveau fan s\'abonne et envoie juste "Hey sexy". Quel est ton tout premier objectif ?',
+          'Un nouvel abonné s\'abonne et envoie juste "Salut". Quel est ton tout premier objectif ?',
         options: [
           {
             label: 'A) Lui envoyer directement un PPV payant à 50$',

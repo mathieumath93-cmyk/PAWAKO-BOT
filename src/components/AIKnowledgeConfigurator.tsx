@@ -731,7 +731,7 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Respecter la courbe naturelle (Accueil &rarr; Flirt léger GFE &rarr; Sexualisation progressive &rarr; Excitation).
+                  Respecter la courbe naturelle (Accueil &rarr; Flirt léger GFE &rarr; Teasing progressif &rarr; Montée du désir).
                 </p>
               </div>
 

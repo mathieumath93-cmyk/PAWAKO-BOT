@@ -4190,6 +4190,7 @@ export class PawakoBotRunner {
           if (member.candidateState === 'formation_outils' && (!member.toolsFormationScheduledTimestamp || member.toolsFormationScheduledTimestamp < Date.now())) {
             member.toolsFormationScheduledTimestamp = getNext10hParisTimestamp();
             member.toolsFormationReminderSent = false;
+            member.toolsFormationUpcomingReminderSent = false;
           }
 
           store.saveMembers();
@@ -5848,8 +5849,9 @@ export class PawakoBotRunner {
   }
 
   /**
-   * Check and send 14h00 HF Simulation reminders for scheduled candidates.
-   * Sends an anticipatory reminder 1 hour before (13h00 HF) and a live reminder at 14h00 HF.
+   * Check and send Simulation reminders for scheduled candidates.
+   * Candidates waiting for Simulation only receive a reminder 1 hour before their scheduled session on Day J.
+   * At H-0, only the Staff alert is dispatched to #staff-alerts.
    */
   private async checkSimulationReminders() {
     if (!this.client || !this.isConnected) return;
@@ -5864,7 +5866,9 @@ export class PawakoBotRunner {
         m.candidateState === 'simulation' &&
         m.simulationScheduledTimestamp
       ) {
-        // 1. Anticipatory reminder (1 hour before 14h00 HF)
+        const tsSec = Math.floor(m.simulationScheduledTimestamp / 1000);
+
+        // 1. Candidate reminder STRICTLY 1 hour before on Day J
         const oneHourBeforeMs = m.simulationScheduledTimestamp - ONE_HOUR_MS;
         if (
           nowMs >= oneHourBeforeMs &&
@@ -5879,24 +5883,24 @@ export class PawakoBotRunner {
           if (candChan) {
             const candMention = `<@${m.discordId || m.id.replace(/^mem-/, '')}>`;
             const upcomingEmbed = new EmbedBuilder()
-              .setTitle('⏰ RAPPEL — RDV DE SIMULATION DANS 1 HEURE (14h00 HF)')
+              .setTitle('⏰ RAPPEL — RDV DE SIMULATION DANS 1 HEURE')
               .setDescription(
-                `📢 ${candMention}, **ton RDV de Simulation commence dans 1 heure (14h00 HF) !**\n\n` +
+                `📢 ${candMention}, **ton RDV de Simulation commence dans 1 heure (<t:${tsSec}:t> — <t:${tsSec}:R>) !**\n\n` +
                 `🎯 Prépare-toi tranquillement, révise tes fiches et tes règles de chatting.\n` +
-                `L'équipe Staff PAWAKO sera présente ici à 14h00 pile ! 🚀`
+                `L'équipe Staff PAWAKO sera présente ici avec toi à l'heure prévue ! 🚀`
               )
               .setColor(0xf59e0b)
-              .setFooter({ text: 'PAWAKO FORMATION • Rappel RDV 14h00 HF' })
+              .setFooter({ text: 'PAWAKO FORMATION • Rappel RDV Simulation (J-1h)' })
               .setTimestamp();
 
             await candChan.send({
-              content: `⏰ **[RAPPEL RDV 14H00 DANS 1H]** ${candMention}`,
+              content: `⏰ **[RAPPEL SIMULATION DANS 1H]** ${candMention}`,
               embeds: [upcomingEmbed],
             }).catch(() => {});
           }
         }
 
-        // 2. Live reminder (at 14h00 HF)
+        // 2. Staff notification at H-0 (without re-pinging candidate)
         if (
           nowMs >= m.simulationScheduledTimestamp &&
           !m.simulationReminderSent
@@ -5907,25 +5911,6 @@ export class PawakoBotRunner {
 
           // Skip sending notification if the scheduled date was over 12 hours ago (outdated)
           if (nowMs - m.simulationScheduledTimestamp <= TWELVE_HOURS_MS) {
-            const candChan = await this.getCandidateChannel(m, true);
-            if (candChan) {
-              const candMention = `<@${m.discordId || m.id.replace(/^mem-/, '')}>`;
-              const reminderEmbed = new EmbedBuilder()
-                .setTitle('🔔 C\'EST L\'HEURE — TEST DE SIMULATION (14h00 HF)')
-                .setDescription(
-                  `📢 ${candMention}, **il est 14h00 HF !**\n\n` +
-                  `C'est le moment de passer ton **Test de Simulation** en direct avec l'équipe Staff PAWAKO. L'équipe t'attend dans ce salon. Fais un signe dans le chat pour commencer ! 🚀`
-                )
-                .setColor(0x10b981)
-                .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Simulation 14h00 HF' })
-                .setTimestamp();
-
-              await candChan.send({
-                content: `🔔 **[RAPPEL SIMULATION 14H00 HF]** ${candMention} — Ton RDV commence maintenant !`,
-                embeds: [reminderEmbed],
-              }).catch((e: any) => console.warn('[Simu Reminder Send Error]', e));
-            }
-
             const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
             if (guildId) {
               const guild = await this.client.guilds.fetch(guildId).catch(() => null);
@@ -5934,7 +5919,7 @@ export class PawakoBotRunner {
                 if (staffChan) {
                   const chanLink = m.personalChannelId ? `<#${m.personalChannelId}>` : 'son salon privé';
                   await staffChan.send({
-                    content: `🔔 **[SIMULATION 14H00 HF]** Le candidat <@${m.discordId || m.id.replace(/^mem-/, '')}> (**${m.username}**) attend son test de simulation dans ${chanLink} !`,
+                    content: `🔔 **[SIMULATION EN DIRECT]** Le candidat <@${m.discordId || m.id.replace(/^mem-/, '')}> (**${m.username}**) attend son test de simulation (<t:${tsSec}:t>) dans ${chanLink} !`,
                   }).catch(() => {});
                 }
               }
@@ -6090,6 +6075,7 @@ export class PawakoBotRunner {
     member.simulationValidatedAt = new Date().toLocaleString('fr-FR');
     member.toolsFormationScheduledTimestamp = toolsScheduledTs;
     member.toolsFormationReminderSent = false;
+    member.toolsFormationUpcomingReminderSent = false;
 
     store.saveMembers();
     firebaseSyncService.saveMember(member).catch(() => {});
@@ -6215,7 +6201,9 @@ export class PawakoBotRunner {
   }
 
   /**
-   * Check and send 10h00 HF Tools Formation reminders for scheduled candidates
+   * Check and send Tools Formation reminders for scheduled candidates.
+   * Candidates waiting for Tools Formation only receive a reminder 1 hour before their scheduled session on Day J.
+   * At H-0, the voice channel is ensured and Staff (Mahsa & Mathieu) receive their session alert.
    */
   private async checkToolsFormationReminders() {
     if (!this.client || !this.isConnected) return;
@@ -6224,8 +6212,64 @@ export class PawakoBotRunner {
     const cfg = onboardingService.getConfig();
     const meetUrl = cfg.toolsFormationMeetUrl || 'https://meet.google.com/pawako-tools-formation';
 
+    const ONE_HOUR_MS = 60 * 60 * 1000;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
+    // 1. Candidate reminder STRICTLY 1 hour before on Day J
+    const upcomingMembers = allMembers.filter((m) => {
+      if (
+        m.isActive === false ||
+        m.candidateState !== 'formation_outils' ||
+        !m.toolsFormationScheduledTimestamp ||
+        m.toolsFormationUpcomingReminderSent
+      ) {
+        return false;
+      }
+      const oneHourBeforeMs = m.toolsFormationScheduledTimestamp - ONE_HOUR_MS;
+      return nowMs >= oneHourBeforeMs && nowMs < m.toolsFormationScheduledTimestamp;
+    });
+
+    if (upcomingMembers.length > 0) {
+      let upcomingVoiceChan: any = null;
+      const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+      if (guildId) {
+        const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          upcomingVoiceChan = await this.getOrCreateToolsVoiceChannel(guild, upcomingMembers);
+        }
+      }
+      const upcomingVoiceLinkStr = upcomingVoiceChan ? `<#${upcomingVoiceChan.id}>` : `[Google Meet](${meetUrl})`;
+
+      for (const m of upcomingMembers) {
+        m.toolsFormationUpcomingReminderSent = true;
+        store.saveMembers();
+        firebaseSyncService.saveMember(m).catch(() => {});
+
+        const candChan = await this.getCandidateChannel(m, true);
+        if (candChan) {
+          const tsSec = Math.floor((m.toolsFormationScheduledTimestamp || nowMs) / 1000);
+          const candMention = `<@${m.discordId || m.id.replace('mem-', '')}>`;
+          const upcomingEmbed = new EmbedBuilder()
+            .setTitle('⏰ RAPPEL — FORMATION OUTILS DANS 1 HEURE')
+            .setDescription(
+              `📢 ${candMention}, **ta session de Formation Outils commence dans 1 heure (<t:${tsSec}:t> — <t:${tsSec}:R>) !**\n\n` +
+              `🎯 Prépare-toi pour la prise en main des outils de l'agence avec l'équipe !\n\n` +
+              `🔊 **Salon Vocal Discord :** ${upcomingVoiceLinkStr}\n` +
+              `🔗 **Lien Google Meet (secours) :** [Rejoindre le Meet](${meetUrl}) 🚀`
+            )
+            .setColor(0xf59e0b)
+            .setFooter({ text: 'PAWAKO FORMATION • Rappel Formation Outils (J-1h)' })
+            .setTimestamp();
+
+          await candChan.send({
+            content: `⏰ **[RAPPEL FORMATION OUTILS DANS 1H]** ${candMention}`,
+            embeds: [upcomingEmbed],
+          }).catch((e: any) => console.warn('[Tools 1h Reminder Send Error]', e));
+        }
+      }
+    }
+
+    // 2. Staff notification & Voice channel check at H-0
     const dueMembers = allMembers.filter(
       (m) =>
         m.isActive !== false &&
@@ -6263,29 +6307,6 @@ export class PawakoBotRunner {
 
     const voiceLinkStr = voiceChan ? `<#${voiceChan.id}>` : `[Google Meet](${meetUrl})`;
 
-    for (const m of freshMembers) {
-      const candChan = await this.getCandidateChannel(m, true);
-      if (candChan) {
-        const candMention = `<@${m.discordId || m.id.replace('mem-', '')}>`;
-        const reminderEmbed = new EmbedBuilder()
-          .setTitle('🔔 C\'EST L\'HEURE — FORMATION OUTILS (10h00 HF)')
-          .setDescription(
-            `📢 ${candMention}, **il est 10h00 HF !**\n\n` +
-            `C'est le moment de rejoindre la session de **Formation Outils** en direct avec l'équipe !\n\n` +
-            `🔊 **Rejoindre le Vocal :** ${voiceLinkStr}\n` +
-            `🔗 **Lien Google Meet (secours) :** [Rejoindre le Meet](${meetUrl}) 🚀`
-          )
-          .setColor(0x10b981)
-          .setFooter({ text: 'PAWAKO FORMATION • Rappel Automatique Formation Outils 10h00 HF' })
-          .setTimestamp();
-
-        await candChan.send({
-          content: `🔔 **[RAPPEL FORMATION OUTILS 10H00 HF]** ${candMention}`,
-          embeds: [reminderEmbed],
-        }).catch((e: any) => console.warn('[Tools Reminder Send Error]', e));
-      }
-    }
-
     const closeVoiceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId('staff_close_voice_session')
@@ -6296,20 +6317,20 @@ export class PawakoBotRunner {
     const mahsaMention = cfg.mahsaDiscordId ? `<@${cfg.mahsaDiscordId}>` : '@Mahsa';
     const mathieuMention = cfg.mathieuDiscordId ? `<@${cfg.mathieuDiscordId}>` : '@Mathieu';
 
-    const candListStr = dueMembers
+    const candListStr = freshMembers
       .map((m, idx) => `${idx + 1}. <@${m.discordId || m.id.replace('mem-', '')}> (**${m.username}**)`)
       .join('\n');
 
     const staffReminderEmbed = new EmbedBuilder()
-      .setTitle('🔔 RAPPEL 10H00 HF — SESSION FORMATION OUTILS COMMENCÉE')
+      .setTitle('🔔 RAPPEL — SESSION FORMATION OUTILS COMMENCÉE')
       .setDescription(
         `📢 **Rappel en direct pour ${mahsaMention} et ${mathieuMention}**\n\n` +
-        `Il est **10h00 HF** ! La session de **Formation Outils** commence maintenant.\n\n` +
+        `La session de **Formation Outils** commence maintenant.\n\n` +
         `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n\n` +
         `📋 **Candidats attendus pour cette session :**\n${candListStr}`
       )
       .setColor(0x10b981)
-      .setFooter({ text: 'PAWAKO FORMATION • Rappel Session 10h00 HF' })
+      .setFooter({ text: 'PAWAKO FORMATION • Rappel Session Formation Outils' })
       .setTimestamp();
 
     if (guildId) {
@@ -6317,7 +6338,7 @@ export class PawakoBotRunner {
         this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff').then((staffChan) => {
           if (staffChan) {
             staffChan.send({
-              content: `🔔 **[SESSION 10H00 HF COMMENCÉE]** ${mahsaMention} ${mathieuMention}`,
+              content: `🔔 **[SESSION FORMATION OUTILS COMMENCÉE]** ${mahsaMention} ${mathieuMention}`,
               embeds: [staffReminderEmbed],
               components: [closeVoiceRow],
             }).catch(() => {});
@@ -6535,8 +6556,8 @@ export class PawakoBotRunner {
   private cronIntervalId: NodeJS.Timeout | null = null;
 
   /**
-   * Triggers personalized follow-up messages for candidates depending on their module progress.
-   * Completely isolated from simulation channels.
+   * Triggers personalized follow-up messages ONLY for candidates at the theoretical modules stage (Modules 1 to 5).
+   * Candidates waiting for Simulation or Tools Formation do NOT get daily relances (they only get a reminder 1h before Day J).
    * Includes strict single-send idempotency per calendar day to avoid double-sending.
    */
   public async triggerPersonalizedCandidateFollowups(): Promise<number> {
@@ -6551,7 +6572,46 @@ export class PawakoBotRunner {
     try {
       const todayKey = new Date().toISOString().slice(0, 10);
       const modules = store.getModules();
-      const members = store.getMembers().filter((m) => m.isActive !== false && m.candidateState !== 'formation_terminee');
+      const totalModulesCount = modules.length || 5;
+
+      const members = store.getMembers().filter((m) => {
+        if (m.isActive === false) return false;
+
+        // Exclude Staff members
+        const isStaff = (m.roles || []).some((r) =>
+          ['staff', 'admin', 'formateur', 'modérateur', 'moderateur', 'fondateur', 'direction', 'support'].some((kw) =>
+            String(r).toLowerCase().includes(kw)
+          )
+        );
+        if (isStaff) return false;
+
+        // STRICT FILTER: Only candidates at the modules stage receive daily follow-up reminders.
+        // Exclude anyone in Simulation, Tools Formation, Completed, or Kicked.
+        if (
+          m.candidateState === 'formation_terminee' ||
+          m.candidateState === 'formation_outils' ||
+          m.candidateState === 'simulation' ||
+          m.candidateState === 'simulation_validee' ||
+          m.candidateState === 'expulse_inactivite' ||
+          Boolean(m.simulationScheduledTimestamp) ||
+          Boolean(m.toolsFormationScheduledTimestamp) ||
+          Boolean(m.simulationValidatedAt) ||
+          Boolean(m.toolsFormationValidatedAt)
+        ) {
+          return false;
+        }
+
+        const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+        if (
+          validatedCount >= totalModulesCount ||
+          m.progress?.['mod-5']?.status === 'valide' ||
+          m.progress?.['module-5']?.status === 'valide'
+        ) {
+          return false;
+        }
+
+        return true;
+      });
 
       for (const m of members) {
         if (!m.personalChannelId) continue;
@@ -6571,24 +6631,10 @@ export class PawakoBotRunner {
           const followupMsg = await communityService.generatePersonalizedFollowup(m, modules);
           if (followupMsg) {
             const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
-            const isSimu = m.candidateState === 'simulation' || validatedCount >= (modules.length || 5);
             const isOnboarding = m.candidateState === 'nouveau' || m.candidateState === 'bienvenue_validee' || (!m.candidateState && validatedCount === 0);
 
             const components: any[] = [];
-            const isAiActive = aiKnowledgeService.isSimulationEnabled();
-            if (isSimu) {
-              // STRICT RULE: Only display "Lancer la simulation" button when AI is active!
-              if (isAiActive) {
-                components.push(
-                  new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    new ButtonBuilder()
-                      .setCustomId(`launch_simu_${m.id}`)
-                      .setLabel('🚀 Lancer la Simulation IA')
-                      .setStyle(ButtonStyle.Primary)
-                  )
-                );
-              }
-            } else if (isOnboarding) {
+            if (isOnboarding) {
               components.push(
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                   new ButtonBuilder()
@@ -6600,16 +6646,10 @@ export class PawakoBotRunner {
             }
 
             const followupEmbed = new EmbedBuilder()
-              .setTitle(
-                isSimu
-                  ? isAiActive
-                    ? '🎭 SIMULATION IA — SUIVI PAWAKO'
-                    : '🎭 SIMULATION PRATIQUE — SUIVI PAWAKO'
-                  : '🎯 SUIVI DE PARCOURS & FORMATION PAWAKO'
-              )
+              .setTitle('🎯 SUIVI DE PARCOURS & FORMATION PAWAKO')
               .setDescription(followupMsg)
-              .setColor(isSimu ? 0x3b82f6 : 0x8b5cf6)
-              .setFooter({ text: 'PAWAKO FORMATION • Suivi Personnalisé' })
+              .setColor(0x8b5cf6)
+              .setFooter({ text: 'PAWAKO FORMATION • Suivi Personnalisé Modules' })
               .setTimestamp();
 
             await (channel as any).send({ embeds: [followupEmbed], components }).catch(() => {});

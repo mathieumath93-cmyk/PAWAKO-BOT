@@ -286,7 +286,6 @@ Règles :
   ): Promise<string> {
     const cfg = aiKnowledgeService.getPromptConfig();
     const chanMention = member.personalChannelId ? `<#${member.personalChannelId}>` : 'ton salon privé de formation';
-    const onboardingCfg = onboardingService.getConfig();
     const totalModules = modules.length || 5;
 
     // Calculate number of theoretical modules validated (1 to 5)
@@ -294,54 +293,31 @@ Règles :
       (p) => p.status === 'valide'
     ).length;
 
+    // STRICT RULE: Only candidates at the modules stage receive daily follow-up reminders.
+    // Candidates waiting for Simulation or Tools Formation only get a reminder 1h before Day J.
+    if (
+      member.candidateState === 'formation_terminee' ||
+      member.candidateState === 'formation_outils' ||
+      member.candidateState === 'simulation' ||
+      member.candidateState === 'simulation_validee' ||
+      member.candidateState === 'expulse_inactivite' ||
+      Boolean(member.simulationScheduledTimestamp) ||
+      Boolean(member.toolsFormationScheduledTimestamp) ||
+      Boolean(member.simulationValidatedAt) ||
+      Boolean(member.toolsFormationValidatedAt) ||
+      validatedCount >= totalModules ||
+      member.progress?.['mod-5']?.status === 'valide' ||
+      member.progress?.['module-5']?.status === 'valide'
+    ) {
+      return '';
+    }
+
     // Detect exact training step:
     let stageDescription = '';
     let actionInstructions = '';
     let fallbackMessage = '';
 
-    if (member.candidateState === 'formation_terminee') {
-      stageDescription = 'Formation intégrale 100% validée (Modules 1 à 5 + Simulation + Outils Agence). Prêt pour le shift en agence !';
-      actionInstructions = `Félicite chaleureusement le candidat pour avoir validé TOUT son parcours. Dis-lui qu'il est officiellement prêt pour ses créneaux de chatting et qu'un membre du management Pawako prendra contact avec lui ici.`;
-      fallbackMessage =
-        `🎓 **Félicitations <@${member.discordId || member.id}> !**\n\n` +
-        `Tu as validé l'intégralité de ton parcours Pawako avec succès (Modules 1 à 5, Simulation et Outils) ! 🏆\n` +
-        `Tu es désormais fin prêt pour tes shifts en agence. Le management arrive très vite pour ton planning ! 🚀`;
-    } else if (
-      member.candidateState === 'formation_outils' ||
-      (member.simulationValidatedAt && member.candidateState !== 'simulation')
-    ) {
-      const meetUrl = onboardingCfg.toolsFormationMeetUrl || '';
-      stageDescription = `Simulation validée avec succès ! Le candidat est à l'Étape Outils & Intégration (InFlow, Telegram, organisation opérationnelle).${meetUrl ? ` Lien Google Meet officiel de formation : ${meetUrl}` : ''}`;
-      actionInstructions = `Félicite le candidat pour sa simulation validée avec brio ! Indique-lui que la prochaine étape obligatoire est la prise en main des **Outils de l'Agence** (InFlow, Telegram, organisation des shifts). Le message étant déjà dans son salon, dis-lui simplement de suivre les consignes du staff ici.${meetUrl ? ` Mentionne le lien visio Meet officiel : ${meetUrl}` : ''}`;
-      fallbackMessage =
-        `🛠️ **Étape Suivante : Formation Outils & Intégration !**\n\n` +
-        `Bravo <@${member.discordId || member.id}> ! Ta simulation de chatting est validée avec brio. 👏\n\n` +
-        `Tu passes maintenant à la configuration de tes **outils opérationnels** (InFlow, Telegram, accès agence).\n` +
-        `L'équipe Staff va t'accompagner ici dans ce salon pour finaliser tes accès et préparer ton intégration ! 🚀` +
-        (meetUrl ? `\n🔗 *Lien Visio Outils :* ${meetUrl}` : '');
-    } else if (
-      member.candidateState === 'simulation' ||
-      validatedCount >= totalModules ||
-      member.progress?.['mod-5']?.status === 'valide' ||
-      member.progress?.['module-5']?.status === 'valide'
-    ) {
-      const isAiActive = aiKnowledgeService.isSimulationEnabled();
-      if (isAiActive) {
-        stageDescription = `L'ensemble des 5 modules théoriques est validé (${validatedCount}/${totalModules}) ! ATTENTION ABSOLUE : IL N'Y A AUCUN MODULE 6 ! Le candidat est actuellement en phase de SIMULATION IA DE CHATTING avec Anthony.`;
-        actionInstructions = `Félicite le candidat pour avoir validé tous ses modules théoriques (1 à 5). NE MENTIONNE SURTOUT PAS DE MODULE 6 (qui n'existe pas !). Indique-lui que son épreuve pratique est la **Simulation de Chatting IA** avec Anthony. Invite-le à cliquer sur le bouton **"🚀 Lancer la Simulation IA"** ci-dessous pour démarrer sa session en direct. NE DIS PAS "Rends-toi dans ton salon" car le message est déjà dans son salon.`;
-        fallbackMessage =
-          `🎭 **Félicitations <@${member.discordId || member.id}> ! Tes 5 modules théoriques sont validés !** 🏆\n\n` +
-          `Tu passes désormais à l'épreuve pratique : la **Simulation de Chatting IA** avec Anthony !\n\n` +
-          `Clique sur le bouton **"🚀 Lancer la Simulation IA"** ci-dessous pour démarrer ta session en direct. Montre ce que tu sais faire ! 🔥`;
-      } else {
-        stageDescription = `L'ensemble des 5 modules théoriques est validé (${validatedCount}/${totalModules}) ! Le mode de simulation IA est DÉSACTIVÉ. Le candidat passe sa simulation manuellement en direct avec l'équipe Staff PAWAKO.`;
-        actionInstructions = `Félicite le candidat pour avoir validé tous ses modules théoriques (1 à 5). NE MENTIONNE SURTOUT PAS D'IA, D'ANTHONY NI DE BOUTON DE SIMULATION. Indique-lui qu'un formateur / staff prend le relais directement avec lui ici dans ce salon pour démarrer sa mise en situation pratique. NE DIS PAS "Rends-toi dans ton salon".`;
-        fallbackMessage =
-          `🎭 **Félicitations <@${member.discordId || member.id}> ! Tes 5 modules théoriques sont validés !** 🏆\n\n` +
-          `Tu passes désormais à l'épreuve pratique : la **Simulation de Chatting** avec l'équipe Staff PAWAKO !\n\n` +
-          `Un formateur prend le relais directement avec toi dans ce salon pour démarrer ta mise en situation. Fais un signe dans le chat dès que tu es prêt(e) ! 🔥`;
-      }
-    } else if (
+    if (
       member.candidateState === 'nouveau' ||
       member.candidateState === 'bienvenue_validee' ||
       (!member.candidateState && validatedCount === 0)

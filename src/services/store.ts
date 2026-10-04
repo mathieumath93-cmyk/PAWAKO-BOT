@@ -1853,6 +1853,7 @@ ${statusText}
     // Mettre à jour l'horodatage et remettre le statut en 'simulation' non validée
     member.simulationScheduledTimestamp = timestamp;
     member.simulationReminderSent = false;
+    member.simulationUpcomingReminderSent = false;
     member.candidateState = 'simulation';
     member.simulationValidatedAt = undefined;
 
@@ -1877,6 +1878,7 @@ ${statusText}
 
     member.toolsFormationScheduledTimestamp = timestamp;
     member.toolsFormationReminderSent = false;
+    member.toolsFormationUpcomingReminderSent = false;
     member.candidateState = 'formation_outils';
     member.toolsFormationValidatedAt = undefined;
 

@@ -206,6 +206,7 @@ export interface Member {
   simuMpSentToStaff?: boolean;
   toolsFormationScheduledTimestamp?: number | null;
   toolsFormationReminderSent?: boolean;
+  toolsFormationUpcomingReminderSent?: boolean;
   simulationValidatedAt?: string;
   toolsFormationValidatedAt?: string;
   productionAnnouncedAt?: string;

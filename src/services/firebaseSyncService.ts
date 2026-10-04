@@ -72,7 +72,29 @@ class FirebaseSyncService {
     const currentParisHour = pDate.getHours();
 
     for (const member of members) {
-      if (!member.isActive || member.candidateState === 'formation_terminee') {
+      if (
+        !member.isActive ||
+        member.candidateState === 'formation_terminee' ||
+        member.candidateState === 'formation_outils' ||
+        member.candidateState === 'simulation' ||
+        member.candidateState === 'simulation_validee' ||
+        member.candidateState === 'expulse_inactivite' ||
+        Boolean(member.simulationScheduledTimestamp) ||
+        Boolean(member.toolsFormationScheduledTimestamp) ||
+        Boolean(member.simulationValidatedAt) ||
+        Boolean(member.toolsFormationValidatedAt)
+      ) {
+        continue;
+      }
+
+      const modules = store.getModules();
+      const totalModules = modules.length || 5;
+      const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
+      if (
+        validatedCount >= totalModules ||
+        member.progress?.['mod-5']?.status === 'valide' ||
+        member.progress?.['module-5']?.status === 'valide'
+      ) {
         continue;
       }
 
@@ -83,15 +105,13 @@ class FirebaseSyncService {
       const inactiveMs = Math.max(0, nowMs - lastActiveMs);
       const inactiveHours = inactiveMs / (1000 * 3600);
 
-      const modules = store.getModules();
       const currentMod = modules.find((m) => m.id === member.currentModuleId) || modules[0];
-      const validatedCount = Object.values(member.progress || {}).filter((p) => p.status === 'valide').length;
 
       let situation: 'unstarted' | 'unfinished' | null = null;
 
       if (validatedCount === 0 && (member.candidateState === 'nouveau' || !member.progress || Object.keys(member.progress).length === 0)) {
         situation = 'unstarted';
-      } else if (member.candidateState === 'formation_commencee' || validatedCount < modules.length) {
+      } else if (member.candidateState === 'formation_commencee' || validatedCount < totalModules) {
         const curProg = member.progress?.[currentMod?.id || ''];
         if (!curProg || curProg.status !== 'valide') {
           situation = 'unfinished';

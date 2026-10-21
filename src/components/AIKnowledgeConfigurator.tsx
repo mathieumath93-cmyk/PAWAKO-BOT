@@ -34,6 +34,10 @@ import {
   Music,
   Power,
   PowerOff,
+  HelpCircle,
+  Check,
+  CheckCheck,
+  Search,
 } from 'lucide-react';
 import {
   aiKnowledgeService,
@@ -43,7 +47,10 @@ import {
   defaultValidationGridPrompt,
   defaultCmConfig,
 } from '../services/aiKnowledgeService';
-import { AiPromptConfig, SimulationEvaluationResult, AiCmConfig } from '../types';
+import { AiPromptConfig, SimulationEvaluationResult, AiCmConfig, FaqItem, FaqStatus } from '../types';
+import { store } from '../services/store';
+import { faqService } from '../services/faqService';
+import { discordService } from '../services/discordService';
 
 interface AIKnowledgeConfiguratorProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'info') => void;
@@ -51,7 +58,107 @@ interface AIKnowledgeConfiguratorProps {
 
 export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = ({ onShowToast }) => {
   const [promptCfg, setPromptCfg] = useState<AiPromptConfig>(aiKnowledgeService.getPromptConfig());
-  const [activeTab, setActiveTab] = useState<'prompt' | 'cm' | 'criteria' | 'sandbox'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'cm' | 'faq' | 'criteria' | 'sandbox'>('prompt');
+
+  // FAQ state
+  const [faqs, setFaqs] = useState<FaqItem[]>(store.getFaqItems());
+  const [faqFilter, setFaqFilter] = useState<'all' | 'proposee' | 'approuvee' | 'rejetee'>('all');
+  const [isScanningFaq, setIsScanningFaq] = useState(false);
+  const [editingFaq, setEditingFaq] = useState<FaqItem | null>(null);
+  const [isCreatingFaq, setIsCreatingFaq] = useState(false);
+  const [newFaqData, setNewFaqData] = useState<Partial<FaqItem>>({
+    category: 'Règlement & Quiz',
+    rephrasedQuestion: '',
+    answer: '',
+    sources: ['Règlement Officiel'],
+    confidence: 'elevee',
+  });
+
+  useEffect(() => {
+    const unsubStore = store.subscribe(() => {
+      setFaqs(store.getFaqItems());
+    });
+    return () => unsubStore();
+  }, []);
+
+  const handleScanDiscordQuestions = async () => {
+    setIsScanningFaq(true);
+    try {
+      const channels = discordService.getChannels();
+      const mockChans = channels.map((c) => ({
+        id: c.id,
+        name: c.name,
+        fetchMessages: async () => [],
+      }));
+      const generated = await faqService.scanAndGenerateFaqSuggestions(mockChans);
+      setFaqs(store.getFaqItems());
+      onShowToast(
+        'Analyse Discord Terminée 🤖',
+        `${generated.length} question(s) récurrente(s) analysée(s) pour validation Staff.`,
+        'success'
+      );
+    } catch (err: any) {
+      onShowToast('Erreur Scan FAQ', err?.message || 'Impossible d\'analyser les salons', 'info');
+    } finally {
+      setIsScanningFaq(false);
+    }
+  };
+
+  const handleApproveFaq = async (id: string) => {
+    const approved = store.approveFaqItem(id, 'Staff Dashboard');
+    if (approved) {
+      await faqService.publishApprovedFaqToDiscord(id);
+      setFaqs(store.getFaqItems());
+      onShowToast('FAQ Approuvée & Publiée', 'La question a été publiée dans le salon Discord #faq !', 'success');
+    }
+  };
+
+  const handleRejectFaq = (id: string) => {
+    store.rejectFaqItem(id, 'Staff Dashboard');
+    setFaqs(store.getFaqItems());
+    onShowToast('FAQ Rejetée', 'La proposition a été rejetée et ne sera pas publiée.', 'info');
+  };
+
+  const handleDeleteFaq = (id: string) => {
+    store.deleteFaqItem(id);
+    setFaqs(store.getFaqItems());
+    onShowToast('FAQ Supprimée', 'La question a été retirée.', 'info');
+  };
+
+  const handleSaveEditFaq = () => {
+    if (!editingFaq) return;
+    store.updateFaqItem(editingFaq.id, editingFaq);
+    setEditingFaq(null);
+    setFaqs(store.getFaqItems());
+    onShowToast('FAQ Mise à Jour', 'Les modifications ont été enregistrées.', 'success');
+  };
+
+  const handleCreateFaq = () => {
+    if (!newFaqData.rephrasedQuestion || !newFaqData.answer) {
+      onShowToast('Champs requis', 'Veuillez saisir la question et la réponse.', 'info');
+      return;
+    }
+    store.addFaqItem({
+      category: newFaqData.category || 'Règlement & Quiz',
+      rawQuestionsCount: 1,
+      sampleRawQuestions: [newFaqData.rephrasedQuestion],
+      rephrasedQuestion: newFaqData.rephrasedQuestion,
+      answer: newFaqData.answer,
+      sources: newFaqData.sources || ['Documentation Officielle'],
+      confidence: newFaqData.confidence || 'elevee',
+      status: 'proposee',
+    });
+    setIsCreatingFaq(false);
+    setNewFaqData({
+      category: 'Règlement & Quiz',
+      rephrasedQuestion: '',
+      answer: '',
+      sources: ['Règlement Officiel'],
+      confidence: 'elevee',
+    });
+    setFaqs(store.getFaqItems());
+    onShowToast('Question FAQ Proposée', 'Enregistrée avec succès en attente de validation Staff.', 'success');
+  };
 
   // Helpers for CM Config
   const updateCmConfig = (fields: Partial<AiCmConfig>) => {
@@ -254,6 +361,23 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
         >
           <Bot className="w-4 h-4 text-purple-400" />
           <span>🤖 Community Manager IA (Discord)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('faq')}
+          className={`px-4 py-3 font-bold text-xs rounded-t-xl flex items-center gap-2 transition-all ${
+            activeTab === 'faq'
+              ? 'bg-cyan-600/20 text-cyan-300 border-t border-x border-cyan-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
+          }`}
+        >
+          <HelpCircle className="w-4 h-4 text-cyan-400" />
+          <span>💡 FAQ Intelligente & Questions</span>
+          {faqs.filter((f) => f.status === 'proposee').length > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+              {faqs.filter((f) => f.status === 'proposee').length}
+            </span>
+          )}
         </button>
 
         <button
@@ -668,7 +792,510 @@ export const AIKnowledgeConfigurator: React.FC<AIKnowledgeConfiguratorProps> = (
         </div>
       )}
 
-      {/* TAB 3: CRITERIA & VALIDATION LIMITS */}
+      {/* TAB: FAQ INTELLIGENTE & QUESTIONS RÉCURRENTES DISCORD */}
+      {activeTab === 'faq' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-cyan-950/60 via-slate-900 to-indigo-950/60 border border-cyan-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+              <HelpCircle className="w-32 h-32 text-cyan-400" />
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-inner">
+                  <HelpCircle className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-white">FAQ Intelligente & Questions Récurrentes Discord</h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold uppercase tracking-wider">
+                      Validation Staff Requise
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Analyse les messages accessibles des salons Discord pour détecter les interrogations fréquentes des candidats.
+                    <br />
+                    <strong className="text-cyan-300">Règle de gouvernance Staff :</strong> Aucune proposition générée n'est publiée sur le serveur sans votre approbation préalable.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleScanDiscordQuestions}
+                  disabled={isScanningFaq}
+                  className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-600/20 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isScanningFaq ? 'animate-spin' : ''}`} />
+                  <span>{isScanningFaq ? 'Analyse Discord...' : 'Scanner les Salons Discord'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsCreatingFaq(true)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-2 transition-all"
+                >
+                  <Plus className="w-4 h-4 text-cyan-400" />
+                  <span>Nouvelle Question</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3 rounded-2xl">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setFaqFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  faqFilter === 'all'
+                    ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Toutes ({faqs.length})
+              </button>
+
+              <button
+                onClick={() => setFaqFilter('proposee')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  faqFilter === 'proposee'
+                    ? 'bg-amber-600/20 text-amber-300 border border-amber-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>En attente Staff</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[10px]">
+                  {faqs.filter((f) => f.status === 'proposee').length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setFaqFilter('approuvee')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  faqFilter === 'approuvee'
+                    ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>Approuvées & Publiées</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
+                  {faqs.filter((f) => f.status === 'approuvee').length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setFaqFilter('rejetee')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  faqFilter === 'rejetee'
+                    ? 'bg-rose-600/20 text-rose-300 border border-rose-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>Rejetées</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 text-[10px]">
+                  {faqs.filter((f) => f.status === 'rejetee').length}
+                </span>
+              </button>
+            </div>
+
+            <div className="text-[11px] text-slate-400 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>Salon cible : <strong>#faq</strong></span>
+            </div>
+          </div>
+
+          {/* Create Modal / Inline Form */}
+          {isCreatingFaq && (
+            <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-cyan-400" />
+                  <span>Ajouter une Question Manuellement</span>
+                </h3>
+                <button onClick={() => setIsCreatingFaq(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Catégorie</label>
+                  <select
+                    value={newFaqData.category || 'Règlement & Quiz'}
+                    onChange={(e) => setNewFaqData({ ...newFaqData, category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="Règlement & Quiz">Règlement & Quiz</option>
+                    <option value="Simulations">Simulations</option>
+                    <option value="Formation Outils">Formation Outils</option>
+                    <option value="Horaires & Organisation">Horaires & Organisation</option>
+                    <option value="Confidentialité & Données">Confidentialité & Données</option>
+                    <option value="Paiements & PPV">Paiements & PPV</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Niveau de Confiance</label>
+                  <select
+                    value={newFaqData.confidence || 'elevee'}
+                    onChange={(e) => setNewFaqData({ ...newFaqData, confidence: e.target.value as any })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="elevee">🟢 Élevée (Source officielle vérifiée)</option>
+                    <option value="moyenne">🟡 Moyenne (À adapter)</option>
+                    <option value="incertaine_a_verifier">🔴 Incertaine (À vérifier par le Staff)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Question reformulée</label>
+                <input
+                  type="text"
+                  value={newFaqData.rephrasedQuestion || ''}
+                  onChange={(e) => setNewFaqData({ ...newFaqData, rephrasedQuestion: e.target.value })}
+                  placeholder="Ex: Que se passe-t-il après 5 échecs consécutifs à un quiz ?"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Réponse synthétique officielle</label>
+                <textarea
+                  rows={4}
+                  value={newFaqData.answer || ''}
+                  onChange={(e) => setNewFaqData({ ...newFaqData, answer: e.target.value })}
+                  placeholder="Rédigez la réponse courte et claire fondée sur les documents..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Sources officielles (séparées par des virgules)</label>
+                <input
+                  type="text"
+                  value={(newFaqData.sources || []).join(', ')}
+                  onChange={(e) =>
+                    setNewFaqData({
+                      ...newFaqData,
+                      sources: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  placeholder="Ex: Règlement Officiel - Règle 3, Module 1"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setIsCreatingFaq(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleCreateFaq}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs"
+                >
+                  Enregistrer en proposition
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Modal */}
+          {editingFaq && (
+            <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-cyan-400" />
+                  <span>Modifier la Question FAQ</span>
+                </h3>
+                <button onClick={() => setEditingFaq(null)} className="text-slate-400 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Catégorie</label>
+                  <input
+                    type="text"
+                    value={editingFaq.category}
+                    onChange={(e) => setEditingFaq({ ...editingFaq, category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Niveau de Confiance</label>
+                  <select
+                    value={editingFaq.confidence}
+                    onChange={(e) => setEditingFaq({ ...editingFaq, confidence: e.target.value as any })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="elevee">🟢 Élevée (Source officielle vérifiée)</option>
+                    <option value="moyenne">🟡 Moyenne</option>
+                    <option value="incertaine_a_verifier">🔴 Incertaine / À vérifier</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Question reformulée</label>
+                <input
+                  type="text"
+                  value={editingFaq.rephrasedQuestion}
+                  onChange={(e) => setEditingFaq({ ...editingFaq, rephrasedQuestion: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Réponse</label>
+                <textarea
+                  rows={4}
+                  value={editingFaq.answer}
+                  onChange={(e) => setEditingFaq({ ...editingFaq, answer: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Sources officielles (virgules)</label>
+                <input
+                  type="text"
+                  value={editingFaq.sources.join(', ')}
+                  onChange={(e) =>
+                    setEditingFaq({
+                      ...editingFaq,
+                      sources: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setEditingFaq(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleSaveEditFaq}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs"
+                >
+                  Enregistrer les modifications
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* List of FAQ Items */}
+          <div className="grid grid-cols-1 gap-4">
+            {faqs
+              .filter((f) => (faqFilter === 'all' ? true : f.status === faqFilter))
+              .map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 shadow-xl transition-all space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">
+                        {item.category}
+                      </span>
+
+                      {item.rawQuestionsCount > 1 && (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono">
+                          📊 Posée {item.rawQuestionsCount} fois sur Discord
+                        </span>
+                      )}
+
+                      {item.confidence === 'elevee' && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Source vérifiée
+                        </span>
+                      )}
+
+                      {item.confidence === 'incertaine_a_verifier' && (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] font-semibold flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Incertaine / À vérifier Staff
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {item.status === 'proposee' && (
+                        <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                          En attente validation Staff
+                        </span>
+                      )}
+                      {item.status === 'approuvee' && (
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+                          <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          Validée & Publiée dans #faq
+                        </span>
+                      )}
+                      {item.status === 'rejetee' && (
+                        <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
+                          Rejetée par le Staff
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sample Raw Questions from Discord */}
+                  {item.sampleRawQuestions && item.sampleRawQuestions.length > 0 && (
+                    <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/60">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                        <MessageSquare className="w-3 h-3 text-cyan-400" />
+                        <span>Extraits des messages reçus des candidats :</span>
+                      </p>
+                      <div className="space-y-1">
+                        {item.sampleRawQuestions.slice(0, 3).map((sq, sIdx) => (
+                          <p key={sIdx} className="text-xs text-slate-300 italic">
+                            « {sq} »
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rephrased Question & Official Answer */}
+                  <div>
+                    <h4 className="text-sm font-bold text-white mb-1.5 flex items-center gap-2">
+                      <span className="text-cyan-400">Q.</span>
+                      <span>{item.rephrasedQuestion}</span>
+                    </h4>
+                    <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed bg-slate-950/40 p-3 rounded-xl border border-slate-800/40">
+                      {item.answer}
+                    </p>
+                  </div>
+
+                  {/* Sources tag list */}
+                  {item.sources && item.sources.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10px] text-slate-400 font-semibold">Sources officielles :</span>
+                      {item.sources.map((src, sIdx) => (
+                        <span
+                          key={sIdx}
+                          className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-[10px] text-slate-300 font-mono"
+                        >
+                          {src}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Footer & Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
+                    <div className="text-[10px] text-slate-400">
+                      {item.reviewedBy ? (
+                        <span>Validé par <strong>{item.reviewedBy}</strong> ({item.reviewedAt})</span>
+                      ) : (
+                        <span>Proposé le {item.suggestedAt}</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {item.status === 'proposee' && (
+                        <>
+                          <button
+                            onClick={() => handleApproveFaq(item.id)}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Approuver & Publier</span>
+                          </button>
+
+                          <button
+                            onClick={() => setEditingFaq(item)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1"
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                            <span>Modifier</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleRejectFaq(item.id)}
+                            className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-xs font-semibold flex items-center gap-1"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Rejeter</span>
+                          </button>
+                        </>
+                      )}
+
+                      {item.status === 'approuvee' && (
+                        <>
+                          <button
+                            onClick={() => handleApproveFaq(item.id)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1"
+                            title="Republier dans #faq Discord"
+                          >
+                            <Send className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Republier</span>
+                          </button>
+
+                          <button
+                            onClick={() => setEditingFaq(item)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1"
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                            <span>Modifier</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteFaq(item.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+
+                      {item.status === 'rejetee' && (
+                        <>
+                          <button
+                            onClick={() => handleApproveFaq(item.id)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Réexaminer & Valider</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteFaq(item.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+            {faqs.filter((f) => (faqFilter === 'all' ? true : f.status === faqFilter)).length === 0 && (
+              <div className="text-center py-12 bg-slate-900/40 border border-slate-800 rounded-2xl">
+                <HelpCircle className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-400">Aucune question dans cette catégorie.</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Cliquez sur « Scanner les Salons Discord » ou « Nouvelle Question » pour en ajouter.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === 'criteria' && (
         <div className="space-y-6 animate-in fade-in">
           {/* Threshold Card */}

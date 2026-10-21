@@ -21,7 +21,8 @@ import { store, defaultModules, defaultQuizzes } from '../services/store';
 import { discordService } from '../services/discordService';
 import { discordSyncService } from '../services/discordSyncService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
-import { onboardingService } from '../services/onboardingService';
+import { onboardingService, OFFICIAL_SERVER_RULES_TEXT } from '../services/onboardingService';
+import { faqService } from '../services/faqService';
 import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
 import { QuizQuestion, Member, Quiz, MemberBadge, MemberProgress } from '../types';
 import { voiceRadioService, RADIO_STATIONS, RadioStation } from '../services/voiceRadioService';
@@ -110,10 +111,10 @@ function formatMemberRolesDisplay(roles: string[] = []): string {
  */
 /**
  * Calculates epoch timestamp and schedule details for next 14h00 HF (Europe/Paris timezone).
- * Allowed days: Monday to Saturday (Du lundi au samedi). Sunday (0) is excluded!
- * - If current time in Paris is < 14h00 on Mon-Sat, returns 14h00 today.
- * - If current time in Paris is >= 14h00 on Mon-Sat, moves to tomorrow at 14h00.
- * - Skips Sundays to Monday at 14h00.
+ * Allowed days: Monday to Friday (Du lundi au vendredi). Saturday (6) & Sunday (0) are excluded (aucun créneau régulier le week-end)!
+ * - If current time in Paris is < 14h00 on Mon-Fri, returns 14h00 today.
+ * - If current time in Paris is >= 14h00 on Mon-Fri, moves to next open weekday at 14h00.
+ * - Skips weekends (Saturday & Sunday) to Monday at 14h00.
  */
 export function getSimulationScheduleDetails(): { timestamp: number; isToday: boolean; formattedDate: string } {
   const now = new Date();
@@ -124,12 +125,12 @@ export function getSimulationScheduleDetails(): { timestamp: number; isToday: bo
   targetParis.setHours(14, 0, 0, 0);
 
   const currentDay = parisDate.getDay();
-  // Is it valid for today? Only if Monday (1) through Saturday (6) and before 14:00
-  const isToday = currentDay !== 0 && parisDate.getTime() < targetParis.getTime();
+  // Is it valid for today? Only if Monday (1) through Friday (5) and before 14:00
+  const isToday = currentDay !== 0 && currentDay !== 6 && parisDate.getTime() < targetParis.getTime();
 
   if (!isToday) {
     targetParis.setDate(targetParis.getDate() + 1);
-    while (targetParis.getDay() === 0) { // Sunday skipped
+    while (targetParis.getDay() === 0 || targetParis.getDay() === 6) { // Weekends (Saturday & Sunday) skipped
       targetParis.setDate(targetParis.getDate() + 1);
     }
   }
@@ -692,6 +693,188 @@ export class PawakoBotRunner {
           );
 
           await message.reply({ embeds: [embed], components: [row] }).catch(() => {});
+          return;
+        }
+
+        // --- 1. RÈGLEMENT OFFICIEL DU SERVEUR ---
+        if (content === '!reglement' || content === '!rules' || content === '!charte') {
+          const rulesEmbed = new EmbedBuilder()
+            .setTitle('📜 RÈGLEMENT OFFICIEL DU SERVEUR & CHARTE PAWAKO')
+            .setDescription(OFFICIAL_SERVER_RULES_TEXT)
+            .setColor(0x6366f1)
+            .setFooter({ text: "PAWAKO FORMATION • Charte d'Excellence & Convivialité" })
+            .setTimestamp();
+
+          const rulesRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('btn_formation').setLabel('📚 Ma formation').setStyle(ButtonStyle.Success)
+          );
+
+          await message.reply({ embeds: [rulesEmbed], components: [rulesRow] }).catch(() => {});
+          return;
+        }
+
+        // --- 2. HORAIRES ET ORGANISATION OFFICIELS ---
+        if (content === '!horaires' || content === '!planning' || content === '!sessions' || content === '!calendrier') {
+          const horairesEmbed = new EmbedBuilder()
+            .setTitle('⏰ HORAIRES OFFICIELS DES SESSIONS & ORGANISATION STAFF')
+            .setDescription(
+              `Voici les horaires officiels d'encadrement en vigueur sur PAWAKO FORMATION :\n\n` +
+              `🛠️ **1. FORMATION OUTILS (Google Meet / Infloww) :**\n` +
+              `• **Du Lundi au Vendredi**\n` +
+              `• **De 10h00 à 14h00 Heure Française (HF)**\n` +
+              `• Dédiée à la prise en main des outils professionnels, configuration des raccourcis et flux de travail.\n\n` +
+              `🎭 **2. ÉPREUVES DE SIMULATION CHATTING :**\n` +
+              `• **Du Lundi au Vendredi**\n` +
+              `• **De 14h00 à 18h00 Heure Française (HF)**\n` +
+              `• Sessions pratiques en situation réelle avec analyse pédagogique immédiate du coach.\n\n` +
+              `🛑 **3. WEEK-END (Samedi & Dimanche) :**\n` +
+              `• **Aucune session régulière** n'a lieu le samedi et le dimanche.\n` +
+              `• Ces créneaux sont réservés au repos et aux révisions personnelles.\n\n` +
+              `👥 **4. ENCADREMENT ET SUIVI PAR L'ÉQUIPE :**\n` +
+              `• Trois membres du staff (Anthony, Mahsa, Mathieu et formateurs désignés) coordonnent les sessions et le suivi des candidats.\n` +
+              `• **Relais continu transparent :** Un formateur autorisé peut reprendre un candidat sans jamais réinitialiser sa progression ni créer de doublon.\n\n` +
+              `📌 *Ces horaires restent fixes sauf annonce officielle explicite de la direction.*`
+            )
+            .setColor(0x06b6d4)
+            .setFooter({ text: 'PAWAKO FORMATION • Horaires Officiels de Session' })
+            .setTimestamp();
+
+          await message.reply({ embeds: [horairesEmbed] }).catch(() => {});
+          return;
+        }
+
+        // --- 3. PROLONGATION D'INACTIVITÉ (STAFF ONLY) ---
+        if (content.startsWith('!prolongation') || content.startsWith('!prolonger') || content.startsWith('!delai')) {
+          if (!this.isStaffChannel(message.channel) && !this.isStaffUser(message.author, message.member)) {
+            await message.reply('⛔ Commande réservée au staff Pawako.').catch(() => {});
+            return;
+          }
+
+          const args = content.split(' ').slice(1);
+          const mentionUser = message.mentions.users.first();
+          const targetId = mentionUser ? mentionUser.id : (args[0] ? args[0].replace(/<@!?|>/g, '') : null);
+
+          if (!targetId) {
+            await message.reply('ℹ️ **Utilisation :** `!prolongation @candidat [nombre_de_jours] [motif]` (ex: `!prolongation @jean 3 Déplacement pro`)').catch(() => {});
+            return;
+          }
+
+          const days = parseInt(args[1], 10) || 3;
+          const reason = args.slice(2).join(' ') || 'Accord Staff';
+
+          const targetMember = store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+          if (!targetMember) {
+            await message.reply(`⚠️ Candidat introuvable pour "${targetId}".`).catch(() => {});
+            return;
+          }
+
+          const updated = store.grantInactivityExtension(targetMember.id, days, reason, `@${message.author.username}`);
+          if (updated) {
+            const untilDate = updated.inactivityExtensionUntilTimestamp
+              ? new Date(updated.inactivityExtensionUntilTimestamp).toLocaleDateString('fr-FR')
+              : 'N/A';
+
+            const extEmbed = new EmbedBuilder()
+              .setTitle("⏱️ PROLONGATION D'INACTIVITÉ ACCORDÉE")
+              .setDescription(
+                `Le Staff a accordé une prolongation officielle à <@${updated.discordId || updated.id.replace('mem-', '')}> :\n\n` +
+                `• **Durée accordée :** **+${days} jour(s)**\n` +
+                `• **Valable jusqu'au :** **${untilDate}**\n` +
+                `• **Motif :** ${reason}\n` +
+                `• **Accordée par :** <@${message.author.id}>\n\n` +
+                `🛡️ *Le candidat est protégé contre tout passage en statut OUT jusqu'à cette date.*`
+              )
+              .setColor(0x10b981)
+              .setFooter({ text: 'PAWAKO FORMATION • Gestion des Délais Staff' })
+              .setTimestamp();
+
+            await message.reply({ embeds: [extEmbed] }).catch(() => {});
+
+            if (updated.personalChannelId) {
+              const chan = await this.client?.channels.fetch(updated.personalChannelId).catch(() => null);
+              if (chan && 'send' in chan) {
+                await (chan as any).send({ embeds: [extEmbed] }).catch(() => {});
+              }
+            }
+          }
+          return;
+        }
+
+        // --- 4. FAQ INTERACTIVE POUR LES CANDIDATS ---
+        if (content === '!faq' || content === '!questions' || content === '!aide-faq') {
+          const approvedFaqs = store.getFaqItems('approuvee');
+          if (approvedFaqs.length === 0) {
+            await message.reply("ℹ️ Aucune question FAQ n'a encore été validée par le Staff.").catch(() => {});
+            return;
+          }
+
+          const faqFields = approvedFaqs.slice(0, 8).map((f) => ({
+            name: `❓ ${f.rephrasedQuestion}`,
+            value: `${f.answer}\n*Sources : ${f.sources.join(', ')}*`,
+            inline: false,
+          }));
+
+          const faqEmbed = new EmbedBuilder()
+            .setTitle('💡 FOIRE AUX QUESTIONS OFFICIELLES (FAQ)')
+            .setDescription(
+              `Bienvenue dans la FAQ officielle de **PAWAKO FORMATION**.\n` +
+              `Ces réponses ont été formulées à partir des questions récurrentes des candidats et validées par le Staff.\n`
+            )
+            .addFields(faqFields)
+            .setColor(0x6366f1)
+            .setFooter({ text: 'PAWAKO FORMATION • FAQ Officielle' })
+            .setTimestamp();
+
+          await message.reply({ embeds: [faqEmbed] }).catch(() => {});
+          return;
+        }
+
+        // --- 5. FAQ REVIEW POUR LE STAFF ---
+        if (content === '!faq-review' || content === '!faq-propositions' || content === '!faq-staff') {
+          if (!this.isStaffChannel(message.channel) && !this.isStaffUser(message.author, message.member)) {
+            await message.reply('⛔ Commande réservée au staff Pawako.').catch(() => {});
+            return;
+          }
+
+          const pendingFaqs = store.getFaqItems('proposee');
+          if (pendingFaqs.length === 0) {
+            await message.reply("✅ **Aucune proposition FAQ en attente.** Toutes les questions ont été traitées.").catch(() => {});
+            return;
+          }
+
+          await message.reply(`📋 **${pendingFaqs.length} proposition(s) FAQ en attente d'approbation Staff :**`).catch(() => {});
+
+          for (const item of pendingFaqs.slice(0, 5)) {
+            const propEmbed = new EmbedBuilder()
+              .setTitle(`💡 [PROPOSITION FAQ] ${item.category}`)
+              .setDescription(
+                `• **Question reformulée :** **${item.rephrasedQuestion}**\n` +
+                `• **Réponse suggérée :** ${item.answer}\n` +
+                `• **Sources :** ${item.sources.join(', ')}\n` +
+                `• **Occurrences détectées :** ${item.rawQuestionsCount} question(s)\n` +
+                `• **Fiabilité :** ${item.confidence === 'elevee' ? '🟢 Élevée' : item.confidence === 'moyenne' ? '🟡 Moyenne' : '🔴 À vérifier'}\n` +
+                (item.conflictNote ? `⚠️ **Point d'attention :** ${item.conflictNote}\n` : '') +
+                `\n*Règle stricte : Cette réponse ne sera publiée dans #faq qu'après votre approbation explicite.*`
+              )
+              .setColor(item.confidence === 'elevee' ? 0x6366f1 : 0xf59e0b)
+              .setFooter({ text: 'PAWAKO FORMATION • Validation FAQ Staff' });
+
+            const propRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`faq_approve_${item.id}`)
+                .setLabel('✅ Approuver & Publier')
+                .setStyle(ButtonStyle.Success),
+              new ButtonBuilder()
+                .setCustomId(`faq_reject_${item.id}`)
+                .setLabel('❌ Rejeter')
+                .setStyle(ButtonStyle.Danger)
+            );
+
+            if ('send' in message.channel) {
+              await (message.channel as any).send({ embeds: [propEmbed], components: [propRow] }).catch(() => {});
+            }
+          }
           return;
         }
 
@@ -2595,10 +2778,12 @@ export class PawakoBotRunner {
 
         try {
           // Defer reply or update IMMEDIATELY (<10ms) to prevent Discord timeout errors
+          const isPrivacyAction = customId === 'privacy_accept' || customId === 'privacy_decline';
           const isStartOnboarding =
             customId === 'start_onboarding_process' ||
             customId.startsWith('start_onboarding') ||
-            customId.startsWith('join_training');
+            customId.startsWith('join_training') ||
+            customId === 'privacy_accept';
 
           const isStaffAction = customId.startsWith('staff_') || customId.startsWith('show_my_profile') || customId.startsWith('btn_profile');
 
@@ -2609,7 +2794,7 @@ export class PawakoBotRunner {
           } else {
             if (!interaction.deferred && !interaction.replied) {
               // Ephemeral MUST be true for start_onboarding AND staff actions so public/candidate channels aren't flooded with staff logs!
-              await interaction.deferReply({ flags: (isStartOnboarding || isStaffAction) ? MessageFlags.Ephemeral : undefined }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
+              await interaction.deferReply({ flags: (isStartOnboarding || isPrivacyAction || isStaffAction) ? MessageFlags.Ephemeral : undefined }).catch((e) => console.warn('[DeferReply Warning]', e?.message || e));
             }
           }
 
@@ -2624,11 +2809,80 @@ export class PawakoBotRunner {
             }
           }
 
+          // Handle refusal of privacy agreement
+          if (customId === 'privacy_decline') {
+            await interaction.editReply({
+              content: '❌ **Refus du contrat de confidentialité enregistré.**\n\nConformément au règlement et à notre charte de protection des données, la formation ne peut pas démarrer sans votre consentement préalable.\n\n💡 *Si vous changez d\'avis, vous pouvez relancer le parcours à tout moment en cliquant à nouveau sur **« Commencer la formation »**.*',
+              embeds: [],
+              components: [],
+            }).catch(() => {});
+            return;
+          }
+
+          // Show Privacy Agreement modal/embed if not already accepted
+          if (
+            customId === 'start_onboarding_process' ||
+            customId.startsWith('start_onboarding') ||
+            customId.startsWith('join_training')
+          ) {
+            const cand = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+            if (!cand.privacyAccepted || cand.privacyAcceptedVersion !== 'v1.0') {
+              const privacyEmbed = new EmbedBuilder()
+                .setTitle('📋 CONTRAT DE CONFIDENTIALITÉ & PROTECTION DES DONNÉES (v1.0)')
+                .setDescription(
+                  `Bienvenue <@${user.id}> ! Avant de créer votre salon privé et de débuter votre parcours de formation, veuillez prendre connaissance des modalités de traitement de vos données :\n\n` +
+                  `📊 **1. Actions & Données enregistrées :**\n` +
+                  `Sont exclusivement enregistrés votre progression dans les modules, vos tentatives et scores de quiz, vos erreurs pédagogiques, vos interactions pertinentes avec le bot/staff, et vos changements de statut.\n\n` +
+                  `🎯 **2. Finalité pédagogique :**\n` +
+                  `Ces informations servent uniquement au suivi de votre apprentissage, à l'adaptation de l'accompagnement des formateurs et à l'évaluation de vos compétences en vue de votre intégration.\n\n` +
+                  `🔒 **3. Accès strictement réservé :**\n` +
+                  `L'accès aux données de votre parcours est strictement restreint aux seuls administrateurs et responsables de formation explicitement autorisés.\n\n` +
+                  `📸 **4. Précision sur les captures d'écran :**\n` +
+                  `Aucune capture d'écran de votre appareil n'est effectuée de manière automatique par le bot. Seules les captures ou documents que vous transmettez vous-même volontairement dans vos échanges ou tickets sont conservés pour votre accompagnement.\n\n` +
+                  `⚖️ **5. Conservation & Droits :**\n` +
+                  `Vos données sont conservées pendant la durée de votre parcours. Vous disposez d'un droit permanent d'accès, de rectification ou de suppression sur simple demande adressée au Staff.`
+                )
+                .setColor(0x6366f1)
+                .setFooter({ text: 'PAWAKO FORMATION • Protection des Données & RGPD • Version 1.0' })
+                .setTimestamp();
+
+              const privacyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId('privacy_accept')
+                  .setLabel("✅ J'accepte et je commence")
+                  .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                  .setCustomId('privacy_decline')
+                  .setLabel('❌ Je refuse')
+                  .setStyle(ButtonStyle.Danger)
+              );
+
+              await interaction.editReply({
+                embeds: [privacyEmbed],
+                components: [privacyRow],
+              });
+              return;
+            }
+          }
+
           // --- 1. START ONBOARDING & PERSONAL CHANNEL CREATION ---
           if (isStartOnboarding) {
             const member = store.getOrCreateCandidate(user.id, user.username, user.displayAvatarURL());
+            if (customId === 'privacy_accept') {
+              member.privacyAccepted = true;
+              member.privacyAcceptedAt = store.getFormattedNow();
+              member.privacyAcceptedVersion = 'v1.0';
+              member.privacyAcceptedDiscordId = user.id;
+              store.addLog(
+                user.username,
+                `📋 Consentement RGPD / Contrat de confidentialité v1.0 accepté par ${user.username}`,
+                'member',
+                user.username
+              );
+            }
             member.candidateState = 'formation_commencee';
             member.lastActiveAt = store.getFormattedNow();
+            member.lastActiveAtTimestamp = Date.now();
 
             const cfg = onboardingService.getConfig();
 
@@ -3109,6 +3363,196 @@ export class PawakoBotRunner {
             return;
           }
 
+          // Staff Confirmation of Ban after 5 failures or spam abuse
+          if (customId.startsWith('staff_confirm_ban_')) {
+            const targetId = customId.replace('staff_confirm_ban_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable.' });
+              return;
+            }
+
+            member.isActive = false;
+            member.candidateState = 'out';
+            member.kickedAt = store.getFormattedNow();
+            member.kickedReason = `Bannissement confirmé par le Staff (@${user.username})`;
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            if (guild && member.discordId) {
+              try {
+                const gm = await guild.members.fetch(member.discordId).catch(() => null);
+                if (gm && gm.bannable) {
+                  await gm.ban({ reason: `PAWAKO Formation - Bannissement confirmé par Staff (@${user.username})` }).catch(() => {});
+                }
+              } catch (e) {}
+            }
+
+            store.addLog(
+              `@${user.username}`,
+              `🔨 Bannissement confirmé par le Staff pour ${member.username} (${member.discordId})`,
+              'member',
+              member.username
+            );
+
+            await interaction.editReply({
+              content: `🔨 **Bannissement confirmé par <@${user.id}> pour ${member.username}.** Le candidat a été sanctionné conformément au règlement.`
+            });
+            return;
+          }
+
+          // Staff Archive / Close candidate peacefully without banning
+          if (customId.startsWith('staff_close_candidate_')) {
+            const targetId = customId.replace('staff_close_candidate_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable.' });
+              return;
+            }
+
+            member.isActive = false;
+            member.candidateState = 'out';
+            member.kickedAt = store.getFormattedNow();
+            member.kickedReason = `Dossier clôturé sans bannissement par @${user.username}`;
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            store.addLog(
+              `@${user.username}`,
+              `📁 Clôture sans bannissement pour le candidat ${member.username}`,
+              'member',
+              member.username
+            );
+
+            await interaction.editReply({
+              content: `📁 **Dossier de ${member.username} clôturé sans bannissement par <@${user.id}>.** Les historiques et données restent archivés.`
+            });
+            return;
+          }
+
+          // Staff Exceptional Retry / Last Chance
+          if (customId.startsWith('staff_grant_last_chance_')) {
+            const targetId = customId.replace('staff_grant_last_chance_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable.' });
+              return;
+            }
+
+            for (const prog of Object.values(member.progress || {})) {
+              if (prog.attemptsCount >= 5) {
+                prog.attemptsCount = 4;
+                prog.quizBlockedByFailures = false;
+              }
+            }
+            member.candidateState = 'module_en_cours';
+            member.isActive = true;
+            member.cooldownUntilTimestamp = null;
+            member.currentQuizAvailableAtTimestamp = null;
+            member.cooldownAbuseSanctioned = false;
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            store.addLog(
+              `@${user.username}`,
+              `🔄 Déblocage exceptionnel / dernière chance accordée à ${member.username}`,
+              'member',
+              member.username
+            );
+
+            await interaction.editReply({
+              content: `🔄 **Déblocage exceptionnel accordé à ${member.username} par <@${user.id}>.** Le candidat peut retenter son quiz.`
+            });
+            return;
+          }
+
+          // Staff Anti-Spam Pardon / Unblock
+          if (customId.startsWith('staff_unblock_spammer_')) {
+            const targetId = customId.replace('staff_unblock_spammer_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable.' });
+              return;
+            }
+
+            member.cooldownAbuseSanctioned = false;
+            member.isActive = true;
+            member.candidateState = 'module_en_cours';
+            member.cooldownUntilTimestamp = null;
+            this.cooldownClickTracker.delete(member.discordId);
+            store.saveMembers();
+            firebaseSyncService.saveMember(member).catch(() => {});
+
+            store.addLog(
+              `@${user.username}`,
+              `🔓 Pardon anti-spam accordé à ${member.username}`,
+              'member',
+              member.username
+            );
+
+            await interaction.editReply({
+              content: `🔓 **Déblocage anti-spam validé pour ${member.username} par <@${user.id}>.**`
+            });
+            return;
+          }
+
+          // Staff FAQ Approval
+          if (customId.startsWith('faq_approve_')) {
+            const faqId = customId.replace('faq_approve_', '');
+            const approved = store.approveFaqItem(faqId, `@${user.username}`);
+            if (!approved) {
+              await interaction.editReply({ content: '⚠️ Question FAQ introuvable.' });
+              return;
+            }
+            const published = await faqService.publishApprovedFaqToDiscord(faqId);
+            await interaction.editReply({
+              content: `✅ **FAQ Approuvée par <@${user.id}> !**\n\n📌 **Question :** "${approved.rephrasedQuestion}"\n${published ? '🚀 Publiée avec succès dans le salon **#faq** !' : '⚠️ Enregistrée dans le système (salon #faq à configurer).'}`
+            });
+            return;
+          }
+
+          // Staff FAQ Rejection
+          if (customId.startsWith('faq_reject_')) {
+            const faqId = customId.replace('faq_reject_', '');
+            const rejected = store.rejectFaqItem(faqId, `@${user.username}`);
+            if (!rejected) {
+              await interaction.editReply({ content: '⚠️ Question FAQ introuvable.' });
+              return;
+            }
+            await interaction.editReply({
+              content: `❌ **Proposition FAQ rejetée par <@${user.id}> :** "${rejected.rephrasedQuestion}". Elle ne sera pas publiée.`
+            });
+            return;
+          }
+
           if (customId.startsWith('staff_encourage_member_')) {
             const targetId = customId.replace('staff_encourage_member_', '');
             const member =
@@ -3327,7 +3771,32 @@ export class PawakoBotRunner {
               quiz = store.getQuiz('quiz-1') || defaultQuizzes[0];
             }
 
-            // 3-0. Strict Block Check: 3 failures accumulated on ANY module
+            // 3-0a. Check 5 Failures Refusal: Candidate disqualified
+            if (
+              member.candidateState === 'refus_candidature_5_echecs' ||
+              Object.values(member.progress || {}).some((p) => p.attemptsCount >= 5 && !p.quizPassed)
+            ) {
+              const refusedEmbed = new EmbedBuilder()
+                .setTitle('🛑 CANDIDATURE REFUSÉE — 5 ÉCHECS CUMULÉS AUX QUIZ')
+                .setDescription(
+                  `📢 <@${user.id}>, **tu as atteint 5 échecs aux quiz de formation.**\n\n` +
+                  `⚖️ **Application stricte du Règlement Officiel (Règle 3) :**\n` +
+                  `• Votre formation est arrêtée et votre candidature non retenue.\n` +
+                  `• L'accès aux quiz est définitivement clôturé.\n\n` +
+                  `*Conformément aux règles du serveur, le bannissement requiert une confirmation expresse du Staff.*`
+                )
+                .setColor(0xef4444)
+                .setFooter({ text: 'PAWAKO FORMATION • Décision Officielle Règlement' });
+
+              const refusedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+              );
+
+              await interaction.editReply({ embeds: [refusedEmbed], components: [refusedRow] }).catch(() => {});
+              return;
+            }
+
+            // 3-0b. Strict Block Check: 3 failures accumulated on ANY module
             let blockedModId: string | null = null;
             let blockedModProgress: MemberProgress | null = null;
 
@@ -3390,12 +3859,29 @@ export class PawakoBotRunner {
               return;
             }
 
-            // 3a. Cooldown Check
+            // 3a. Cooldown Check & Anti-Spam Protection
             if (member.cooldownUntilTimestamp && Date.now() < member.cooldownUntilTimestamp) {
               const remainingMs = member.cooldownUntilTimestamp - Date.now();
               const mins = Math.floor(remainingMs / 60000);
               const secs = Math.floor((remainingMs % 60000) / 1000);
               const tsSec = Math.floor(member.cooldownUntilTimestamp / 1000);
+
+              // Anti-Spam: Check debounce for accidental double clicks (< 1000ms) or network lags
+              const nowClick = Date.now();
+              const userTracker = this.userClickTracker.get(user.id);
+              const isAccidentalDoubleClick = userTracker && (nowClick - userTracker.lastClickTime < 1000);
+              this.userClickTracker.set(user.id, {
+                count: (userTracker?.count || 0) + 1,
+                lastClickTime: nowClick,
+              });
+
+              if (isAccidentalDoubleClick) {
+                // Ignore accidental double-clicks: do not count as abusive clicks or failures
+                await interaction.editReply({
+                  content: `⏳ *Temps d'attente en cours. Veuillez patienter la fin de votre cooldown (<t:${tsSec}:R>).*`,
+                }).catch(() => {});
+                return;
+              }
 
               // Track clicks specifically during this active cooldown
               const existingTrack = this.cooldownClickTracker.get(user.id);
@@ -3432,43 +3918,126 @@ export class PawakoBotRunner {
                 return;
               }
 
-              // 2nd click and beyond (insisting / clicking repeatedly during cooldown): Sarcastic message in BIG/BOLD text followed by "IL TE RESTE XMIN YSEC"!
-              const cfg = onboardingService.getConfig();
-              const spamPool = cfg.cooldownSpamPool && cfg.cooldownSpamPool.length > 0
-                ? cfg.cooldownSpamPool
-                : (cfg.sarcasticSpamMessages && cfg.sarcasticSpamMessages.length > 0
-                    ? cfg.sarcasticSpamMessages
-                    : this.SARCASTIC_SPAM_MESSAGES);
+              // 2nd to 4th click: Sarcastic message
+              if (cooldownClicks < 5) {
+                const cfg = onboardingService.getConfig();
+                const spamPool = cfg.cooldownSpamPool && cfg.cooldownSpamPool.length > 0
+                  ? cfg.cooldownSpamPool
+                  : (cfg.sarcasticSpamMessages && cfg.sarcasticSpamMessages.length > 0
+                      ? cfg.sarcasticSpamMessages
+                      : this.SARCASTIC_SPAM_MESSAGES);
 
-              const rawSarcastic = spamPool.length > 0
-                ? spamPool[Math.floor(Math.random() * spamPool.length)]
-                : "🤖 *Woah, doucement sur le bouton <@{discordId}> ! Le cooldown est actif, repasse <t:{tsSec}:R> !*";
+                const rawSarcastic = spamPool.length > 0
+                  ? spamPool[Math.floor(Math.random() * spamPool.length)]
+                  : "🤖 *Woah, doucement sur le bouton <@{discordId}> ! Le cooldown est actif, repasse <t:{tsSec}:R> !*";
 
-              const formattedSarcastic = rawSarcastic
-                .replace(/\{discordId\}/g, member.discordId || user.id)
-                .replace(/\{tsSec\}/g, String(tsSec))
-                .replace(/\{mins\}/g, String(mins))
-                .replace(/\{secs\}/g, String(secs))
-                .replace(/\{username\}/g, member.username);
+                const formattedSarcastic = rawSarcastic
+                  .replace(/\{discordId\}/g, member.discordId || user.id)
+                  .replace(/\{tsSec\}/g, String(tsSec))
+                  .replace(/\{mins\}/g, String(mins))
+                  .replace(/\{secs\}/g, String(secs))
+                  .replace(/\{username\}/g, member.username);
 
-              const sarcasticEmbed = new EmbedBuilder()
-                .setTitle('🤖 ALERTE SARCASME — TENTATIVES RÉPÉTÉES EN COOLDOWN')
+                const sarcasticEmbed = new EmbedBuilder()
+                  .setTitle('🤖 ALERTE SARCASME — TENTATIVES RÉPÉTÉES EN COOLDOWN')
+                  .setDescription(
+                    `### ${formattedSarcastic}\n\n` +
+                    `👉 **IL TE RESTE ${mins}MIN ${secs}SEC** (<t:${tsSec}:R>)\n\n` +
+                    `📊 **Statut du quiz :**\n` +
+                    `• Score minimum requis : **${requiredMin}/20**`
+                  )
+                  .addFields({ name: '⏳ Temps d\'attente obligatoire', value: `**Il te reste ${mins}min ${secs}sec** (<t:${tsSec}:R>)` })
+                  .setColor(0xf59e0b)
+                  .setFooter({ text: 'PAWAKO FORMATION • Système Anti-Spam Cooldown' });
+
+                const cooldownRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
+                  new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+                );
+
+                await interaction.editReply({ embeds: [sarcasticEmbed], components: [cooldownRow] });
+                return;
+              }
+
+              // 5th to 6th click: Formal Warning about Server Rules
+              if (cooldownClicks < 7) {
+                const warnEmbed = new EmbedBuilder()
+                  .setTitle('⚠️ AVERTISSEMENT FORMEL — RESPECT DU RÈGLEMENT (RÈGLE 4)')
+                  .setDescription(
+                    `📢 <@${user.id}>, **attention ! Vous insistez sur le bouton pendant un temps d'attente actif.**\n\n` +
+                    `Le règlement officiel du serveur interdit formellement le mitraillage de clics et les tentatives de contourner le chronomètre.\n\n` +
+                    `🛑 **En cas d'insistance persistante, un bannissement automatique pour abus de clics sera appliqué.**\n\n` +
+                    `⏳ **Déblocage prévu :** <t:${tsSec}:R> (dans **${mins}min ${secs}sec**)`
+                  )
+                  .setColor(0xef4444)
+                  .setFooter({ text: 'PAWAKO FORMATION • Avertissement Anti-Spam Officiel' });
+
+                const warnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
+                  new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+                );
+
+                await interaction.editReply({ embeds: [warnEmbed], components: [warnRow] });
+                return;
+              }
+
+              // 7th click and beyond: Confirmed Deliberate Abuse
+              if (!member.cooldownAbuseSanctioned) {
+                member.cooldownAbuseSanctioned = true;
+                member.isActive = false;
+                member.candidateState = 'out';
+                member.kickedAt = store.getFormattedNow();
+                member.kickedReason = 'Spam répété et abus avéré de clics pendant les cooldowns';
+                store.saveMembers();
+                firebaseSyncService.saveMember(member).catch(() => {});
+
+                // Alert staff in #staff-alerts
+                if (this.client) {
+                  const guildId = onboardingService.getConfig().guildId || this.client.guilds.cache.first()?.id;
+                  const guild = guildId ? await this.client.guilds.fetch(guildId).catch(() => null) : this.client.guilds.cache.first();
+                  if (guild) {
+                    const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+                    if (staffChan) {
+                      const abuseEmbed = new EmbedBuilder()
+                        .setTitle('🚨 ALERTE STAFF — ABUS DE CLICS COOLDOWN CONFIRMÉ')
+                        .setDescription(
+                          `📢 **Un candidat a ignoré les avertissements et persisté dans le spam de clics :**\n\n` +
+                          `• **Candidat :** <@${user.id}> (**${member.username}**)\n` +
+                          `• **Nombre de clics constatés :** **${cooldownClicks} clics** pendant le cooldown actif\n` +
+                          `• **Statut actuel :** Verrouillé & Sorti du parcours (Statut OUT)\n\n` +
+                          `⚖️ *Règle 4 : Le bannissement définitif nécessite la confirmation du Staff :*`
+                        )
+                        .setColor(0xef4444)
+                        .setFooter({ text: 'PAWAKO FORMATION • Détection Anti-Spam' })
+                        .setTimestamp();
+
+                      const staffRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                        new ButtonBuilder().setCustomId(`staff_confirm_ban_${member.id}`).setLabel('🔨 Confirmer Bannissement').setStyle(ButtonStyle.Danger),
+                        new ButtonBuilder().setCustomId(`staff_close_candidate_${member.id}`).setLabel('📁 Clôturer sans bannir').setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId(`staff_unblock_spammer_${member.id}`).setLabel('🔓 Débloquer / Pardonner').setStyle(ButtonStyle.Primary)
+                      );
+
+                      await staffChan.send({
+                        content: `🚨 **[ABUS SPAM COOLDOWN]** <@${user.id}> (${member.username})`,
+                        embeds: [abuseEmbed],
+                        components: [staffRow]
+                      }).catch(() => {});
+                    }
+                  }
+                }
+              }
+
+              const blockedAbuseEmbed = new EmbedBuilder()
+                .setTitle('🛑 ACCÈS BLOQUÉ — ABUS DE CLICS RÉPÉTÉS')
                 .setDescription(
-                  `### ${formattedSarcastic}\n\n` +
-                  `👉 **IL TE RESTE ${mins}MIN ${secs}SEC** (<t:${tsSec}:R>)\n\n` +
-                  `📊 **Statut du quiz :**\n` +
-                  `• Score minimum requis : **${requiredMin}/20**`
+                  `📢 <@${user.id}>, **votre accès est suspendu suite à des clics répétés pendant le cooldown.**\n\n` +
+                  `Conformément au règlement du serveur (Règle 4), le mitraillage de clics et les tentatives de forcer le chronomètre constituent une infraction.\n` +
+                  `Le Staff a été notifié de cet incident.`
                 )
-                .addFields({ name: '⏳ Temps d\'attente obligatoire', value: `**Il te reste ${mins}min ${secs}sec** (<t:${tsSec}:R>)` })
-                .setColor(0xf59e0b)
-                .setFooter({ text: 'PAWAKO FORMATION • Système Anti-Spam Cooldown' });
+                .setColor(0xef4444)
+                .setFooter({ text: 'PAWAKO FORMATION • Système Anti-Abus' });
 
-              const cooldownRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                buildQuizButton(member, quiz, quiz?.title || 'Quiz'),
-                new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
-              );
-
-              await interaction.editReply({ embeds: [sarcasticEmbed], components: [cooldownRow] });
+              await interaction.editReply({ embeds: [blockedAbuseEmbed], components: [] });
               return;
             }
 
@@ -6849,6 +7418,9 @@ export class PawakoBotRunner {
         // Check 10h00 HF tools formation reminders
         this.checkToolsFormationReminders();
 
+        // Check 5 consecutive days of inactivity -> OUT status (respects exceptions)
+        this.checkInactivityOutStatus();
+
         // Check 11h00 HF daily community post and personalized candidate followups (EXACTLY ONCE PER DAY)
         if (hours === 11 && minutes === 0) {
           if (this.lastMorningCronRunDate !== todayKey) {
@@ -6887,6 +7459,103 @@ export class PawakoBotRunner {
         console.warn('[Scheduled Cron Warning]', err);
       }
     }, 35 * 1000); // Check every 35 seconds
+  }
+
+  /**
+   * Checks candidates for 5 consecutive days of inactivity.
+   * STRICT EXCEPTIONS (Requirement 3):
+   * - Candidates in simulation or scheduled for simulation
+   * - Candidates in tools formation or scheduled for tools formation
+   * - Candidates with an active staff extension
+   * - Candidates already finished
+   * - Staff members
+   * Passes candidate to OUT status without deleting any training history.
+   */
+  private async checkInactivityOutStatus() {
+    const now = Date.now();
+    // Throttle check to once every 10 minutes to avoid overhead
+    if (now - this.lastInactivityCheckTimestamp < 10 * 60 * 1000) return;
+    this.lastInactivityCheckTimestamp = now;
+
+    const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+    const members = store.getMembers();
+
+    for (const m of members) {
+      if (m.isActive === false || m.candidateState === 'out' || m.candidateState === 'expulse_inactivite') continue;
+
+      // Staff protection
+      const isStaff = (m.roles || []).some((r) =>
+        ['staff', 'admin', 'formateur', 'modérateur', 'moderateur', 'fondateur', 'direction', 'support'].some((kw) =>
+          String(r).toLowerCase().includes(kw)
+        )
+      );
+      if (isStaff) continue;
+
+      // EXCEPTION 1: In simulation
+      if (m.candidateState === 'simulation' || Boolean(m.simulationScheduledTimestamp)) continue;
+
+      // EXCEPTION 2: In tools formation
+      if (m.candidateState === 'formation_outils' || Boolean(m.toolsFormationScheduledTimestamp)) continue;
+
+      // EXCEPTION 3: Staff extension valid
+      if (m.inactivityExtensionUntilTimestamp && now < m.inactivityExtensionUntilTimestamp) continue;
+
+      // EXCEPTION 4: Already completed
+      if (m.candidateState === 'formation_terminee' || m.candidateState === 'simulation_validee') continue;
+
+      // Inactivity threshold calculation based on real learning activity
+      let lastActivityTs = m.lastActiveAtTimestamp;
+      if (!lastActivityTs && m.lastActiveAt) {
+        try {
+          const parts = m.lastActiveAt.split(/[\/\s:]/);
+          if (parts.length >= 3) {
+            const d = parseInt(parts[0], 10);
+            const mo = parseInt(parts[1], 10) - 1;
+            const y = parseInt(parts[2], 10);
+            lastActivityTs = new Date(y, mo, d).getTime();
+          }
+        } catch (e) {}
+      }
+
+      if (!lastActivityTs && m.joinedAt) {
+        try {
+          const parts = m.joinedAt.split(/[\/\s:]/);
+          if (parts.length >= 3) {
+            const d = parseInt(parts[0], 10);
+            const mo = parseInt(parts[1], 10) - 1;
+            const y = parseInt(parts[2], 10);
+            lastActivityTs = new Date(y, mo, d).getTime();
+          }
+        } catch (e) {}
+      }
+
+      if (lastActivityTs && (now - lastActivityTs >= FIVE_DAYS_MS)) {
+        console.log(`[Inactivity 5J] Membre ${m.username} inactif depuis > 5 jours. Passage en statut OUT.`);
+        const updated = store.setMemberOutForInactivity(m.id, '5 jours consécutifs d\'inactivité constatée sans action réelle');
+        if (updated) {
+          firebaseSyncService.saveMember(updated).catch(() => {});
+
+          // Send notice in personal channel without deleting data
+          if (m.personalChannelId) {
+            const chan = await this.client?.channels.fetch(m.personalChannelId).catch(() => null);
+            if (chan && 'send' in chan) {
+              const outEmbed = new EmbedBuilder()
+                .setTitle('🛑 PARCOURS SUSPENDU — STATUT OUT (5 JOURS D\'INACTIVITÉ)')
+                .setDescription(
+                  `📢 <@${m.discordId || m.id.replace('mem-', '')}>, **votre parcours a été suspendu pour inactivité.**\n\n` +
+                  `Conformément au règlement officiel (Règle 3), après **5 jours consécutifs sans action réelle de formation**, votre statut passe automatiquement en **OUT**.\n\n` +
+                  `📚 Vos fiches, scores et données restent conservés dans l'historique.\n` +
+                  `Si vous souhaitez reprendre la formation ou solliciter une prolongation, contactez un formateur du Staff.`
+                )
+                .setColor(0xef4444)
+                .setFooter({ text: 'PAWAKO FORMATION • Suivi d\'Inactivité' });
+
+              await (chan as any).send({ embeds: [outEmbed] }).catch(() => {});
+            }
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -7389,8 +8058,105 @@ export class PawakoBotRunner {
       const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
       const externalLink = (mod?.url && mod.url.trim() !== '' ? mod.url : (stepCfg?.externalLinkUrl && stepCfg.externalLinkUrl.trim() !== '' ? stepCfg.externalLinkUrl : (mod?.resources && mod?.resources[0]?.url))) || '';
 
-      if (currentAttempts >= 3) {
-        // --- 3 OR MORE CUMULATIVE FAILURES: STRICT LOCKOUT UNTIL STAFF UNBLOCKS ---
+      if (currentAttempts >= 5) {
+        // --- 5 OR MORE CUMULATIVE FAILURES: PERMANENT DISQUALIFICATION & STOP TRAINING ---
+        member.cooldownUntilTimestamp = null;
+        member.currentQuizAvailableAtTimestamp = null;
+        member.candidateState = 'refus_candidature_5_echecs';
+        member.isActive = false;
+        member.kickedAt = store.getFormattedNow();
+        member.kickedReason = `Arrêt de la formation suite à ${currentAttempts} échecs cumulés au quiz (${modTitle})`;
+        member.progress[quiz.moduleId] = {
+          ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
+          attemptsCount: currentAttempts,
+          score: finalScore,
+          quizPassed: false,
+          quizBlockedByFailures: true,
+          quizBlockedAt: store.getFormattedNow(),
+        };
+
+        store.saveMembers();
+        firebaseSyncService.saveMember(member).catch(() => {});
+
+        resultEmbed = new EmbedBuilder()
+          .setTitle(`🛑 CANDIDATURE REFUSÉE — 5 ÉCHECS CUMULÉS SUR ${modTitle.toUpperCase()}`)
+          .setDescription(
+            `📢 <@${discordUserId}>, **tu as atteint la limite de 5 échecs cumulés au quiz de ce module (${modTitle}).**\n\n` +
+            `⚖️ **Application stricte du Règlement Officiel (Règle 3) :**\n` +
+            `• 5 échecs aux quiz entraînent automatiquement le **refus de votre candidature** et l'**arrêt immédiat de votre formation**.\n` +
+            `• Vos accès aux questionnaires et aux épreuves sont suspendus.\n` +
+            `• L'équipe administrative et les formateurs ont été informés de la clôture de votre parcours.\n\n` +
+            `*Rappel réglementaire : Tout bannissement éventuel du serveur requiert une confirmation expresse du Staff.*`
+          )
+          .setColor(0xef4444)
+          .setFooter({ text: 'PAWAKO FORMATION • Décision Officielle Règlement' })
+          .setTimestamp();
+
+        resultRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
+        );
+
+        // Immediate Staff Alert with 1-click Ban Confirmation Buttons
+        if (this.client) {
+          const cfg = onboardingService.getConfig();
+          const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
+          if (guildId) {
+            const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+            if (guild) {
+              const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+              if (staffChan) {
+                const chanLink = member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé';
+                const staffDisqualifyEmbed = new EmbedBuilder()
+                  .setTitle(`🚨 ALERTE STAFF — REFUS CANDIDATURE (5 ÉCHECS CUMULÉS)`)
+                  .setDescription(
+                    `📢 **Un candidat a atteint la limite des 5 échecs aux quiz :**\n\n` +
+                    `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
+                    `• **Module en échec :** **${modTitle}** (${quiz.title})\n` +
+                    `• **Dernier score :** **${finalScore}/${totalQuestions}** (Requis: ${minScore}/${totalQuestions})\n` +
+                    `• **Nombre d'échecs cumulés :** **${currentAttempts}**\n` +
+                    `• **Statut :** 🛑 Formation arrêtée & Candidature refusée\n` +
+                    `• **Salon du candidat :** ${chanLink}\n\n` +
+                    `⚖️ *Règle 3 du règlement : Le bannissement nécessite une confirmation explicite du Staff ci-dessous :*`
+                  )
+                  .setColor(0xdc2626)
+                  .setFooter({ text: 'PAWAKO FORMATION • Gestion des Sanctions Staff' })
+                  .setTimestamp();
+
+                const staffRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`staff_confirm_ban_${member.id}`)
+                    .setLabel(`🔨 Confirmer Bannissement (${member.username})`)
+                    .setStyle(ButtonStyle.Danger),
+                  new ButtonBuilder()
+                    .setCustomId(`staff_close_candidate_${member.id}`)
+                    .setLabel('📁 Clôturer sans bannir')
+                    .setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder()
+                    .setCustomId(`staff_grant_last_chance_${member.id}`)
+                    .setLabel('🔄 Déblocage exceptionnel')
+                    .setStyle(ButtonStyle.Primary)
+                );
+
+                await staffChan.send({
+                  content: `🚨 **[5 ÉCHECS QUIZ - REFUS CANDIDATURE]** <@${discordUserId}> (**${member.username}**) éliminé(e) sur **${modTitle}**`,
+                  embeds: [staffDisqualifyEmbed],
+                  components: [staffRow],
+                }).catch((err: any) => console.warn('[Send Staff 5 Fails Error]', err));
+              }
+            }
+          }
+        }
+
+        store.addLog(
+          'System',
+          `🛑 [REFUS_5_ECHECS] ${member.username} éliminé(e) sur le quiz "${quiz.title}" après ${currentAttempts} échecs cumulés. Staff alerté pour confirmation de bannissement.`,
+          'quiz',
+          member.username,
+          quiz.title,
+          quiz.moduleId
+        );
+      } else if (currentAttempts >= 3) {
+        // --- 3 OR 4 CUMULATIVE FAILURES: TEMPORARY LOCKOUT UNTIL STAFF UNBLOCKS ---
         member.cooldownUntilTimestamp = null;
         member.currentQuizAvailableAtTimestamp = null;
         member.candidateState = 'bloque_quiz_3_echecs';
@@ -7423,7 +8189,7 @@ export class PawakoBotRunner {
             `3. Dès que tes révisions sont achevées, **fais signe au Staff** (clique sur "🎫 Faire signe au Staff" ci-dessous ou écris dans ce salon) pour demander le déblocage de ton quiz.\n\n` +
             (contentSnippet ? `📖 **Rappel du cours (${modTitle}) :**\n${contentSnippet}\n\n` : '') +
             (externalLink ? `🔗 **Support complet :** [Consulter le document de cours (${modTitle})](${externalLink})\n\n` : '') +
-            `⚠️ *Inutile de cliquer sur d'autres boutons : le quiz restera inactif tant qu'un membre du Staff n'aura pas validé ton déblocage.*`
+            `⚠️ *Attention : 5 échecs cumulés entraîneront automatiquement l'arrêt définitif de votre formation (Règle 3).*`
           )
           .setColor(0xef4444)
           .setFooter({ text: 'PAWAKO FORMATION • 3 Échecs Cumulés — Autorisation Staff Requise' })

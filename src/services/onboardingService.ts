@@ -7,13 +7,33 @@ import { firebaseSyncService } from './firebaseSyncService';
 const STORAGE_KEY = 'pawako_onboarding_flow_config';
 const COOLDOWN_STORAGE_KEY = 'pawako_member_quiz_cooldowns';
 
+export const OFFICIAL_SERVER_RULES_TEXT = `📜 **RÈGLEMENT OFFICIEL DU SERVEUR & CHARTE DE FORMATION**
+
+Bienvenue au sein de l'académie de formation PAWAKO. En rejoignant ce parcours, chaque candidat s'engage à respecter scrupuleusement les règles suivantes :
+
+1️⃣ **Autonomie & Rigueur** : Les candidats doivent lire attentivement l'intégralité des documents de cours et appliquer les consignes en totale autonomie.
+2️⃣ **Maîtrise du Français** : Une excellente compréhension écrite du français est indispensable pour assimiler les notions et réussir les épreuves.
+3️⃣ **Règle des 5 Échecs aux Quiz** :
+• 5 échecs cumulés aux quiz entraînent automatiquement le **refus de candidature** et l'**arrêt immédiat de la formation**.
+• Après ces 5 échecs, tout bannissement définitif du serveur nécessite une confirmation explicite du Staff.
+4️⃣ **Respect des Délais & Anti-Spam** :
+• Le spam de clics pendant les cooldowns et les tentatives de contournement technique sont strictement interdits.
+• Le système détecte les abus réels et applique les sanctions automatiques (les erreurs techniques ou doubles clics involontaires sont filtrés pour éliminer tout faux positif).
+5️⃣ **Convivialité & Respect** :
+• Tolérance zéro pour le flood, le harcèlement, les insultes et toute publicité non autorisée.
+6️⃣ **Confidentialité & Directives Staff** :
+• Les candidats doivent impérativement respecter la confidentialité des supports et appliquer les instructions du Staff.
+7️⃣ **Horaires Officiels** :
+• Formation Outils : Lundi au Vendredi, de 10h à 14h HF.
+• Simulations : Lundi au Vendredi, de 14h à 18h HF (aucun créneau régulier le week-end).`;
+
 const defaultStepConfigs: ModuleStepConfig[] = [];
 
 const defaultConfig: OnboardingFlowConfig = {
   welcomeChannelName: '#bienvenue',
   welcomeButtonLabel: 'Commencer la formation',
   personalChannelPrefix: 'formation-',
-  welcomeRulesMessage: `👋 Bienvenue sur notre serveur !\n\nVeuillez prendre connaissance des informations ci-dessous avant de cliquer sur le bouton pour lancer votre parcours.`,
+  welcomeRulesMessage: OFFICIAL_SERVER_RULES_TEXT,
   startTrainingButtonLabel: 'Lancer la formation',
   initialRoleId: '',
   initialRoleName: '',

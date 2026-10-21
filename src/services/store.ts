@@ -4,6 +4,8 @@ import {
   BackupRecord,
   BrandingSettings,
   DiscordRole,
+  FaqItem,
+  FaqStatus,
   MaintenanceSetting,
   MaintenanceType,
   Member,
@@ -675,6 +677,114 @@ export interface QuizAnalyticsItem {
   difficulty: 'Facile' | 'Modéré' | 'Difficile' | 'Extrême';
 }
 
+export const defaultFaqItems: FaqItem[] = [
+  {
+    id: 'faq-1',
+    category: 'Règlement & Sanctions',
+    rawQuestionsCount: 19,
+    sampleRawQuestions: [
+      'Que se passe-t-il si je rate mon quiz plusieurs fois ?',
+      'Au bout de combien d\'échecs on est éliminé ?',
+      'Est-ce qu\'on peut retenter à l\'infini ?'
+    ],
+    rephrasedQuestion: 'Quelle est la règle en cas d\'échecs répétés aux quiz ?',
+    answer: '5 échecs cumulés entraînent automatiquement le refus de la candidature et l\'arrêt immédiat de la formation. Après ces 5 échecs, le bannissement du serveur nécessite la confirmation explicite du Staff.',
+    sources: ['Règlement Officiel PAWAKO - Règle 3', 'Charte Formation'],
+    confidence: 'elevee',
+    status: 'approuvee',
+    suggestedAt: '21/10/2026 09:00',
+    reviewedAt: '21/10/2026 09:30',
+    reviewedBy: 'Anthony (Admin)',
+  },
+  {
+    id: 'faq-2',
+    category: 'Horaires & Organisation',
+    rawQuestionsCount: 28,
+    sampleRawQuestions: [
+      'Quels sont les horaires des simulations ?',
+      'La formation outils se passe à quelle heure ?',
+      'Y a-t-il des cours le week-end ?'
+    ],
+    rephrasedQuestion: 'Quels sont les horaires officiels des sessions de formation ?',
+    answer: '• Formation Outils : du lundi au vendredi, de 10h00 à 14h00 HF.\n• Simulations : du lundi au vendredi, de 14h00 à 18h00 HF.\n• Aucune session régulière le samedi et le dimanche. Ces horaires restent fixes sauf annonce officielle du staff.',
+    sources: ['Horaires Officiels PAWAKO'],
+    confidence: 'elevee',
+    status: 'approuvee',
+    suggestedAt: '21/10/2026 09:00',
+    reviewedAt: '21/10/2026 09:30',
+    reviewedBy: 'Mahsa (Coordinatrice)',
+  },
+  {
+    id: 'faq-3',
+    category: 'Horaires & Organisation',
+    rawQuestionsCount: 14,
+    sampleRawQuestions: [
+      'Qui fait passer les simulations ?',
+      'Est-ce que je garde mes points si un autre formateur me prend en charge ?'
+    ],
+    rephrasedQuestion: 'Comment s\'organise le suivi par l\'équipe du staff ?',
+    answer: 'Trois membres du staff (Anthony, Mahsa, Mathieu et formateurs désignés) assurent les simulations et le suivi des parcours. Un formateur peut reprendre votre dossier sans réinitialiser votre progression ni créer de doublon.',
+    sources: ['Organisation Staff PAWAKO'],
+    confidence: 'elevee',
+    status: 'approuvee',
+    suggestedAt: '21/10/2026 09:00',
+    reviewedAt: '21/10/2026 09:30',
+    reviewedBy: 'Mathieu (Staff)',
+  },
+  {
+    id: 'faq-4',
+    category: 'Inactivité & Statut OUT',
+    rawQuestionsCount: 22,
+    sampleRawQuestions: [
+      'Combien de temps j\'ai pour faire la formation ?',
+      'C\'est quoi le statut OUT ?',
+      'J\'ai un empêchement, est-ce que je vais être kick ?'
+    ],
+    rephrasedQuestion: 'Comment fonctionne la gestion de l\'inactivité et le statut OUT ?',
+    answer: 'Après 5 jours consécutifs d\'inactivité sans action réelle de formation, le candidat passe automatiquement en statut OUT. Exceptions : les candidats en simulation, en formation outils, ou bénéficiant d\'une prolongation explicitement accordée par le Staff.',
+    sources: ['Règlement Officiel PAWAKO - Inactivité'],
+    confidence: 'elevee',
+    status: 'approuvee',
+    suggestedAt: '21/10/2026 09:00',
+    reviewedAt: '21/10/2026 09:30',
+    reviewedBy: 'Anthony (Admin)',
+  },
+  {
+    id: 'faq-5',
+    category: 'Anti-Spam & Cooldown',
+    rawQuestionsCount: 31,
+    sampleRawQuestions: [
+      'Pourquoi je ne peux pas recliquer sur le quiz ?',
+      'Si je clique plein de fois ça passe plus vite ?'
+    ],
+    rephrasedQuestion: 'Puis-je forcer le cooldown en cliquant plusieurs fois ?',
+    answer: 'Non. Le spam de clics pendant les temps d\'attente est strictement interdit et ne débloque pas le chrono. Le système détecte les abus répétés et applique un bannissement automatique. Les doubles clics involontaires ou lenteurs réseau sont quant à eux automatiquement ignorés.',
+    sources: ['Règlement Officiel PAWAKO - Fair-Play'],
+    confidence: 'elevee',
+    status: 'approuvee',
+    suggestedAt: '21/10/2026 09:00',
+    reviewedAt: '21/10/2026 09:30',
+    reviewedBy: 'Anthony (Admin)',
+  },
+  {
+    id: 'faq-6',
+    category: 'Confidentialité & Données',
+    rawQuestionsCount: 12,
+    sampleRawQuestions: [
+      'Qu\'est-ce qui est enregistré pendant ma formation ?',
+      'Est-ce que le bot prend des captures de mon écran ?'
+    ],
+    rephrasedQuestion: 'Quelles données sont enregistrées et garanties pour ma confidentialité ?',
+    answer: 'Sont enregistrés : progression, tentatives de quiz, erreurs et échanges pédagogiques dans vos salons de formation. L\'accès est strictement réservé au Staff habilité. Aucune capture d\'écran n\'est effectuée automatiquement par le bot (seuls vos fichiers transmis volontairement sont conservés). Vous pouvez demander l\'accès ou la suppression de vos données auprès du Staff.',
+    sources: ['Contrat de Confidentialité v1.0', 'Politique RGPD'],
+    confidence: 'elevee',
+    status: 'approuvee',
+    suggestedAt: '21/10/2026 09:00',
+    reviewedAt: '21/10/2026 09:30',
+    reviewedBy: 'Staff PAWAKO',
+  },
+];
+
 class StoreService {
   private branding: BrandingSettings = { ...defaultBranding };
   private modules: TrainingModule[] = [...defaultModules];
@@ -688,6 +798,7 @@ class StoreService {
   private backups: BackupRecord[] = [...defaultBackups];
   private quizAttempts: QuizAttempt[] = [];
   private simulationAttempts: SimulationAttempt[] = [];
+  private faqItems: FaqItem[] = [...defaultFaqItems];
   private lastInactivityCheckDate: string = '';
   private listeners: Array<() => void> = [];
 
@@ -758,6 +869,14 @@ class StoreService {
       const storedLastCheck = localStorage.getItem('pawako_last_inactivity_check_date');
       if (storedLastCheck) {
         this.lastInactivityCheckDate = storedLastCheck;
+      }
+
+      const storedFaq = localStorage.getItem('pawako_faq_items');
+      if (storedFaq) {
+        const parsed = JSON.parse(storedFaq);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.faqItems = parsed;
+        }
       }
     } catch (e) {
       console.warn('Error loading store from localStorage:', e);
@@ -1453,7 +1572,11 @@ class StoreService {
     return m;
   }
 
-  public touchMemberActivity(memberId: string): void {
+  public touchMemberActivity(memberId: string, isRealLearningAction: boolean = true): void {
+    if (!isRealLearningAction) {
+      // Cooldown click spam or passive events do NOT touch activity timer!
+      return;
+    }
     const m = this.getMember(memberId);
     if (m) {
       m.lastActiveAt = this.getFormattedNow();
@@ -1467,22 +1590,55 @@ class StoreService {
     }
   }
 
-  public kickMemberForInactivity(memberId: string, reason: string = '3 jours d\'inactivité sans action'): Member | null {
+  /**
+   * Sets member to OUT after 5 consecutive days of inactivity without real learning action.
+   * STRICT EXCEPTIONS:
+   * - Candidates in simulation or scheduled for simulation
+   * - Candidates in tools formation or scheduled for tools formation
+   * - Candidates with an active staff extension
+   * - Candidates already finished/validated
+   */
+  public setMemberOutForInactivity(
+    memberId: string,
+    reason: string = '5 jours consécutifs d\'inactivité sans action réelle de formation'
+  ): Member | null {
     const m = this.getMember(memberId);
     if (!m) return null;
 
-    // Absolute protection for Staff / Admin / Formateur
+    // Protection Staff
     const isStaff = (m.roles || []).some((r) => {
       const lower = (r || '').toLowerCase();
       return lower.includes('admin') || lower.includes('staff') || lower.includes('formateur') || lower.includes('bureau');
     });
     if (isStaff) {
-      console.warn(`[Kick Protection] Refus d'expulser le membre ${m.username} (compte Staff/Admin).`);
+      return m;
+    }
+
+    // EXCEPTION 1: Candidates in simulation
+    if (m.candidateState === 'simulation' || Boolean(m.simulationScheduledTimestamp)) {
+      console.log(`[Inactivity Exemption] ${m.username} est en simulation (ou RDV planifié). Pas de statut OUT.`);
+      return m;
+    }
+
+    // EXCEPTION 2: Candidates in tools formation
+    if (m.candidateState === 'formation_outils' || Boolean(m.toolsFormationScheduledTimestamp)) {
+      console.log(`[Inactivity Exemption] ${m.username} est en formation outils (ou RDV planifié). Pas de statut OUT.`);
+      return m;
+    }
+
+    // EXCEPTION 3: Staff Extension
+    if (m.inactivityExtensionUntilTimestamp && Date.now() < m.inactivityExtensionUntilTimestamp) {
+      console.log(`[Inactivity Exemption] ${m.username} bénéficie d'une prolongation Staff jusqu'au ${new Date(m.inactivityExtensionUntilTimestamp).toLocaleDateString()}. Pas de statut OUT.`);
+      return m;
+    }
+
+    // EXCEPTION 4: Already finished or validated
+    if (m.candidateState === 'formation_terminee' || m.candidateState === 'simulation_validee') {
       return m;
     }
 
     m.isActive = false;
-    m.candidateState = 'expulse_inactivite';
+    m.candidateState = 'out';
     m.inactivityWarningLevel = 3;
     m.kickedAt = this.getFormattedNow();
     m.kickedReason = reason;
@@ -1494,14 +1650,82 @@ class StoreService {
     } catch (e) {}
 
     this.addLog(
-      'Système Modération (Auto Bot)',
-      `🚨 [EXPULSION_3J] ${m.username} a été expulsé(e) du parcours pour inactivité de 3 jours.`,
+      'Système Inactivité (Auto Bot)',
+      `🚨 [STATUT_OUT_5J] ${m.username} est passé(e) en statut OUT suite à 5 jours d'inactivité constatée. Données et progression conservées.`,
       'system',
       m.username
     );
 
     return m;
   }
+
+  public kickMemberForInactivity(memberId: string, reason: string = '5 jours d\'inactivité sans action'): Member | null {
+    return this.setMemberOutForInactivity(memberId, reason);
+  }
+
+  public grantInactivityExtension(
+    memberId: string,
+    days: number = 3,
+    reason: string = 'Accord Staff',
+    staffName: string = 'Staff'
+  ): Member | null {
+    const m = this.getMember(memberId);
+    if (!m) return null;
+
+    const extensionMs = days * 24 * 60 * 60 * 1000;
+    const currentBase = (m.inactivityExtensionUntilTimestamp && m.inactivityExtensionUntilTimestamp > Date.now())
+      ? m.inactivityExtensionUntilTimestamp
+      : Date.now();
+
+    m.inactivityExtensionUntilTimestamp = currentBase + extensionMs;
+    m.inactivityExtensionReason = reason;
+    m.inactivityExtensionGrantedBy = staffName;
+    m.inactivityWarningLevel = 0;
+
+    this.saveMembers();
+    try {
+      const { firebaseSyncService } = require('./firebaseSyncService');
+      if (firebaseSyncService) firebaseSyncService.saveMember(m).catch(() => {});
+    } catch (e) {}
+
+    this.addLog(
+      staffName,
+      `⏱️ [PROLONGATION] Prolongation d'inactivité accordée à ${m.username} pour +${days} jour(s) (${reason}).`,
+      'member',
+      m.username
+    );
+
+    return m;
+  }
+
+  public recordPrivacyConsent(
+    memberIdOrDiscordId: string,
+    version: string = 'v1.0'
+  ): Member | null {
+    const m = this.getMember(memberIdOrDiscordId);
+    if (!m) return null;
+
+    m.privacyAccepted = true;
+    m.privacyAcceptedAt = this.getFormattedNow();
+    m.privacyAcceptedVersion = version;
+    m.privacyAcceptedDiscordId = m.discordId || memberIdOrDiscordId.replace('mem-', '');
+
+    this.saveMembers();
+    try {
+      const { firebaseSyncService } = require('./firebaseSyncService');
+      if (firebaseSyncService) firebaseSyncService.saveMember(m).catch(() => {});
+    } catch (e) {}
+
+    this.addLog(
+      'Système Confidentialité',
+      `🔒 [ACCORD_CONFIDENTIALITÉ] ${m.username} (${m.discordId}) a accepté le Contrat de Confidentialité ${version}.`,
+      'system',
+      m.username
+    );
+
+    return m;
+  }
+
 
   public updateMemberRoles(memberId: string, roles: string[]): Member {
     const m = this.getMember(memberId);
@@ -2192,6 +2416,76 @@ ${statusText}
     this.saveToLocalStorage();
     this.notify();
     this.addLog('Anthony (Admin)', 'Réinitialisation des 5 modules et quiz officiels effectuée', 'system');
+  }
+
+  // --- FAQ Management ---
+  public getFaqItems(status?: FaqStatus): FaqItem[] {
+    if (status) {
+      return this.faqItems.filter((f) => f.status === status);
+    }
+    return [...this.faqItems];
+  }
+
+  public getFaqItem(id: string): FaqItem | undefined {
+    return this.faqItems.find((f) => f.id === id);
+  }
+
+  public saveFaqItems(): void {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pawako_faq_items', JSON.stringify(this.faqItems));
+      } catch (e) {}
+    }
+    this.notify();
+  }
+
+  public addFaqItem(item: Omit<FaqItem, 'id' | 'suggestedAt'>): FaqItem {
+    const newItem: FaqItem = {
+      ...item,
+      id: `faq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      suggestedAt: this.getFormattedNow(),
+    };
+    this.faqItems.unshift(newItem);
+    this.saveFaqItems();
+    return newItem;
+  }
+
+  public updateFaqItem(id: string, updates: Partial<FaqItem>): FaqItem | null {
+    const idx = this.faqItems.findIndex((f) => f.id === id);
+    if (idx === -1) return null;
+    this.faqItems[idx] = { ...this.faqItems[idx], ...updates };
+    this.saveFaqItems();
+    return this.faqItems[idx];
+  }
+
+  public approveFaqItem(id: string, staffName: string): FaqItem | null {
+    const item = this.getFaqItem(id);
+    if (!item) return null;
+    item.status = 'approuvee';
+    item.reviewedAt = this.getFormattedNow();
+    item.reviewedBy = staffName;
+    this.saveFaqItems();
+    this.addLog(staffName, `FAQ Approuvée : "${item.rephrasedQuestion}"`, 'system');
+    return item;
+  }
+
+  public rejectFaqItem(id: string, staffName: string): FaqItem | null {
+    const item = this.getFaqItem(id);
+    if (!item) return null;
+    item.status = 'rejetee';
+    item.reviewedAt = this.getFormattedNow();
+    item.reviewedBy = staffName;
+    this.saveFaqItems();
+    this.addLog(staffName, `FAQ Rejetée : "${item.rephrasedQuestion}"`, 'system');
+    return item;
+  }
+
+  public deleteFaqItem(id: string): boolean {
+    const idx = this.faqItems.findIndex((f) => f.id === id);
+    if (idx === -1) return false;
+    this.faqItems.splice(idx, 1);
+    this.saveFaqItems();
+    return true;
   }
 
   public resetAllData(): void {

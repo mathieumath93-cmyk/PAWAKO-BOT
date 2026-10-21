@@ -48,11 +48,13 @@ export type CandidateState =
   | 'quiz_disponible'
   | 'cooldown_actif'
   | 'bloque_quiz_3_echecs'
+  | 'refus_candidature_5_echecs'
   | 'simulation'
   | 'simulation_validee'
   | 'formation_outils'
   | 'formation_terminee'
-  | 'expulse_inactivite';
+  | 'expulse_inactivite'
+  | 'out';
 
 export interface QuizQuestion {
   id: string;
@@ -223,6 +225,20 @@ export interface Member {
   lastFollowupDate?: string; // "YYYY-MM-DD" of last morning followup
   lastVoiceFollowupSentAt?: string;
   notes?: string;
+  // Privacy & Consent Agreement (v1.0)
+  privacyAccepted?: boolean;
+  privacyAcceptedAt?: string;
+  privacyAcceptedVersion?: string;
+  privacyAcceptedDiscordId?: string;
+  // Inactivity & Extension Tracking
+  inactivityExtensionUntilTimestamp?: number | null;
+  inactivityExtensionReason?: string;
+  inactivityExtensionGrantedBy?: string;
+  cooldownAbuseSanctioned?: boolean;
+  simulationStartedAt?: string;
+  simulationEndedAt?: string;
+  toolsFormationStartedAt?: string;
+  toolsFormationEndedAt?: string;
 }
 
 export interface TicketMessage {
@@ -703,4 +719,25 @@ export interface GamificationStats {
   totalCandidates: number;
   productionReadyCount: number;
 }
+
+export type FaqStatus = 'proposee' | 'approuvee' | 'rejetee';
+
+export interface FaqItem {
+  id: string;
+  category: string; // e.g. "Règlement & Quiz", "Simulations", "Formation Outils", "Horaires & Organisation", "Technique"
+  rawQuestionsCount: number; // occurrences
+  sampleRawQuestions: string[]; // short anonymized snippets
+  rephrasedQuestion: string; // concise reformulated question
+  answer: string; // concise answer based on official rules & courses
+  sources: string[]; // e.g. ["Module 1", "Règlement du serveur"]
+  confidence: 'elevee' | 'moyenne' | 'incertaine_a_verifier';
+  conflictNote?: string; // if conflicting or ambiguous
+  status: FaqStatus;
+  suggestedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string; // staff username
+  discordMessageId?: string; // Discord message ID if published
+  publishedAt?: string;
+}
+
 

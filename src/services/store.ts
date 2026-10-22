@@ -25,6 +25,11 @@ import {
 import { discordService } from './discordService';
 import { onboardingService } from './onboardingService';
 import { firebaseSyncService } from './firebaseSyncService';
+import {
+  getNextToolsFormationTimestamp,
+  getToolsFormationScheduleInfo,
+  adjustScheduledAppointmentsForNewSchedule,
+} from './scheduleConfig';
 
 const defaultBranding: BrandingSettings = {
   trainingName: 'PAWAKO FORMATION 🤖',
@@ -706,7 +711,7 @@ export const defaultFaqItems: FaqItem[] = [
       'Y a-t-il des cours le week-end ?'
     ],
     rephrasedQuestion: 'Quels sont les horaires officiels des sessions de formation ?',
-    answer: '• Formation Outils : du lundi au vendredi, de 10h00 à 14h00 HF.\n• Simulations : du lundi au vendredi, de 14h00 à 18h00 HF.\n• Aucune session régulière le samedi et le dimanche. Ces horaires restent fixes sauf annonce officielle du staff.',
+    answer: '• Formation Outils : du lundi au vendredi, de 09h00 à 13h00 HF (à compter du 26/10/2026 ; 10h00–14h00 pour les sessions antérieures).\n• Simulations : du lundi au vendredi, de 13h00 à 17h00 HF (à compter du 26/10/2026 ; 14h00–18h00 pour les sessions antérieures).\n• Aucune session le samedi et le dimanche. Ces horaires restent fixes sauf annonce officielle du staff.',
     sources: ['Horaires Officiels PAWAKO'],
     confidence: 'elevee',
     status: 'approuvee',
@@ -842,6 +847,7 @@ class StoreService {
       if (storedMembers) {
         const parsed = JSON.parse(storedMembers);
         this.members = Array.isArray(parsed) ? parsed : [];
+        adjustScheduledAppointmentsForNewSchedule(this.members);
       } else {
         this.members = [];
       }
@@ -960,6 +966,7 @@ class StoreService {
 
   public setMembers(members: Member[]): void {
     if (Array.isArray(members)) {
+      adjustScheduledAppointmentsForNewSchedule(members);
       this.members = members;
       this.saveMembers();
     }
@@ -1992,35 +1999,25 @@ ${statusText}
   }
 
   /**
-   * Validate simulation step for a candidate and schedule 10h00 HF Tools Formation
+   * Validate simulation step for a candidate and schedule Tools Formation (09h00 HF dès le 26/10, 10h00 avant)
    */
   public validateCandidateSimulation(memberId: string, adminName: string = 'Staff'): Member {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Membre non trouvé');
 
-    const now = new Date();
-    const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
-    const parisDate = new Date(parisString);
-
-    const targetParis = new Date(parisDate);
-    targetParis.setHours(10, 0, 0, 0);
-
-    if (parisDate.getTime() >= targetParis.getTime()) {
-      targetParis.setDate(targetParis.getDate() + 1);
-    }
-
-    const diffMs = targetParis.getTime() - parisDate.getTime();
-    const scheduledTs = now.getTime() + diffMs;
+    const scheduledTs = getNextToolsFormationTimestamp();
+    const info = getToolsFormationScheduleInfo(scheduledTs);
 
     member.candidateState = 'formation_outils';
     member.simulationValidatedAt = new Date().toLocaleString('fr-FR');
     member.toolsFormationScheduledTimestamp = scheduledTs;
     member.toolsFormationReminderSent = false;
+    member.toolsFormationUpcomingReminderSent = false;
 
     this.saveMembers();
     this.addLog(
       adminName,
-      `🏆 [VALIDATION_SIMULATION] Validation de la simulation pour ${member.username}. Formation Outils programmée pour 10h00 HF.`,
+      `🏆 [VALIDATION_SIMULATION] Validation de la simulation pour ${member.username}. Formation Outils programmée pour ${info.startHourStr} HF.`,
       'member',
       member.username
     );

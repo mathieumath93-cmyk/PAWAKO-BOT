@@ -24,8 +24,9 @@ Bienvenue au sein de l'académie de formation PAWAKO. En rejoignant ce parcours,
 6️⃣ **Confidentialité & Directives Staff** :
 • Les candidats doivent impérativement respecter la confidentialité des supports et appliquer les instructions du Staff.
 7️⃣ **Horaires Officiels** :
-• Formation Outils : Lundi au Vendredi, de 10h à 14h HF.
-• Simulations : Lundi au Vendredi, de 14h à 18h HF (aucun créneau régulier le week-end).`;
+• Formation Outils : Lundi au Vendredi, de 09h00 à 13h00 HF (à compter du 26/10/2026 ; 10h00–14h00 pour les sessions antérieures).
+• Simulations : Lundi au Vendredi, de 13h00 à 17h00 HF (à compter du 26/10/2026 ; 14h00–18h00 pour les sessions antérieures).
+• Aucune session le samedi et le dimanche.`;
 
 const defaultStepConfigs: ModuleStepConfig[] = [];
 

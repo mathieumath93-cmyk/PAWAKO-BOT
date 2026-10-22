@@ -28,6 +28,15 @@ import { QuizQuestion, Member, Quiz, MemberBadge, MemberProgress } from '../type
 import { voiceRadioService, RADIO_STATIONS, RadioStation } from '../services/voiceRadioService';
 import { resolveActionMessage } from '../config/discordActionMessages';
 import {
+  isNewScheduleDate,
+  getToolsFormationScheduleInfo,
+  getSimulationScheduleInfo,
+  getSimulationScheduleDetails,
+  getNextToolsFormationTimestamp,
+  parseFrenchDateTimeInputWithContext,
+  adjustScheduledAppointmentsForNewSchedule,
+} from '../services/scheduleConfig';
+import {
   callOpenRouterAI,
   getSimulationPrompt,
   createRandomFanProfile,
@@ -109,165 +118,18 @@ function formatMemberRolesDisplay(roles: string[] = []): string {
  * If current time in Paris is < 14h00 on Mon-Sat, returns 14h00 today.
  * Otherwise advances to the next valid day (Mon-Sat) at 14h00.
  */
-/**
- * Calculates epoch timestamp and schedule details for next 14h00 HF (Europe/Paris timezone).
- * Allowed days: Monday to Friday (Du lundi au vendredi). Saturday (6) & Sunday (0) are excluded (aucun créneau régulier le week-end)!
- * - If current time in Paris is < 14h00 on Mon-Fri, returns 14h00 today.
- * - If current time in Paris is >= 14h00 on Mon-Fri, moves to next open weekday at 14h00.
- * - Skips weekends (Saturday & Sunday) to Monday at 14h00.
- */
-export function getSimulationScheduleDetails(): { timestamp: number; isToday: boolean; formattedDate: string } {
-  const now = new Date();
-  const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
-  const parisDate = new Date(parisString);
-
-  const targetParis = new Date(parisDate);
-  targetParis.setHours(14, 0, 0, 0);
-
-  const currentDay = parisDate.getDay();
-  // Is it valid for today? Only if Monday (1) through Friday (5) and before 14:00
-  const isToday = currentDay !== 0 && currentDay !== 6 && parisDate.getTime() < targetParis.getTime();
-
-  if (!isToday) {
-    targetParis.setDate(targetParis.getDate() + 1);
-    while (targetParis.getDay() === 0 || targetParis.getDay() === 6) { // Weekends (Saturday & Sunday) skipped
-      targetParis.setDate(targetParis.getDate() + 1);
-    }
-  }
-
-  const diffMs = targetParis.getTime() - parisDate.getTime();
-  const timestamp = now.getTime() + diffMs;
-
-  const formattedDate = targetParis.toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-
-  return {
-    timestamp,
-    isToday,
-    formattedDate,
-  };
-}
+export { getSimulationScheduleDetails };
 
 function getNext14hParisTimestamp(): number {
   return getSimulationScheduleDetails().timestamp;
 }
 
-/**
- * Calculates epoch timestamp for next 10h00 HF (Europe/Paris timezone).
- * Allowed days: Monday to Friday (Du lundi au vendredi). Saturday (6) & Sunday (0) are excluded!
- * If current time in Paris is < 10h00 on Mon-Fri, returns 10h00 today.
- * Otherwise advances to the next valid weekday (Mon-Fri) at 10h00.
- */
 function getNext10hParisTimestamp(): number {
-  const now = new Date();
-  const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
-  const parisDate = new Date(parisString);
-
-  const targetParis = new Date(parisDate);
-  targetParis.setHours(10, 0, 0, 0);
-
-  const currentDay = parisDate.getDay();
-  // If today is Saturday/Sunday or past 10:00, move to tomorrow
-  if (currentDay === 0 || currentDay === 6 || parisDate.getTime() >= targetParis.getTime()) {
-    targetParis.setDate(targetParis.getDate() + 1);
-  }
-
-  // Keep advancing until day is Monday (1) through Friday (5)
-  while (targetParis.getDay() === 0 || targetParis.getDay() === 6) {
-    targetParis.setDate(targetParis.getDate() + 1);
-  }
-
-  const diffMs = targetParis.getTime() - parisDate.getTime();
-  return now.getTime() + diffMs;
+  return getNextToolsFormationTimestamp();
 }
 
-/**
- * Parses a French date/time string into an epoch timestamp in Europe/Paris timezone.
- * Supports: "Demain 14:00", "Aujourd'hui 14:00", "30/08/2026 14:00", "30/08 14h", "14h00", etc.
- */
 function parseFrenchDateTimeInput(inputStr: string, defaultHour: number = 14): number | null {
-  if (!inputStr || !inputStr.trim()) return null;
-  const raw = inputStr.trim().toLowerCase();
-
-  const now = new Date();
-  const parisString = now.toLocaleString('en-US', { timeZone: 'Europe/Paris' });
-  const pDate = new Date(parisString);
-
-  let targetYear = pDate.getFullYear();
-  let targetMonth = pDate.getMonth();
-  let targetDay = pDate.getDate();
-  let targetHour = defaultHour;
-  let targetMinute = 0;
-
-  let matchedDate = false;
-
-  if (raw.includes('demain')) {
-    const nextDay = new Date(pDate);
-    nextDay.setDate(nextDay.getDate() + 1);
-    targetYear = nextDay.getFullYear();
-    targetMonth = nextDay.getMonth();
-    targetDay = nextDay.getDate();
-    matchedDate = true;
-  } else if (raw.includes("aujourd'hui") || raw.includes("aujourdhui") || raw.includes("ce jour")) {
-    targetYear = pDate.getFullYear();
-    targetMonth = pDate.getMonth();
-    targetDay = pDate.getDate();
-    matchedDate = true;
-  }
-
-  const dateMatch = raw.match(/(\d{1,2})[\/\-\.](?:(\d{1,2})[\/\-\.])?(\d{2,4})?/);
-  if (dateMatch) {
-    const isoMatch = raw.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-    if (isoMatch) {
-      targetYear = parseInt(isoMatch[1], 10);
-      targetMonth = parseInt(isoMatch[2], 10) - 1;
-      targetDay = parseInt(isoMatch[3], 10);
-      matchedDate = true;
-    } else {
-      const day = parseInt(dateMatch[1], 10);
-      const monthStr = dateMatch[2];
-      const yearStr = dateMatch[3];
-
-      if (day >= 1 && day <= 31) {
-        targetDay = day;
-        if (monthStr) {
-          targetMonth = parseInt(monthStr, 10) - 1;
-        }
-        if (yearStr) {
-          targetYear = yearStr.length === 2 ? 2000 + parseInt(yearStr, 10) : parseInt(yearStr, 10);
-        }
-        matchedDate = true;
-      }
-    }
-  }
-
-  const timeMatch = raw.match(/(\d{1,2})(?:[h:](\d{1,2}))?/);
-  if (timeMatch) {
-    const h = parseInt(timeMatch[1], 10);
-    const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
-    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      targetHour = h;
-      targetMinute = m;
-    }
-  }
-
-  if (!matchedDate) {
-    const checkToday = new Date(pDate);
-    checkToday.setHours(targetHour, targetMinute, 0, 0);
-    if (pDate.getTime() >= checkToday.getTime()) {
-      checkToday.setDate(checkToday.getDate() + 1);
-    }
-    targetYear = checkToday.getFullYear();
-    targetMonth = checkToday.getMonth();
-    targetDay = checkToday.getDate();
-  }
-
-  const targetDateParis = new Date(targetYear, targetMonth, targetDay, targetHour, targetMinute, 0, 0);
-  const diffMs = targetDateParis.getTime() - pDate.getTime();
-  return now.getTime() + diffMs;
+  return parseFrenchDateTimeInputWithContext(inputStr, defaultHour <= 10);
 }
 
 async function syncMemberRolesOnGuild(guild: any, discordUserId: string, roleIdentifiers: string[]) {
@@ -549,6 +411,12 @@ export class PawakoBotRunner {
         // Sync Firestore data on bot ready
         firebaseSyncService.revalidate().catch((err) => {
           console.warn('[Pawako Bot Sync Error on Ready]', err?.message || err);
+        }).finally(() => {
+          const adj = adjustScheduledAppointmentsForNewSchedule(store.getMembers());
+          if (adj.updatedCount > 0) {
+            store.saveMembers();
+            store.addLog('System Bot', `📅 Mise à jour automatique des créneaux (26/10+) : ${adj.updatedCount} rendez-vous ajustés vers 09h00/13h00 HF sans notification en double.`, 'system');
+          }
         });
 
         // Auto-sync candidates who completed modules on server start
@@ -722,18 +590,22 @@ export class PawakoBotRunner {
               `Voici les horaires officiels d'encadrement en vigueur sur PAWAKO FORMATION :\n\n` +
               `🛠️ **1. FORMATION OUTILS (Google Meet / Infloww) :**\n` +
               `• **Du Lundi au Vendredi**\n` +
-              `• **De 10h00 à 14h00 Heure Française (HF)**\n` +
+              `• **De 09h00 à 13h00 Heure Française (HF)** *(à compter du Lundi 26/10/2026)*\n` +
+              `• *(Créneau de 10h00 à 14h00 HF pour les sessions antérieures au 26/10)*\n` +
               `• Dédiée à la prise en main des outils professionnels, configuration des raccourcis et flux de travail.\n\n` +
               `🎭 **2. ÉPREUVES DE SIMULATION CHATTING :**\n` +
               `• **Du Lundi au Vendredi**\n` +
-              `• **De 14h00 à 18h00 Heure Française (HF)**\n` +
+              `• **De 13h00 à 17h00 Heure Française (HF)** *(à compter du Lundi 26/10/2026)*\n` +
+              `• *(Créneau de 14h00 à 18h00 HF pour les sessions antérieures au 26/10)*\n` +
               `• Sessions pratiques en situation réelle avec analyse pédagogique immédiate du coach.\n\n` +
               `🛑 **3. WEEK-END (Samedi & Dimanche) :**\n` +
-              `• **Aucune session régulière** n'a lieu le samedi et le dimanche.\n` +
+              `• **Aucune session** n'a lieu le samedi et le dimanche.\n` +
               `• Ces créneaux sont réservés au repos et aux révisions personnelles.\n\n` +
-              `👥 **4. ENCADREMENT ET SUIVI PAR L'ÉQUIPE :**\n` +
+              `⚡ **4. APPLICATION DES CONVOCATIONS :**\n` +
+              `• Dès le **Vendredi 23/10/2026**, toute convocation générée pour le 26/10 et les jours suivants est automatiquement calée sur **09h00 HF** (outils) et **13h00 HF** (simulations).\n\n` +
+              `👥 **5. ENCADREMENT ET SUIVI PAR L'ÉQUIPE :**\n` +
               `• Trois membres du staff (Anthony, Mahsa, Mathieu et formateurs désignés) coordonnent les sessions et le suivi des candidats.\n` +
-              `• **Relais continu transparent :** Un formateur autorisé peut reprendre un candidat sans jamais réinitialiser sa progression ni créer de doublon.\n\n` +
+              `• **Relais continu transparent :** Reprise fluide sans jamais réinitialiser la progression ni créer de doublon.\n\n` +
               `📌 *Ces horaires restent fixes sauf annonce officielle explicite de la direction.*`
             )
             .setColor(0x06b6d4)
@@ -1467,12 +1339,13 @@ export class PawakoBotRunner {
 
           await this.validateSimulationAndTriggerToolsFormation(targetMember, message.author.id);
 
+          const toolsHourStr = isNewScheduleDate(targetMember.toolsFormationScheduledTimestamp || Date.now()) ? '09h00' : '10h00';
           const simuLogEmbed = new EmbedBuilder()
             .setTitle('🏆 LOG STAFF — VALIDATION SIMULATION')
             .setColor(0x3b82f6)
             .setDescription(
               `🏆 **Simulation validée par <@${message.author.id}> pour <@${targetMember.discordId || targetMember.id.replace('mem-', '')}> !**\n\n` +
-              `Le candidat a été validé et convoqué pour la Formation Outils à 10h00 HF.`
+              `Le candidat a été validé et convoqué pour la Formation Outils à ${toolsHourStr} HF.`
             )
             .setFooter({ text: 'PAWAKO FORMATION • Validation Staff' })
             .setTimestamp();
@@ -2668,13 +2541,13 @@ export class PawakoBotRunner {
 
           const modal = new ModalBuilder()
             .setCustomId(`modal_reprogram_simu_${member ? member.id : targetId}`)
-            .setTitle("📅 Reprogrammer la Simulation (14h00)");
+            .setTitle("📅 Reprogrammer la Simulation");
 
           const dateInput = new TextInputBuilder()
             .setCustomId('new_date_str')
-            .setLabel('Date & Heure (ex: Demain 14:00 ou 30/08 14:00)')
+            .setLabel('Date & Heure (ex: 26/10 13:00 ou Demain 13h)')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ex: Demain 14:00 ou 30/08/2026 14:00')
+            .setPlaceholder('Ex: Demain 13:00 ou 26/10/2026 13:00')
             .setRequired(true);
 
           modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(dateInput));
@@ -2699,9 +2572,9 @@ export class PawakoBotRunner {
 
           const dateInput = new TextInputBuilder()
             .setCustomId('new_date_str')
-            .setLabel('Date & Heure (ex: Demain 10:00 ou 30/08 10:00)')
+            .setLabel('Date & Heure (ex: 26/10 09:00 ou Demain 09h)')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ex: Demain 10:00 ou 30/08/2026 10:00')
+            .setPlaceholder('Ex: Demain 09:00 ou 26/10/2026 09:00')
             .setRequired(true);
 
           modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(dateInput));
@@ -3628,8 +3501,9 @@ export class PawakoBotRunner {
 
             await this.validateSimulationAndTriggerToolsFormation(member, user.id);
 
+            const toolsHourStr = isNewScheduleDate(member.toolsFormationScheduledTimestamp || Date.now()) ? '09h00' : '10h00';
             await interaction.editReply({
-              content: `🏆 **Simulation validée avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe candidat a été convoqué pour la Formation Outils à 10h00 HF, et la notification a été transmise au Staff.`
+              content: `🏆 **Simulation validée avec succès pour <@${member.discordId || member.id.replace('mem-', '')}> par <@${user.id}> !**\nLe candidat a été convoqué pour la Formation Outils à ${toolsHourStr} HF, et la notification a été transmise au Staff.`
             });
             return;
           }
@@ -4372,12 +4246,14 @@ export class PawakoBotRunner {
       }
 
       if (!existingVoice) {
+        const firstScheduled = scheduledMembers[0]?.toolsFormationScheduledTimestamp;
+        const toolsHour = isNewScheduleDate(firstScheduled || Date.now()) ? '09h00' : '10h00';
         existingVoice = await guild.channels.create({
-          name: '🔊 Formation Outils (10h00 HF)',
+          name: `🔊 Formation Outils (${toolsHour} HF)`,
           type: ChannelType.GuildVoice,
           permissionOverwrites: overwrites,
         });
-        console.log('[PawakoBot] Salon Vocal #Formation Outils créé avec succès.');
+        console.log(`[PawakoBot] Salon Vocal #Formation Outils (${toolsHour} HF) créé avec succès.`);
       } else {
         for (const ow of overwrites) {
           await existingVoice.permissionOverwrites.edit(ow.id, ow).catch(() => {});
@@ -6345,7 +6221,7 @@ export class PawakoBotRunner {
     const member = store.getMember(memberInput.id) || memberInput;
     if (!member) return false;
 
-    const { timestamp, isToday, formattedDate } = getSimulationScheduleDetails();
+    const { timestamp, isToday, formattedDate, hourStr } = getSimulationScheduleDetails();
 
     member.candidateState = 'simulation';
     member.simulationScheduledTimestamp = timestamp;
@@ -6354,10 +6230,11 @@ export class PawakoBotRunner {
     store.saveMembers();
     firebaseSyncService.saveMember(member).catch(() => {});
 
+    const simHourStr = hourStr || (isNewScheduleDate(timestamp) ? '13h00' : '14h00');
     const discordUserId = member.discordId || member.id.replace(/^mem-/, '');
     const timingBadge = isToday
-      ? "📅 **AUJOURD'HUI à 14h00 HF**"
-      : `📅 **DEMAIN (${formattedDate}) à 14h00 HF**`;
+      ? `📅 **AUJOURD'HUI à ${simHourStr} HF**`
+      : `📅 **PROCHAINE SESSION (${formattedDate}) à ${simHourStr} HF**`;
 
     const isAiActive = aiKnowledgeService.isSimulationEnabled();
     const resolved = resolveActionMessage('schedule_simulation_14h', member, { timestamp });
@@ -6407,7 +6284,7 @@ export class PawakoBotRunner {
               .setStyle(ButtonStyle.Secondary)
           );
           await staffChan.send({
-            content: `📅 **[CONVOCATION SIMULATION 14H00]** Le candidat <@${discordUserId}> (**${member.username}**) a terminé ses modules. RDV fixé pour ${timingBadge} dans ${chanLink} !`,
+            content: `📅 **[CONVOCATION SIMULATION ${simHourStr.toUpperCase()} HF]** Le candidat <@${discordUserId}> (**${member.username}**) a terminé ses modules. RDV fixé pour ${timingBadge} dans ${chanLink} !`,
             components: [simStaffRow],
           }).catch(() => {});
         }
@@ -6637,8 +6514,10 @@ export class PawakoBotRunner {
     member.cooldownUntilTimestamp = null;
     member.currentQuizAvailableAtTimestamp = null;
 
-    const toolsScheduledTs = getNext10hParisTimestamp();
+    const toolsScheduledTs = getNextToolsFormationTimestamp();
     const tsSec = Math.floor(toolsScheduledTs / 1000);
+    const toolsInfo = getToolsFormationScheduleInfo(toolsScheduledTs);
+    const toolsHourStr = toolsInfo.startHourStr;
 
     member.candidateState = 'formation_outils';
     member.simulationValidatedAt = new Date().toLocaleString('fr-FR');
@@ -6652,12 +6531,12 @@ export class PawakoBotRunner {
     const cfg = onboardingService.getConfig();
     const meetUrl = cfg.toolsFormationMeetUrl || 'https://meet.google.com/pawako-tools-formation';
 
-    // List all candidates scheduled for this same 10h00 HF timestamp
+    // List all candidates scheduled for this same timestamp
     const scheduledMembers = store.getMembers().filter(
       (m) => m.toolsFormationScheduledTimestamp === toolsScheduledTs && m.isActive !== false
     );
 
-    // Get or Create Private Voice Channel for 10h00 HF Formation Outils
+    // Get or Create Private Voice Channel for Formation Outils
     let voiceChan: any = null;
     if (this.client) {
       const guildId = cfg.guildId || this.client.guilds.cache.first()?.id;
@@ -6717,21 +6596,21 @@ export class PawakoBotRunner {
             const mathieuMention = cfg.mathieuDiscordId ? `<@${cfg.mathieuDiscordId}>` : '@Mathieu';
 
             const staffAlertEmbed = new EmbedBuilder()
-              .setTitle('🔔 SIMULATION VALIDÉE ➡️ FORMATION OUTILS (10h00 HF)')
+              .setTitle(`🔔 SIMULATION VALIDÉE ➡️ FORMATION OUTILS (${toolsHourStr} HF)`)
               .setDescription(
                 `📢 **Notification pour ${mahsaMention} et ${mathieuMention}**\n\n` +
                 `Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**) a été validé${staffUserId ? ` par <@${staffUserId}>` : ''} pour la **Formation Outils** !\n\n` +
-                `📅 **Session 10h00 HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
+                `📅 **Session ${toolsHourStr} HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
                 `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n` +
                 `🔗 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
-                `📋 **Liste des candidats inscrits à cette session 10h00 HF :**\n${scheduledListStr}`
+                `📋 **Liste des candidats inscrits à cette session ${toolsHourStr} HF :**\n${scheduledListStr}`
               )
               .setColor(0x3b82f6)
-              .setFooter({ text: 'PAWAKO FORMATION • Programme Formation Outils 10h00 HF' })
+              .setFooter({ text: `PAWAKO FORMATION • Programme Formation Outils ${toolsHourStr} HF` })
               .setTimestamp();
 
             await staffChan.send({
-              content: `🔔 **[FORMATION OUTILS 10H00 HF]** ${mahsaMention} ${mathieuMention}`,
+              content: `🔔 **[FORMATION OUTILS ${toolsHourStr.toUpperCase()} HF]** ${mahsaMention} ${mathieuMention}`,
               embeds: [staffAlertEmbed],
               components: [staffToolsActionRow],
             }).catch((e) => console.warn('[Staff Alert Simu Validated Error]', e));
@@ -6742,11 +6621,11 @@ export class PawakoBotRunner {
 
     // 3. Direct Message (MP) to Mahsa & Mathieu
     const mpEmbed = new EmbedBuilder()
-      .setTitle('🔔 SIMULATION VALIDÉE — FORMATION OUTILS (10h00 HF)')
+      .setTitle(`🔔 SIMULATION VALIDÉE — FORMATION OUTILS (${toolsHourStr} HF)`)
       .setDescription(
         `🏆 **Notification Privée Staff**\n\n` +
         `Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (**${member.username}**) a été validé${staffUserId ? ` par <@${staffUserId}>` : ''} pour la **Formation Outils** !\n\n` +
-        `📅 **Session 10h00 HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
+        `📅 **Session ${toolsHourStr} HF :** <t:${tsSec}:F> (<t:${tsSec}:R>)\n` +
         `🔊 **Salon Vocal Discord :** ${voiceLinkStr}\n` +
         `📍 **Salon privé candidat :** ${member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon privé'}\n\n` +
         `📋 **Candidats inscrits pour cette session :**\n${scheduledListStr}\n\n` +
@@ -6761,7 +6640,7 @@ export class PawakoBotRunner {
     // 4. Log event
     store.addLog(
       staffUserId ? `Staff (<@${staffUserId}>)` : 'System',
-      `Validation de la simulation pour ${member.username}. Convocation Formation Outils 10h00 HF envoyée.`,
+      `Validation de la simulation pour ${member.username}. Convocation Formation Outils ${toolsHourStr} HF envoyée.`,
       'member',
       member.username
     );

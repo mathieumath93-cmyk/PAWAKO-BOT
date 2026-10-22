@@ -1,4 +1,9 @@
 import { Member } from '../types';
+import {
+  isNewScheduleDate,
+  getToolsFormationScheduleInfo,
+  getSimulationScheduleInfo,
+} from '../services/scheduleConfig';
 
 export type CandidateRoleProfile =
   | 'onboarding_new'
@@ -596,8 +601,17 @@ export function resolveActionMessage(
   const meetUrl = context.meetUrl || 'https://meet.google.com/pawako-formation';
   const dynamicNote = context.dynamicNote || 'Continue tes efforts pour franchir les prochaines étapes de ta formation.';
 
+  const isNew = isNewScheduleDate(timestamp);
+  const simInfo = getSimulationScheduleInfo(timestamp);
+  const toolsInfo = getToolsFormationScheduleInfo(timestamp);
+
+  const simHourStr = simInfo.startHourStr;
+  const simRangeStr = simInfo.rangeStr;
+  const toolsHourStr = toolsInfo.startHourStr;
+  const toolsRangeStr = toolsInfo.rangeStr;
+
   const replacePlaceholders = (str: string): string => {
-    return str
+    let out = str
       .replace(/\{discordUserId\}/g, discordUserId)
       .replace(/\{username\}/g, member?.username || 'Candidat')
       .replace(/\{timestampSec\}/g, String(timestampSec))
@@ -606,13 +620,30 @@ export function resolveActionMessage(
       .replace(/\{reason\}/g, reason)
       .replace(/\{voiceLink\}/g, voiceLink)
       .replace(/\{meetUrl\}/g, meetUrl)
-      .replace(/\{dynamicNote\}/g, dynamicNote);
+      .replace(/\{dynamicNote\}/g, dynamicNote)
+      .replace(/\{simHour\}/g, simHourStr)
+      .replace(/\{simRange\}/g, simRangeStr)
+      .replace(/\{toolsHour\}/g, toolsHourStr)
+      .replace(/\{toolsRange\}/g, toolsRangeStr);
+
+    if (isNew) {
+      // Automatically adapt text from 14h00/10h00 to 13h00/09h00 for sessions on/after 26/10/2026
+      out = out
+        .replace(/14h00 \(Heure Française - HF\)/g, `${simHourStr} (Heure Française - HF)`)
+        .replace(/14h00 HF/g, `${simHourStr} HF`)
+        .replace(/14h00/g, simHourStr)
+        .replace(/10h00 \(Heure Française - HF\)/g, `${toolsHourStr} (Heure Française - HF)`)
+        .replace(/10h00 HF/g, `${toolsHourStr} HF`)
+        .replace(/10h00/g, toolsHourStr);
+    }
+
+    return out;
   };
 
   return {
     action,
     roleProfile: profile,
-    label: template.label,
+    label: replacePlaceholders(template.label),
     title: replacePlaceholders(template.title),
     content: replacePlaceholders(template.content),
     description: replacePlaceholders(template.description),

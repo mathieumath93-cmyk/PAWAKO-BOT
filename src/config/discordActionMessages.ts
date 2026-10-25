@@ -124,11 +124,11 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         'Ton profil est désormais qualifié pour l\'épreuve pratique finale : le **Test de Simulation en direct**.\n\n' +
         '📅 **Date & Heure :** <t:{timestampSec}:F> (<t:{timestampSec}:R>) — **14h00 (Heure Française - HF)**\n' +
         '📍 **Lieu :** Ce salon privé avec l\'équipe d\'encadrement Staff.\n\n' +
-        '🔔 *Consignes : Assure-toi d\'avoir un micro fonctionnel et d\'être connecté(e) 5 minutes à l\'avance.* 🚀',
+        '🔔 *Consignes : Le test de simulation se déroule intégralement à l\'écrit dans ce salon privé (aucun micro ni casque n\'est requis). Sois connecté(e) 5 minutes à l\'avance.* 🚀',
       footer: 'PAWAKO FORMATION • Épreuve Finale de Simulation 14h00 HF',
       color: 0x3b82f6,
       suggestedDmText:
-        'Félicitations pour la validation de tes modules ! Ton test de simulation est programmé pour le {dateFormatted} à 14h00 HF. Sois prêt(e) avec ton micro.',
+        'Félicitations pour la validation de tes modules ! Ton test de simulation est programmé pour le {dateFormatted} (à l\'écrit dans ton salon privé, aucun micro requis).',
     },
     intermediate_learner: {
       action: 'schedule_simulation_14h',
@@ -141,12 +141,12 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '📢 Bravo <@{discordUserId}> pour ta progression rapide sur les modules intermédiaires !\n\n' +
         'L\'équipe Staff a validé ton passage accéléré vers le **Test de Simulation** :\n\n' +
         '📅 **Date & Heure :** <t:{timestampSec}:F> (<t:{timestampSec}:R>) — **14h00 (Heure Française - HF)**\n' +
-        '📍 **Lieu :** Ce salon privé d\'évaluation.\n\n' +
+        '📍 **Lieu :** Ce salon privé d\'évaluation (épreuve écrite, pas de micro requis).\n\n' +
         '💡 *Révise bien les cas pratiques avant l\'heure du rendez-vous.* Bon courage ! 🚀',
       footer: 'PAWAKO FORMATION • Parcours Accéléré Staff',
       color: 0x6366f1,
       suggestedDmText:
-        'Bravo pour ta progression rapide ! L\'équipe a planifié ta simulation anticipée pour le {dateFormatted} à 14h00 HF.',
+        'Bravo pour ta progression rapide ! L\'équipe a planifié ta simulation anticipée pour le {dateFormatted} (à l\'écrit dans ton salon).',
     },
     onboarding_new: {
       action: 'schedule_simulation_14h',
@@ -157,13 +157,13 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
       content: '🎯 **[PLANIFICATION OBJECTIF SIMULATION]** <@{discordUserId}>',
       description:
         '📢 Bienvenue <@{discordUserId}> !\n\n' +
-        'Ton parcours de formation intègre un jalon clé : le **Test de Simulation à 14h00 HF**.\n\n' +
+        'Ton parcours de formation intègre un jalon clé : le **Test de Simulation à 14h00 HF** (test écrit dans ton salon privé).\n\n' +
         '📅 **Date prévisionnelle :** <t:{timestampSec}:F> (<t:{timestampSec}:R>)\n\n' +
         '🎯 *Objectif : Termine tes modules et quiz avant cette date pour valider ta convocation finale.* L\'équipe reste disponible pour toute question !',
       footer: 'PAWAKO FORMATION • Accueil & Objectif Parcours',
       color: 0x0ea5e9,
       suggestedDmText:
-        'Bienvenue chez Pawako ! Ta session de simulation cible a été fixée au {dateFormatted} à 14h00 HF. Pense à avancer sur tes cours.',
+        'Bienvenue chez Pawako ! Ta session de simulation cible a été fixée au {dateFormatted}. Pense à avancer sur tes cours.',
     },
     default: {
       action: 'schedule_simulation_14h',
@@ -176,11 +176,11 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '📢 <@{discordUserId}>, **ton rendez-vous pour le Test de Simulation en direct est confirmé !** 🏆\n\n' +
         '📅 **Date & Heure :** <t:{timestampSec}:F> (<t:{timestampSec}:R>) — **14h00 (Heure Française - HF)**\n' +
         '📍 **Lieu :** Ce salon privé avec l\'équipe Staff.\n\n' +
-        '🔔 *Un rappel automatique te sera envoyé à l\'heure du rendez-vous. Sois bien connecté(e) et prêt(e) avec ton micro !* 🚀',
+        '🔔 *Consignes : Le test de simulation s\'effectue à l\'écrit dans ce salon privé (aucun micro ni casque requis). Sois prêt(e) 5 minutes à l\'avance !* 🚀',
       footer: 'PAWAKO FORMATION • Convocation Test Simulation 14h00 HF',
       color: 0x3b82f6,
       suggestedDmText:
-        'Ton rendez-vous pour le Test de Simulation est programmé pour le {dateFormatted} à 14h00 HF.',
+        'Ton rendez-vous pour le Test de Simulation est programmé pour le {dateFormatted} (à l\'écrit, pas de micro requis).',
     },
   },
 
@@ -199,11 +199,13 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '📅 **Prochain RDV :** <t:{timestampSec}:F> (<t:{timestampSec}:R>) — **10h00 (Heure Française - HF)**\n' +
         '🔊 **Salon Vocal Discord :** {voiceLink}\n' +
         '🔗 **Lien Visio Google Meet (secours) :** [Rejoindre la visio]({meetUrl})\n\n' +
-        '💡 *L\'équipe Staff t\'accueillera à 10h00 HF. Prépare ton micro et ton espace de travail !* 🚀',
+        '💻 **Support obligatoire :** La formation aux outils doit obligatoirement s\'effectuer sur **PC / Ordinateur** (tablette et téléphone strictement interdits).\n' +
+        '🎧🎙️ **Matériel requis :** **Casque et microphone fonctionnels** obligatoires pour la session vocale.\n\n' +
+        '🔑 *Note importante : La session porte sur la prise en main opérationnelle. Vos accès et identifiants de travail vous seront transmis après la validation de la formation outils.* 🚀',
       footer: 'PAWAKO FORMATION • Validation Simulation & Session Outils 10h00 HF',
       color: 0x10b981,
       suggestedDmText:
-        'Félicitations ! Tu as validé ton test de simulation avec succès. Prochain RDV : Formation Outils demain à 10h00 HF.',
+        'Félicitations ! Simulation validée. Prochain RDV : Formation Outils sur PC avec casque et micro. (Les accès te seront remis après la session).',
     },
     tools_training: {
       action: 'validate_simulation',
@@ -216,11 +218,12 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '📢 <@{discordUserId}>, ton statut pour la **Formation aux Outils** est validé et actif !\n\n' +
         '📅 **Session fixée à :** <t:{timestampSec}:F> (<t:{timestampSec}:R>) — **10h00 HF**\n' +
         '🔊 **Salon vocal :** {voiceLink}\n\n' +
-        '💡 *Sois ponctuel(le) pour l\'attribution de tes identifiants et accès logiciels.*',
+        '💻 **Prérequis impératifs :** Connexion obligatoire sur **PC / Ordinateur** avec **casque et micro fonctionnels**.\n' +
+        '🔑 *Rappel : L\'attribution de vos accès et identifiants professionnels aura lieu à l\'issue de cette formation.*',
       footer: 'PAWAKO FORMATION • Finalisation Outils & Prise de Poste',
       color: 0x8b5cf6,
       suggestedDmText:
-        'Ta validation de simulation est enregistrée et ta session Formation Outils est confirmée pour le {dateFormatted} à 10h00 HF.',
+        'Validation de simulation enregistrée ! Session Outils confirmée sur PC avec casque et micro pour le {dateFormatted}.',
     },
     default: {
       action: 'validate_simulation',
@@ -235,11 +238,13 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '⏰ **Date & Heure :** <t:{timestampSec}:F> (<t:{timestampSec}:R>) — **10h00 (Heure Française - HF)**\n' +
         '🔊 **Salon Vocal Discord :** {voiceLink}\n' +
         '🔗 **Lien Google Meet (secours) :** [Rejoindre la visio]({meetUrl})\n\n' +
-        '💡 *L\'équipe Staff t\'accueillera à 10h00 HF. Prépare ton micro et sois bien ponctuel(le) !* 🚀',
+        '💻 **Support obligatoire :** Connexion impérative sur **PC / Ordinateur** (smartphone/tablette interdits).\n' +
+        '🎧🎙️ **Matériel requis :** **Casque et micro fonctionnels** obligatoires pour participer à la session.\n' +
+        '🔑 *Attribution des accès : Vos accès logiciels et identifiants de travail vous seront délivrés après validation complète de cette formation outils.* 🚀',
       footer: 'PAWAKO FORMATION • Validation Simulation & Session Outils 10h00 HF',
       color: 0x10b981,
       suggestedDmText:
-        'Félicitations pour la validation de ta simulation ! Ta Formation aux Outils est fixée à 10h00 HF.',
+        'Félicitations pour ta simulation ! Formation aux Outils programmée sur PC avec casque et micro. Accès remis après la formation.',
     },
   },
 
@@ -258,11 +263,11 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '🗓️ **<t:{timestampSec}:F>** (<t:{timestampSec}:R>) — **14h00 (Heure Française - HF)**\n' +
         '*(Date : {dateFormatted})*\n\n' +
         '📍 **Lieu :** Ce salon privé avec l\'équipe Staff.\n\n' +
-        '🔔 *Un rappel automatique te sera envoyé à l\'heure du rendez-vous. Sois bien connecté(e) et prêt(e) avec ton micro !* 🚀',
+        '🔔 *Consignes : Le test se déroule à l\'écrit dans ce salon (aucun micro ni casque requis).* 🚀',
       footer: 'PAWAKO FORMATION • Reprogrammation Convocation Simulation 14h00 HF',
       color: 0x3b82f6,
       suggestedDmText:
-        'Ton rendez-vous pour le test de simulation a été reprogrammé par le staff pour le {dateFormatted} à 14h00 HF.',
+        'Ton rendez-vous pour le test de simulation a été reprogrammé par le staff pour le {dateFormatted} (à l\'écrit, pas de micro requis).',
     },
     intermediate_learner: {
       action: 'reschedule_simulation',
@@ -274,11 +279,11 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
       description:
         '📢 <@{discordUserId}>, afin de te permettre de consolider tes fiches de cours, l\'équipe Staff (**{adminName}**) a décalé ton épreuve de simulation :\n\n' +
         '🗓️ **Nouveau rendez-vous : <t:{timestampSec}:F>** (<t:{timestampSec}:R>)\n\n' +
-        '💡 *Mets à profit ce temps supplémentaire pour revoir les scénarios clients !* Bon courage ! 🚀',
+        '💡 *Mets à profit ce temps supplémentaire pour revoir les scénarios clients (épreuve écrite sans micro) !* Bon courage ! 🚀',
       footer: 'PAWAKO FORMATION • Aménagement & Révisions',
       color: 0x8b5cf6,
       suggestedDmText:
-        'Ton rendez-vous de simulation a été décalé au {dateFormatted} à 14h00 HF pour te donner le temps de bien réviser.',
+        'Ton rendez-vous de simulation a été décalé au {dateFormatted} pour te donner le temps de bien réviser.',
     },
     default: {
       action: 'reschedule_simulation',
@@ -291,11 +296,11 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '📢 <@{discordUserId}>, **ton rendez-vous pour le Test de Simulation a été reprogrammé par le Staff ({adminName}) !**\n\n' +
         '🗓️ **<t:{timestampSec}:F>** (<t:{timestampSec}:R>) — **14h00 (Heure Française - HF)**\n\n' +
         '📍 **Lieu :** Ce salon privé avec l\'équipe Staff.\n' +
-        '🔔 *Sois bien connecté(e) et prêt(e) avec ton micro !* 🚀',
+        '🔔 *Le test se déroule à l\'écrit dans ce salon privé (aucun micro ni casque requis).* 🚀',
       footer: 'PAWAKO FORMATION • Reprogrammation Convocation Simulation',
       color: 0x3b82f6,
       suggestedDmText:
-        'Ton rendez-vous pour le test de simulation a été reprogrammé au {dateFormatted} à 14h00 HF.',
+        'Ton rendez-vous pour le test de simulation a été reprogrammé au {dateFormatted} (à l\'écrit, pas de micro requis).',
     },
   },
 
@@ -313,12 +318,13 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         'L\'équipe d\'encadrement Staff (**{adminName}**) a fixé ton nouveau créneau pour :\n\n' +
         '🗓️ **<t:{timestampSec}:F>** (<t:{timestampSec}:R>) — **10h00 (Heure Française - HF)**\n' +
         '*(Date : {dateFormatted})*\n\n' +
-        '📍 **Lieu :** Salon vocal Discord / lien Google Meet.\n\n' +
-        '🔔 *Un rappel avec les liens vocaux te sera transmis à l\'heure pile du rendez-vous. Sois ponctuel(le) !* 🚀',
+        '📍 **Lieu :** Salon vocal Discord / lien Google Meet.\n' +
+        '💻 **Prérequis :** Connexion impérative sur **PC** avec **casque + micro fonctionnels** (vos accès logiciels sont attribués après la session).\n\n' +
+        '🔔 *Un rappel avec les liens vocaux te sera transmis à l\'heure pile du rendez-vous.* 🚀',
       footer: 'PAWAKO FORMATION • Reprogrammation Formation Outils 10h00 HF',
       color: 0x8b5cf6,
       suggestedDmText:
-        'Ta session Formation Outils a été reprogrammée par le staff pour le {dateFormatted} à 10h00 HF.',
+        'Ta session Formation Outils a été reprogrammée pour le {dateFormatted} (PC, casque et micro requis).',
     },
     default: {
       action: 'reschedule_tools',
@@ -331,11 +337,12 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
         '📢 <@{discordUserId}>, ta session de Formation aux Outils a été reprogrammée par l\'équipe Staff ({adminName}) :\n\n' +
         '🗓️ **<t:{timestampSec}:F>** (<t:{timestampSec}:R>) — **10h00 (Heure Française - HF)**\n\n' +
         '📍 **Lieu :** Salon vocal Discord / Google Meet.\n' +
-        '🔔 *Sois ponctuel(le) avec ton micro actif !* 🚀',
+        '💻 **Prérequis :** PC obligatoire, casque et micro fonctionnels (les accès logiciels sont délivrés après validation de la session outils).\n' +
+        '🔔 *Sois bien ponctuel(le) !* 🚀',
       footer: 'PAWAKO FORMATION • Reprogrammation Formation Outils',
       color: 0x8b5cf6,
       suggestedDmText:
-        'Ta session Formation Outils a été déplacée au {dateFormatted} à 10h00 HF.',
+        'Ta session Formation Outils a été déplacée au {dateFormatted} (PC, casque et micro requis).',
     },
   },
 
@@ -408,78 +415,78 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
     },
   },
 
-  // --- 6. KICK INACTIVITÉ 3 JOURS ---
+  // --- 6. KICK INACTIVITÉ (5 JOURS) ---
   kick_inactivity: {
     onboarding_new: {
       action: 'kick_inactivity',
       roleProfile: 'onboarding_new',
-      label: 'Clôture Onboarding Inactif (3 jours sans début)',
+      label: 'Clôture Onboarding Inactif (5 jours sans début)',
       badge: '🚨 Départ Onboarding',
-      title: '🚨 CLÔTURE DU PARCOURS — INACTIVITÉ EN PHASE D\'ACCUEIL (3 JOURS)',
+      title: '🚨 CLÔTURE DU PARCOURS — INACTIVITÉ EN PHASE D\'ACCUEIL (5 JOURS)',
       content: '🚨 **[AVIS DE CLÔTURE DU PARCOURS — INACTIVITÉ ONBOARDING]** <@{discordUserId}>',
       description:
         '📢 <@{discordUserId}>,\n\n' +
-        'Malgré nos relances, aucune progression n\'a été enregistrée sur tes modules initiaux depuis plus de 3 jours.\n\n' +
+        'Malgré nos relances, aucune progression n\'a été enregistrée sur tes modules initiaux depuis plus de 5 jours.\n\n' +
         '❌ **Clôture du dossier & retrait des accès Discord.**\n\n' +
         '_Motif : {reason}_\n\n' +
         'Si tu souhaites réintégrer une future session lorsque tu seras disponible, contacte l\'administration.',
       footer: 'PAWAKO FORMATION • Clôture Parcours Onboarding',
       color: 0xdc2626,
       suggestedDmText:
-        'Ton parcours a été clôturé en raison d\'une inactivité prolongée lors de l\'onboarding (plus de 3 jours sans action).',
+        'Ton parcours a été clôturé en raison d\'une inactivité prolongée lors de l\'onboarding (plus de 5 jours sans action).',
     },
     intermediate_learner: {
       action: 'kick_inactivity',
       roleProfile: 'intermediate_learner',
-      label: 'Clôture Progression Interrompue (3 jours)',
+      label: 'Clôture Progression Interrompue (5 jours)',
       badge: '🚨 Arrêt Formation',
-      title: '🚨 CLÔTURE DU PARCOURS — INTERRUPTION DE FORMATION (3 JOURS SANS ACTION)',
+      title: '🚨 CLÔTURE DU PARCOURS — INTERRUPTION DE FORMATION (5 JOURS SANS ACTION)',
       content: '🚨 **[AVIS DE CLÔTURE DU PARCOURS]** <@{discordUserId}>',
       description:
         '📢 <@{discordUserId}>,\n\n' +
-        'Ton parcours avait bien débuté mais est resté sans activité depuis plus de 72 heures consécutives.\n\n' +
-        '❌ **Conformément au règlement, ta place en session a été libérée et tes accès clôturés.**\n\n' +
+        'Ton parcours avait bien débuté mais est resté sans activité depuis plus de 5 jours consécutifs.\n\n' +
+        '❌ **Conformément au règlement officiel (Règle 3), ta place en session a été libérée et tes accès clôturés.**\n\n' +
         '_Motif : {reason}_\n\n' +
         'Nous te souhaitons une bonne continuation dans tes projets professionnels.',
       footer: 'PAWAKO FORMATION • Modération & Libération de Place',
       color: 0xdc2626,
       suggestedDmText:
-        'Ton parcours a été clôturé pour inactivité de plus de 3 jours sans avancement. Ta place en session a été libérée.',
+        'Ton parcours a été clôturé pour inactivité de plus de 5 jours sans avancement. Ta place en session a été libérée.',
     },
     simulation_ready: {
       action: 'kick_inactivity',
       roleProfile: 'simulation_ready',
       label: 'Clôture Absence Simulation (Rendez-vous non honoré)',
       badge: '🚨 Absence Simu',
-      title: '🚨 CLÔTURE DU PARCOURS — ABSENCE AU RENDEZ-VOUS DE SIMULATION',
-      content: '🚨 **[AVIS D\'EXCLUSION — RENDEZ-VOUS NON HONORÉ]** <@{discordUserId}>',
+      title: '⏳ CLÔTURE DU PARCOURS — ABSENCE AU RENDEZ-VOUS DE SIMULATION',
+      content: '⏳ **[AVIS D\'EXCLUSION — RENDEZ-VOUS NON HONORÉ]** <@{discordUserId}>',
       description:
         '📢 <@{discordUserId}>,\n\n' +
-        'Tu étais convoqué(e) pour le test de simulation mais aucune réponse ou présence n\'a été constatée après 3 jours.\n\n' +
+        'Tu étais convoqué(e) pour le test de simulation mais aucune réponse ou présence n\'a été constatée après plusieurs relances.\n\n' +
         '❌ **Clôture définitive du cycle de formation.**\n\n' +
         '_Motif : {reason}_',
       footer: 'PAWAKO FORMATION • Absence Évaluation',
       color: 0xdc2626,
       suggestedDmText:
-        'Ton dossier a été clôturé suite à ton absence non justifiée au test de simulation et 3 jours sans contact.',
+        'Ton dossier a été clôturé suite à ton absence non justifiée au test de simulation et un délai dépassé sans contact.',
     },
     default: {
       action: 'kick_inactivity',
       roleProfile: 'default',
-      label: 'Clôture Inactivité Standard (3 jours)',
+      label: 'Clôture Inactivité Standard (5 jours)',
       badge: '🚨 Kick Inactivité',
-      title: '🚨 NOTIFICATION DE DÉPART — EXPULSION POUR INACTIVITÉ (3 JOURS)',
+      title: '🚨 NOTIFICATION DE DÉPART — EXPULSION POUR INACTIVITÉ (5 JOURS)',
       content: '🚨 **[AVIS DE CLÔTURE DU PARCOURS — INACTIVITÉ]** <@{discordUserId}>',
       description:
         '📢 <@{discordUserId}>,\n\n' +
-        'Conformément au règlement officiel de formation Pawako, ton parcours a été clôturé suite à une inactivité de plus de 3 jours sans avancement.\n\n' +
+        'Conformément au règlement officiel de formation Pawako (Règle 3), ton parcours a été clôturé suite à une inactivité de plus de 5 jours sans avancement.\n\n' +
         '❌ **Clôture du parcours & retrait des accès Discord.**\n\n' +
         '_Motif : {reason}_\n\n' +
         'Si tu souhaites réintégrer une future session ultérieurement, contacte un administrateur Pawako.',
       footer: 'PAWAKO FORMATION • Modération & Clôture Parcours',
       color: 0xdc2626,
       suggestedDmText:
-        'Ton parcours a été clôturé suite à une inactivité de plus de 3 jours sans action.',
+        'Ton parcours a été clôturé suite à une inactivité de plus de 5 jours sans action.',
     },
   },
 
@@ -520,18 +527,18 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
     simulation_ready: {
       action: 'direct_message_reminder',
       roleProfile: 'simulation_ready',
-      label: 'Relance Préparation Simulation (Micro & Fiches)',
+      label: 'Relance Préparation Simulation (Fiches & Réflexes)',
       badge: '🏆 Rappel Simu',
       title: '💬 DERNIÈRE LIGNE DROITE — PRÉPARATION AU TEST DE SIMULATION',
       content: '💬 **[RAPPEL CONSEILS — SIMULATION STAFF]** <@{discordUserId}>',
       description:
         '📢 Bonjour <@{discordUserId}> ! Tous tes modules théoriques sont au vert.\n\n' +
-        'Pense à tester ton micro sur Discord et à relire la fiche réflexe avant ton rendez-vous avec le formateur.\n\n' +
+        'Pense à relire la fiche réflexe et les cas pratiques avant ton épreuve écrite de simulation.\n\n' +
         'Tout le staff est derrière toi ! 🚀',
       footer: 'PAWAKO FORMATION • Coaching Simulation',
       color: 0x3b82f6,
       suggestedDmText:
-        'Tous tes modules sont validés ! Pense à bien tester ton micro avant ton test de simulation en direct.',
+        'Tous tes modules sont validés ! Pense à bien réviser avant ton test de simulation à l\'écrit (aucun micro requis).',
     },
     tools_training: {
       action: 'direct_message_reminder',
@@ -542,11 +549,11 @@ export const DISCORD_ACTION_MESSAGES_CONFIG: Record<
       content: '💬 **[RAPPEL CRÉNEAU OUTILS 10H00 HF]** <@{discordUserId}>',
       description:
         '📢 Bonjour <@{discordUserId}> ! Ta simulation est validée et ta session Outils approche.\n\n' +
-        'Vérifie que tu as bien accès au salon vocal Discord pour 10h00 HF pile. À très vite ! 🛠️',
+        'Vérifie que tu es bien connecté(e) sur PC avec casque et micro fonctionnels pour l\'heure du rendez-vous. (Les accès logiciels te seront remis à l\'issue de la session). À très vite ! 🛠️',
       footer: 'PAWAKO FORMATION • Préparation Prise de Poste',
       color: 0x8b5cf6,
       suggestedDmText:
-        'Rappel : Ta session de Formation aux Outils est prévue à 10h00 HF. Sois prêt(e) dans le salon vocal !',
+        'Rappel : Session Formation Outils sur PC avec casque et micro. (Accès remis après la formation).',
     },
     default: {
       action: 'direct_message_reminder',

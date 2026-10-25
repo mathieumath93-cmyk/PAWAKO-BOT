@@ -40,6 +40,13 @@ export interface DiscordChannelConfig {
 
 export type QuestionType = 'multiple_choice' | 'single_choice' | 'true_false' | 'text';
 
+export type KickReasonType =
+  | 'inactivite_formation'
+  | 'simulation_non_confirmee'
+  | 'simulation_manquee'
+  | 'refus_simu_catastrophique'
+  | 'refus_niveau_insuffisant';
+
 export type CandidateState =
   | 'nouveau'
   | 'bienvenue_validee'
@@ -54,6 +61,9 @@ export type CandidateState =
   | 'formation_outils'
   | 'formation_terminee'
   | 'expulse_inactivite'
+  | 'expulse_simulation_non_confirmee'
+  | 'expulse_simulation_manquee'
+  | 'refus_simu_catastrophique'
   | 'out';
 
 export interface QuizQuestion {
@@ -222,6 +232,7 @@ export interface Member {
   inactivityWarningLevel?: 0 | 1 | 2 | 3;
   kickedAt?: string;
   kickedReason?: string;
+  kickReasonType?: KickReasonType;
   lastFollowupDate?: string; // "YYYY-MM-DD" of last morning followup
   lastVoiceFollowupSentAt?: string;
   notes?: string;

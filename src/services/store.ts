@@ -6,6 +6,7 @@ import {
   DiscordRole,
   FaqItem,
   FaqStatus,
+  KickReasonType,
   MaintenanceSetting,
   MaintenanceType,
   Member,
@@ -1666,8 +1667,112 @@ class StoreService {
     return m;
   }
 
+  public kickMember(
+    memberId: string,
+    reasonType: KickReasonType = 'inactivite_formation',
+    customReason?: string,
+    staffName: string = 'Staff'
+  ): Member | null {
+    const m = this.getMember(memberId);
+    if (!m) return null;
+
+    const defaultReasons: Record<KickReasonType, string> = {
+      inactivite_formation: "5 jours consécutifs d'inactivité constatée sans avancement ni validation",
+      simulation_non_confirmee: "Simulation non confirmée — Aucune réponse ni confirmation de présence reçue avant le créneau",
+      simulation_manquee: "Simulation non honorée — Absence constatée au rendez-vous de simulation pratique",
+      refus_simu_catastrophique: "Refus de candidature — Échec éliminatoire lors du test pratique de simulation (niveau catastrophique)",
+      refus_niveau_insuffisant: "Refus de candidature — Niveau insuffisant / Cumul de 5 échecs consécutifs aux évaluations (Règle 3)",
+    };
+
+    const finalReason = customReason?.trim() || defaultReasons[reasonType];
+
+    m.isActive = false;
+    m.kickReasonType = reasonType;
+    m.kickedAt = this.getFormattedNow();
+    m.kickedReason = finalReason;
+    m.inactivityWarningLevel = 3;
+
+    if (reasonType === 'refus_simu_catastrophique') {
+      m.candidateState = 'refus_simu_catastrophique';
+    } else if (reasonType === 'refus_niveau_insuffisant') {
+      m.candidateState = 'refus_candidature_5_echecs';
+    } else if (reasonType === 'simulation_non_confirmee') {
+      m.candidateState = 'expulse_simulation_non_confirmee';
+    } else if (reasonType === 'simulation_manquee') {
+      m.candidateState = 'expulse_simulation_manquee';
+    } else {
+      m.candidateState = 'expulse_inactivite';
+    }
+
+    this.saveMembers();
+    try {
+      const { firebaseSyncService } = require('./firebaseSyncService');
+      if (firebaseSyncService) firebaseSyncService.saveMember(m).catch(() => {});
+    } catch (e) {}
+
+    this.addLog(
+      staffName,
+      `🚨 [KICK_${reasonType.toUpperCase()}] ${m.username} expulsé(e) du serveur par ${staffName}. Motif: ${finalReason}`,
+      'member',
+      m.username
+    );
+
+    return m;
+  }
+
   public kickMemberForInactivity(memberId: string, reason: string = '5 jours d\'inactivité sans action'): Member | null {
-    return this.setMemberOutForInactivity(memberId, reason);
+    return this.kickMember(memberId, 'inactivite_formation', reason);
+  }
+
+  public reactivateMember(
+    memberId: string,
+    staffName: string = 'Staff'
+  ): Member | null {
+    const m = this.getMember(memberId);
+    if (!m) return null;
+
+    m.isActive = true;
+    m.inactivityWarningLevel = 0;
+    m.lastActiveAt = this.getFormattedNow();
+    m.lastActiveAtTimestamp = Date.now();
+    m.kickedAt = undefined;
+    m.kickedReason = undefined;
+    m.kickReasonType = undefined;
+
+    // Restore candidate state based on previous progress
+    const allMods = this.getModules();
+    const validatedCount = Object.values(m.progress || {}).filter((p) => p.status === 'valide').length;
+
+    if (m.toolsFormationValidatedAt) {
+      m.candidateState = 'formation_terminee';
+    } else if (m.toolsFormationScheduledTimestamp) {
+      m.candidateState = 'formation_outils';
+    } else if (m.simulationValidatedAt) {
+      m.candidateState = 'formation_outils';
+    } else if (m.simulationScheduledTimestamp) {
+      m.candidateState = 'simulation';
+    } else if (allMods.length > 0 && validatedCount >= allMods.length) {
+      m.candidateState = 'simulation';
+    } else if (validatedCount > 0) {
+      m.candidateState = 'module_en_cours';
+    } else {
+      m.candidateState = 'formation_commencee';
+    }
+
+    this.saveMembers();
+    try {
+      const { firebaseSyncService } = require('./firebaseSyncService');
+      if (firebaseSyncService) firebaseSyncService.saveMember(m).catch(() => {});
+    } catch (e) {}
+
+    this.addLog(
+      staffName,
+      `🔄 [RÉACTIVATION] ${m.username} a été réactivé(e) avec succès par ${staffName}. Session reprise.`,
+      'member',
+      m.username
+    );
+
+    return m;
   }
 
   public grantInactivityExtension(

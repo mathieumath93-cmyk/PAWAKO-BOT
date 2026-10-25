@@ -1,4 +1,4 @@
-import { Member, MemberBadge } from '../types';
+import { Member, MemberBadge, KickReasonType } from '../types';
 import { store } from './store';
 import { firebaseSyncService } from './firebaseSyncService';
 import { badgeService, SYSTEM_BADGES } from './badgeService';
@@ -80,7 +80,16 @@ class MemberService {
       } else if (filterStatus === 'auto_reminder_24h') {
         members = members.filter((m) => m.autoReminderFlag === true && m.autoReminderLevel === '24h');
       } else if (filterStatus === 'kicked_inactivity') {
-        members = members.filter((m) => m.candidateState === 'expulse_inactivite');
+        members = members.filter((m) => m.candidateState === 'expulse_inactivite' || m.kickReasonType === 'inactivite_formation');
+      } else if (filterStatus === 'kicked') {
+        members = members.filter(
+          (m) =>
+            m.isActive === false ||
+            m.candidateState === 'out' ||
+            m.candidateState?.startsWith('expulse_') ||
+            m.candidateState?.startsWith('refus_') ||
+            Boolean(m.kickReasonType)
+        );
       } else if (filterStatus === 'inactive_3d') {
         const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
         const now = Date.now();
@@ -351,19 +360,49 @@ class MemberService {
     return updated;
   }
 
-  public async kickMemberForInactivity(
+  public async kickMember(
     memberId: string,
-    reason: string = 'Inactivité 3 jours sans action'
+    reasonType: KickReasonType = 'inactivite_formation',
+    reason?: string
   ): Promise<{ success: boolean; member?: Member | null; message?: string }> {
-    const updated = store.kickMemberForInactivity(memberId, reason);
+    const updated = store.kickMember(memberId, reasonType, reason, 'Staff');
     if (updated) {
       firebaseSyncService.saveMember(updated).catch(() => {});
     }
     try {
-      const res = await fetch(`/api/members/${memberId}/kick-inactivity`, {
+      const res = await fetch(`/api/members/${memberId}/kick`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reasonType, reason }),
+      });
+      const data = await res.json();
+      if (data && data.member) {
+        store.upsertMember(data.member);
+      }
+      return data;
+    } catch (err: any) {
+      return { success: false, member: updated, message: err?.message };
+    }
+  }
+
+  public async kickMemberForInactivity(
+    memberId: string,
+    reason: string = 'Inactivité 5 jours sans action'
+  ): Promise<{ success: boolean; member?: Member | null; message?: string }> {
+    return this.kickMember(memberId, 'inactivite_formation', reason);
+  }
+
+  public async reactivateMember(
+    memberId: string
+  ): Promise<{ success: boolean; member?: Member | null; message?: string }> {
+    const updated = store.reactivateMember(memberId, 'Staff Dashboard');
+    if (updated) {
+      firebaseSyncService.saveMember(updated).catch(() => {});
+    }
+    try {
+      const res = await fetch(`/api/members/${memberId}/reactivate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       if (data && data.member) {

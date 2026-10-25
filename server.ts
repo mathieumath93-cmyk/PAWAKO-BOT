@@ -689,10 +689,10 @@ async function startServer() {
     });
   });
 
-  // --- MANUAL KICK-OFF ROUTE FOR STAFF ---
-  app.post('/api/members/:id/kick-inactivity', async (req: Request, res: Response) => {
+  // --- MANUAL KICK-OFF ROUTE FOR STAFF (Supports 3 distinct kick reasons) ---
+  const handleKickMember = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason, reasonType } = req.body;
 
     try {
       const member = store.getMember(id);
@@ -706,19 +706,56 @@ async function startServer() {
         return res.status(403).json({ success: false, error: 'Impossible d\'expulser un membre du Staff.' });
       }
 
+      const allowedReasons = [
+        'inactivite_formation',
+        'simulation_non_confirmee',
+        'simulation_manquee',
+        'refus_simu_catastrophique',
+        'refus_niveau_insuffisant',
+      ];
+      const validReasonType = allowedReasons.includes(reasonType)
+        ? reasonType
+        : 'inactivite_formation';
+
       const botSuccess = await pawakoBot.kickMemberAndNotify(
         member,
-        reason || 'Expulsion manuelle Staff (inactivité 3j sans action)'
+        reason,
+        validReasonType,
+        'Staff Dashboard'
       );
       const updated = store.getMember(id) || member;
       return res.json({
         success: true,
         botSuccess,
         member: updated,
-        message: `${member.username} a été expulsé(e) du serveur Discord et notifié(e).`
+        message: `${member.username} a été expulsé(e) du serveur Discord et notifié(e) (Motif: ${validReasonType}).`
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Erreur lors du kick' });
+    }
+  };
+
+  app.post('/api/members/:id/kick', handleKickMember);
+  app.post('/api/members/:id/kick-inactivity', handleKickMember);
+
+  // --- REACTIVATE CANDIDATE ROUTE FOR STAFF ---
+  app.post('/api/members/:id/reactivate', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const member = store.getMember(id);
+      if (!member) {
+        return res.status(404).json({ success: false, error: 'Membre introuvable.' });
+      }
+      const botSuccess = await pawakoBot.reactivateCandidateAndNotify(member, 'Staff Dashboard');
+      const updated = store.getMember(id) || member;
+      return res.json({
+        success: true,
+        botSuccess,
+        member: updated,
+        message: `${member.username} a été réactivé(e) avec succès.`
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur lors de la réactivation' });
     }
   });
 

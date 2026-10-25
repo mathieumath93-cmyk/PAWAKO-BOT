@@ -33,7 +33,7 @@ import {
   ArrowRight,
   Bot,
 } from 'lucide-react';
-import { Member } from '../types';
+import { Member, KickReasonType } from '../types';
 import { memberService } from '../services/memberService';
 import { discordService } from '../services/discordService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
@@ -61,6 +61,12 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
   // Selected candidate drawer / modal
   const [selectedCandidate, setSelectedCandidate] = useState<Member | null>(null);
+
+  // Kick-out Modal State with 3 distinct reasons
+  const [kickTarget, setKickTarget] = useState<Member | null>(null);
+  const [kickReasonType, setKickReasonType] = useState<KickReasonType>('inactivite_formation');
+  const [kickCustomReason, setKickCustomReason] = useState<string>('');
+  const [isKicking, setIsKicking] = useState<boolean>(false);
 
   // Candidate Private Channel Live Chat Modal
   const [chatChannelMember, setChatChannelMember] = useState<Member | null>(null);
@@ -422,7 +428,8 @@ export const MembersView: React.FC<MembersViewProps> = ({
             { id: 'in_progress', label: 'En cours' },
             { id: 'completed', label: 'Terminés' },
             { id: 'inactive_3d', label: '🔴 Inactifs 3j' },
-            { id: 'kicked_inactivity', label: '🚨 Expulsés 3j' },
+            { id: 'kicked_inactivity', label: '🚨 Expulsés 5j' },
+            { id: 'kicked', label: '🚫 Tous les Kicked' },
           ].map((f) => (
             <button
               key={f.id}
@@ -566,6 +573,20 @@ export const MembersView: React.FC<MembersViewProps> = ({
                                   <span>
                                     {Math.ceil((member.cooldownUntilTimestamp - Date.now()) / 60000)}m
                                   </span>
+                                </span>
+                              )}
+
+                              {member.kickReasonType && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                  {member.kickReasonType === 'inactivite_formation'
+                                    ? '🚨 Inactif 5j'
+                                    : member.kickReasonType === 'simulation_non_confirmee'
+                                    ? '⚠️ Simu non confirmée'
+                                    : member.kickReasonType === 'simulation_manquee'
+                                    ? '⏳ Simu manquée'
+                                    : member.kickReasonType === 'refus_simu_catastrophique'
+                                    ? '💥 Simu catastrophique'
+                                    : '🛑 Refus niveau'}
                                 </span>
                               )}
 
@@ -737,21 +758,76 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         </td>
 
                         <td className="p-4">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                              member.candidateState === 'expulse_inactivite'
-                                ? 'bg-red-500/20 text-red-300 border border-red-500/40'
-                                : member.candidateState === 'formation_terminee'
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                : member.candidateState === 'formation_outils'
-                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                                : member.candidateState === 'simulation'
-                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                                : 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20'
-                            }`}
-                          >
-                            {member.candidateState || 'Nouveau'}
-                          </span>
+                          {(() => {
+                            if (member.kickReasonType === 'inactivite_formation' || member.candidateState === 'expulse_inactivite') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                  🚨 OUT (Inactivité 5j)
+                                </span>
+                              );
+                            }
+                            if (member.kickReasonType === 'simulation_non_confirmee' || member.candidateState === 'expulse_simulation_non_confirmee') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  ⚠️ OUT (Simu non confirmée)
+                                </span>
+                              );
+                            }
+                            if (member.kickReasonType === 'simulation_manquee' || member.candidateState === 'expulse_simulation_manquee') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/40">
+                                  ⏳ OUT (Simu Manquée)
+                                </span>
+                              );
+                            }
+                            if (member.kickReasonType === 'refus_simu_catastrophique' || member.candidateState === 'refus_simu_catastrophique') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-700/30 text-red-200 border border-red-600/50">
+                                  💥 REFUS (Simu catastrophique)
+                                </span>
+                              );
+                            }
+                            if (member.kickReasonType === 'refus_niveau_insuffisant' || member.candidateState === 'refus_candidature_5_echecs') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600/30 text-red-300 border border-red-500/50">
+                                  🛑 Refus Niveau
+                                </span>
+                              );
+                            }
+                            if (member.candidateState === 'out' || member.isActive === false) {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/40">
+                                  ⏸️ OUT (En Pause)
+                                </span>
+                              );
+                            }
+                            if (member.candidateState === 'formation_terminee') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                  🎓 Validé
+                                </span>
+                              );
+                            }
+                            if (member.candidateState === 'formation_outils') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                                  🛠️ Outils
+                                </span>
+                              );
+                            }
+                            if (member.candidateState === 'simulation') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                                  🎭 Simulation
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                {member.candidateState || 'Nouveau'}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         <td className="p-4 text-right">
@@ -775,39 +851,42 @@ export const MembersView: React.FC<MembersViewProps> = ({
       {/* --- FICHE CANDIDAT MODAL DRAWER --- */}
       {selectedCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-xl h-full bg-slate-900 border-l border-slate-800 p-4 sm:p-6 shadow-2xl overflow-y-auto space-y-6 relative flex flex-col justify-between">
-            <div className="space-y-6">
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={
-                      selectedCandidate.avatarUrl ||
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
-                    }
-                    alt={selectedCandidate.username}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-indigo-500/40"
-                  />
-                  <div>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <span>{selectedCandidate.username}</span>
-                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">
-                        ID: {selectedCandidate.discordId}
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400 font-mono">
-                      Dernière activité : {selectedCandidate.lastActiveAt || 'Aujourd\'hui'}
-                    </p>
-                  </div>
+          <div className="w-full max-w-xl h-full bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col">
+            {/* Drawer Header (Fixed at top) */}
+            <div className="p-4 sm:p-6 border-b border-slate-800 shrink-0 bg-slate-900 flex items-center justify-between z-10">
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src={
+                    selectedCandidate.avatarUrl ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
+                  }
+                  alt={selectedCandidate.username}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-indigo-500/40 shrink-0"
+                />
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2 truncate">
+                    <span className="truncate">{selectedCandidate.username}</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono shrink-0">
+                      ID: {selectedCandidate.discordId}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400 font-mono truncate">
+                    Dernière activité : {selectedCandidate.lastActiveAt || "Aujourd'hui"}
+                  </p>
                 </div>
-
-                <button
-                  onClick={() => setSelectedCandidate(null)}
-                  className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
+
+              <button
+                onClick={() => setSelectedCandidate(null)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors shrink-0 ml-2 cursor-pointer"
+                title="Fermer la fiche"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Drawer Body (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">
 
               {/* Status Overview Card */}
               <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
@@ -1072,23 +1151,35 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     <span>🔓 Débloquer Quiz (3 Échecs)</span>
                   </button>
 
-                  <button
-                    onClick={async () => {
-                      if (confirm(`Expulser le candidat ${selectedCandidate.username} du serveur Discord pour inactivité de 3 jours ?`)) {
-                        const res = await memberService.kickMemberForInactivity(selectedCandidate.id, 'Expulsion manuelle Staff (inactivité 3j)');
+                  {(!selectedCandidate.isActive || selectedCandidate.candidateState === 'out' || selectedCandidate.candidateState === 'expulse_inactivite' || selectedCandidate.candidateState === 'expulse_simulation_manquee' || selectedCandidate.kickReasonType) && (
+                    <button
+                      onClick={async () => {
+                        const res = await memberService.reactivateMember(selectedCandidate.id);
                         onRefresh();
                         if (res.success) {
-                          onShowToast('🚨 Kick-off Exécuté sur Discord', res.message || `${selectedCandidate.username} a été expulsé(e) du serveur Discord.`, 'warning');
-                          setSelectedCandidate(null);
+                          onShowToast('🔄 Candidat Réactivé', `${selectedCandidate.username} a été réactivé(e) avec succès. Ses accès ont été restaurés.`, 'success');
+                          if (res.member) setSelectedCandidate(res.member);
                         } else {
-                          onShowToast('⚠️ Erreur Expulsion', res.message || 'Impossible d\'expulser le membre de Discord.', 'error');
+                          onShowToast('⚠️ Erreur', res.message || 'Impossible de réactiver le candidat.', 'info');
                         }
-                      }
+                      }}
+                      className="p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>🔄 Réactiver Candidat (Reprise)</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setKickTarget(selectedCandidate);
+                      setKickReasonType('inactivite_formation');
+                      setKickCustomReason('');
                     }}
                     className="p-3 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 text-xs font-bold transition-all text-left flex items-center gap-2 cursor-pointer"
                   >
                     <UserX className="w-4 h-4 text-red-400 shrink-0" />
-                    <span>🚨 Kick Inactivité 3j</span>
+                    <span>🚨 Clôturer Dossier / Kick-out Discord</span>
                   </button>
                 </div>
               </div>
@@ -1115,11 +1206,11 @@ export const MembersView: React.FC<MembersViewProps> = ({
               </div>
             </div>
 
-            {/* Drawer Footer */}
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+            {/* Drawer Footer (Fixed at bottom) */}
+            <div className="p-4 sm:p-6 border-t border-slate-800 shrink-0 bg-slate-900/95 backdrop-blur-sm flex items-center justify-between z-10">
               <button
                 onClick={() => handleResetProgress(selectedCandidate.id, selectedCandidate.username)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset Réel Parcours</span>
@@ -1127,7 +1218,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
               <button
                 onClick={() => setSelectedCandidate(null)}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors"
+                className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer shadow-lg shadow-indigo-600/20"
               >
                 Fermer
               </button>
@@ -1271,10 +1362,10 @@ export const MembersView: React.FC<MembersViewProps> = ({
       {/* --- RESCHEDULE SESSION MODAL --- */}
       {rescheduleTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-2xl p-6 shadow-2xl text-slate-100 relative">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-700/80 rounded-2xl p-6 shadow-2xl text-slate-100 relative custom-scrollbar">
             <button
               onClick={() => setRescheduleTarget(null)}
-              className="absolute top-4 right-4 p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              className="absolute top-4 right-4 p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -1505,6 +1596,269 @@ export const MembersView: React.FC<MembersViewProps> = ({
           onClose={() => setChatChannelMember(null)}
           onShowToast={onShowToast as any}
         />
+      )}
+
+      {/* --- KICK-OUT CONFIRMATION MODAL WITH 5 DISTINCT REASONS --- */}
+      {kickTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl max-h-[92vh] bg-slate-900 border border-red-500/40 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center shrink-0 border border-red-500/30">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Clôture de Session & Kick-out Discord</h3>
+                  <p className="text-xs text-slate-400">
+                    Candidat : <span className="text-indigo-400 font-bold">@{kickTarget.username}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setKickTarget(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+              {/* Selection of 5 Distinct Reasons */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                  1. Sélectionner le motif officiel de départ
+                </label>
+
+                <div className="space-y-2">
+                  {/* Reason 1: Inactivité 5j */}
+                  <label
+                    onClick={() => setKickReasonType('inactivite_formation')}
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      kickReasonType === 'inactivite_formation'
+                        ? 'bg-rose-500/15 border-rose-500/60 shadow-md ring-1 ring-rose-500/40'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kickReason"
+                      checked={kickReasonType === 'inactivite_formation'}
+                      onChange={() => setKickReasonType('inactivite_formation')}
+                      className="mt-1 accent-rose-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-white flex items-center justify-between gap-1.5">
+                        <span className="text-rose-200">🚨 Inactivité prolongée (5 Jours)</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          Règle 3
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        5 jours consécutifs sans avancement ni validation de quiz. Session mise en pause puis kickée.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Reason 2: Simulation non confirmée */}
+                  <label
+                    onClick={() => setKickReasonType('simulation_non_confirmee')}
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      kickReasonType === 'simulation_non_confirmee'
+                        ? 'bg-amber-500/15 border-amber-500/60 shadow-md ring-1 ring-amber-500/40'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kickReason"
+                      checked={kickReasonType === 'simulation_non_confirmee'}
+                      onChange={() => setKickReasonType('simulation_non_confirmee')}
+                      className="mt-1 accent-amber-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-white flex items-center justify-between gap-1.5">
+                        <span className="text-amber-200">⚠️ Simu non confirmée</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          Sans réponse
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Le candidat n'a pas confirmé son créneau de test pratique de simulation dans les délais impartis.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Reason 3: Simulation Manquée */}
+                  <label
+                    onClick={() => setKickReasonType('simulation_manquee')}
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      kickReasonType === 'simulation_manquee'
+                        ? 'bg-orange-500/15 border-orange-500/60 shadow-md ring-1 ring-orange-500/40'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kickReason"
+                      checked={kickReasonType === 'simulation_manquee'}
+                      onChange={() => setKickReasonType('simulation_manquee')}
+                      className="mt-1 accent-orange-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-white flex items-center justify-between gap-1.5">
+                        <span className="text-orange-200">⏳ Simulation manquée / non honorée</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                          Absence RDV
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Candidat convoqué au test pratique (14h) mais absent ou injoignable trop longtemps sans motif valable.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Reason 4: Refus suite à simu catastrophique */}
+                  <label
+                    onClick={() => setKickReasonType('refus_simu_catastrophique')}
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      kickReasonType === 'refus_simu_catastrophique'
+                        ? 'bg-red-800/25 border-red-600/70 shadow-md ring-1 ring-red-600/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kickReason"
+                      checked={kickReasonType === 'refus_simu_catastrophique'}
+                      onChange={() => setKickReasonType('refus_simu_catastrophique')}
+                      className="mt-1 accent-red-600"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-white flex items-center justify-between gap-1.5">
+                        <span className="text-red-300">💥 Refus suite à niveau simu catastrophique</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-700/30 text-red-200 border border-red-600/40">
+                          Niveau Critique
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Test de simulation en direct jugé catastrophique : réflexes, ton ou respect des règles très en dessous des attentes.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Reason 5: Refus Niveau Insuffisant */}
+                  <label
+                    onClick={() => setKickReasonType('refus_niveau_insuffisant')}
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      kickReasonType === 'refus_niveau_insuffisant'
+                        ? 'bg-red-600/20 border-red-500/60 shadow-md ring-1 ring-red-500/40'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kickReason"
+                      checked={kickReasonType === 'refus_niveau_insuffisant'}
+                      onChange={() => setKickReasonType('refus_niveau_insuffisant')}
+                      className="mt-1 accent-red-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-white flex items-center justify-between gap-1.5">
+                        <span className="text-red-200">🛑 Refus de candidature (Niveau insuffisant)</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">
+                          5 Échecs / Jury
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Cumul de 5 échecs consécutifs sur un quiz ou compétences globales jugées insuffisantes par le jury.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Custom precision input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  2. Motif détaillé / Note Staff (optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={kickCustomReason}
+                  onChange={(e) => setKickCustomReason(e.target.value)}
+                  placeholder="Ex: 5j sans réponse sur Discord / Test du 23/10 non honoré..."
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              {/* Summary Alert */}
+              <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-900/50 text-[11px] text-red-300 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-red-200">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Conséquences immédiates de l'expulsion :</span>
+                </div>
+                <ul className="list-disc list-inside text-slate-300 space-y-0.5 pl-1">
+                  <li>Message officiel adapté au motif transmis au candidat (DM + salon).</li>
+                  <li>Expulsion définitive du membre du serveur Discord PAWAKO.</li>
+                  <li>Enregistrement horodaté dans les alertes Staff et la base de données.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Modal Actions (Fixed at bottom) */}
+            <div className="p-4 border-t border-slate-800 flex items-center justify-end gap-3 shrink-0 bg-slate-900/95 z-10">
+              <button
+                type="button"
+                onClick={() => setKickTarget(null)}
+                disabled={isKicking}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={isKicking}
+                onClick={async () => {
+                  if (!kickTarget) return;
+                  setIsKicking(true);
+                  const res = await memberService.kickMember(
+                    kickTarget.id,
+                    kickReasonType,
+                    kickCustomReason || undefined
+                  );
+                  setIsKicking(false);
+                  onRefresh();
+                  if (res.success) {
+                    onShowToast(
+                      '🚨 Kick-out Exécuté',
+                      res.message || `${kickTarget.username} a été expulsé(e) et notifié(e).`,
+                      'success'
+                    );
+                    setKickTarget(null);
+                    setSelectedCandidate(null);
+                  } else {
+                    onShowToast('⚠️ Erreur Expulsion', res.message || 'Impossible d\'expulser le candidat.', 'info');
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg shadow-red-900/40"
+              >
+                {isKicking ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Expulsion en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserX className="w-3.5 h-3.5" />
+                    <span>Confirmer le Kick-out</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

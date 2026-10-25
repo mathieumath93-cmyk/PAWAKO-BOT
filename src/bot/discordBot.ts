@@ -24,7 +24,7 @@ import { firebaseSyncService } from '../services/firebaseSyncService';
 import { onboardingService, OFFICIAL_SERVER_RULES_TEXT } from '../services/onboardingService';
 import { faqService } from '../services/faqService';
 import { badgeService, SYSTEM_BADGES } from '../services/badgeService';
-import { QuizQuestion, Member, Quiz, MemberBadge, MemberProgress } from '../types';
+import { QuizQuestion, Member, Quiz, MemberBadge, MemberProgress, KickReasonType } from '../types';
 import { voiceRadioService, RADIO_STATIONS, RadioStation } from '../services/voiceRadioService';
 import { resolveActionMessage } from '../config/discordActionMessages';
 import {
@@ -670,6 +670,85 @@ export class PawakoBotRunner {
               }
             }
           }
+          return;
+        }
+
+        // --- 3b. DIRECT KICKOUT COMMAND FOR STAFF ---
+        if (content.startsWith('!kickout') || content.startsWith('!kick')) {
+          if (!this.isStaffChannel(message.channel) && !this.isStaffUser(message.author, message.member)) {
+            await message.reply('⛔ Commande réservée au staff Pawako.').catch(() => {});
+            return;
+          }
+
+          const args = content.split(' ').slice(1);
+          const mentionUser = message.mentions.users.first();
+          const targetId = mentionUser ? mentionUser.id : (args[0] ? args[0].replace(/<@!?|>/g, '') : null);
+
+          if (!targetId) {
+            await message.reply(
+              'ℹ️ **Utilisation :** `!kickout @candidat [motif_clef] [précision optionnelle]`\n' +
+              '• `!kickout @candidat inactivite` (Inactivité 5j consécutifs)\n' +
+              '• `!kickout @candidat noconfirm` (Simulation non confirmée)\n' +
+              '• `!kickout @candidat simu` (Simulation manquée / absence au RDV)\n' +
+              '• `!kickout @candidat catas` (Niveau simulation catastrophique / éliminatoire)\n' +
+              '• `!kickout @candidat niveau` (Refus 5 échecs cumulés évaluations)'
+            ).catch(() => {});
+            return;
+          }
+
+          const member = store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+          if (!member) {
+            await message.reply(`⚠️ Candidat introuvable pour "${targetId}".`).catch(() => {});
+            return;
+          }
+
+          const rawReasonType = (args[1] || 'inactivite').toLowerCase();
+          let reasonType: KickReasonType = 'inactivite_formation';
+          if (rawReasonType.includes('noconf') || rawReasonType.includes('nonconf') || rawReasonType.includes('confirm')) {
+            reasonType = 'simulation_non_confirmee';
+          } else if (rawReasonType.includes('cata') || rawReasonType.includes('grave') || rawReasonType.includes('elim')) {
+            reasonType = 'refus_simu_catastrophique';
+          } else if (rawReasonType.includes('simu') || rawReasonType.includes('manqu')) {
+            reasonType = 'simulation_manquee';
+          } else if (rawReasonType.includes('niveau') || rawReasonType.includes('refus')) {
+            reasonType = 'refus_niveau_insuffisant';
+          }
+
+          const customReason = args.slice(2).join(' ') || undefined;
+
+          const ok = await this.kickMemberAndNotify(member, customReason, reasonType, `@${message.author.username}`);
+          await message.reply(
+            ok
+              ? `✅ **Kick-out appliqué avec succès !** <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été notifié et expulsé (Motif: \`${reasonType}\`).`
+              : `⚠️ Dossier clôturé pour ${member.username} (erreur kick serveur).`
+          ).catch(() => {});
+          return;
+        }
+
+        // --- 3c. REACTIVATION COMMAND FOR STAFF ---
+        if (content.startsWith('!reactiver') || content.startsWith('!reprendre')) {
+          if (!this.isStaffChannel(message.channel) && !this.isStaffUser(message.author, message.member)) {
+            await message.reply('⛔ Commande réservée au staff Pawako.').catch(() => {});
+            return;
+          }
+
+          const args = content.split(' ').slice(1);
+          const mentionUser = message.mentions.users.first();
+          const targetId = mentionUser ? mentionUser.id : (args[0] ? args[0].replace(/<@!?|>/g, '') : null);
+
+          if (!targetId) {
+            await message.reply('ℹ️ **Utilisation :** `!reactiver @candidat`').catch(() => {});
+            return;
+          }
+
+          const member = store.getMembers().find((m) => m.id === targetId || m.discordId === targetId || m.id.replace('mem-', '') === targetId.replace('mem-', ''));
+          if (!member) {
+            await message.reply(`⚠️ Candidat introuvable pour "${targetId}".`).catch(() => {});
+            return;
+          }
+
+          await this.reactivateCandidateAndNotify(member, `@${message.author.username}`);
+          await message.reply(`🔄 **Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été réactivé avec succès !** Ses accès sont rétablis.`).catch(() => {});
           return;
         }
 
@@ -3596,6 +3675,214 @@ export class PawakoBotRunner {
               content: closed
                 ? `🏁 **Session de Formation Outils terminée par <@${user.id}> !**\nLe salon vocal d'accès temporaire a été fermé et les accès des candidats révoqués.`
                 : `🏁 **Session terminée.** Le salon vocal n'était plus actif.`,
+            });
+            return;
+          }
+
+          // --- STAFF INACTIVITY & KICKOUT BUTTON HANDLERS ---
+          if (customId.startsWith('staff_kick_inact_')) {
+            const targetId = customId.replace('staff_kick_inact_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            const ok = await this.kickMemberAndNotify(
+              member,
+              'Inactivité de 5 jours consécutifs sans action de formation',
+              'inactivite_formation',
+              `@${user.username}`
+            );
+
+            await interaction.editReply({
+              content: ok
+                ? `🚨 **Kick-out Inactivité exécuté avec succès !**\nLe candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été notifié et expulsé du serveur Discord.`
+                : `⚠️ Dossier de ${member.username} clôturé (Inactivité 5j).`,
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_kick_simu_')) {
+            const targetId = customId.replace('staff_kick_simu_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            const ok = await this.kickMemberAndNotify(
+              member,
+              'Créneau de simulation non honoré / Absence prolongée non justifiée',
+              'simulation_manquee',
+              `@${user.username}`
+            );
+
+            await interaction.editReply({
+              content: ok
+                ? `⏳ **Kick-out Simulation Manquée exécuté avec succès !**\nLe candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été notifié et expulsé.`
+                : `⚠️ Dossier de ${member.username} clôturé (Simulation Manquée).`,
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_kick_noconf_')) {
+            const targetId = customId.replace('staff_kick_noconf_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            const ok = await this.kickMemberAndNotify(
+              member,
+              'Créneau de simulation non confirmé dans les délais impartis',
+              'simulation_non_confirmee',
+              `@${user.username}`
+            );
+
+            await interaction.editReply({
+              content: ok
+                ? `⚠️ **Kick-out Simu Non Confirmée exécuté avec succès !**\nLe candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été notifié et expulsé.`
+                : `⚠️ Dossier de ${member.username} clôturé (Simu Non Confirmée).`,
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_kick_catas_')) {
+            const targetId = customId.replace('staff_kick_catas_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            const ok = await this.kickMemberAndNotify(
+              member,
+              'Refus suite à un niveau de simulation jugé catastrophique et non conforme aux standards',
+              'refus_simu_catastrophique',
+              `@${user.username}`
+            );
+
+            await interaction.editReply({
+              content: ok
+                ? `💥 **Refus Simu Catastrophique exécuté avec succès !**\nLe candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été notifié et expulsé.`
+                : `⚠️ Dossier de ${member.username} marqué Refus Simu Catastrophique.`,
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_kick_refus_')) {
+            const targetId = customId.replace('staff_kick_refus_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            const ok = await this.kickMemberAndNotify(
+              member,
+              "Refus de candidature — Seuil d'échecs cumulés atteint ou niveau pratique insuffisant (Règle 3)",
+              'refus_niveau_insuffisant',
+              `@${user.username}`
+            );
+
+            await interaction.editReply({
+              content: ok
+                ? `🛑 **Refus de Candidature exécuté !**\nLe candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été notifié de la décision du jury et expulsé du serveur.`
+                : `⚠️ Dossier de ${member.username} marqué Refus Candidature.`,
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_extend_inact_')) {
+            const targetId = customId.replace('staff_extend_inact_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            const updated = store.grantInactivityExtension(
+              member.id,
+              3,
+              'Prolongation accordée via bouton Staff Discord',
+              `@${user.username}`
+            );
+
+            await interaction.editReply({
+              content: `⏱️ **Prolongation de +3 jours accordée à <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) !**\nLe candidat est protégé jusqu'au ${new Date(updated?.inactivityExtensionUntilTimestamp || 0).toLocaleDateString('fr-FR')}.`,
+            });
+            return;
+          }
+
+          if (customId.startsWith('staff_reactivate_')) {
+            const targetId = customId.replace('staff_reactivate_', '');
+            const member =
+              store.getMember(targetId) ||
+              store.getMembers().find(
+                (m) =>
+                  m.id === targetId ||
+                  m.discordId === targetId ||
+                  m.id.replace('mem-', '') === targetId.replace('mem-', '')
+              );
+
+            if (!member) {
+              await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base.' });
+              return;
+            }
+
+            await this.reactivateCandidateAndNotify(member, `@${user.username}`);
+            await interaction.editReply({
+              content: `🔄 **Le candidat <@${member.discordId || member.id.replace('mem-', '')}> (${member.username}) a été réactivé avec succès !**\nSes accès ont été rétablis et son salon privé réouvert aux épreuves.`,
             });
             return;
           }
@@ -7409,7 +7696,7 @@ export class PawakoBotRunner {
       }
 
       if (lastActivityTs && (now - lastActivityTs >= FIVE_DAYS_MS)) {
-        console.log(`[Inactivity 5J] Membre ${m.username} inactif depuis > 5 jours. Passage en statut OUT.`);
+        console.log(`[Inactivity 5J] Membre ${m.username} inactif depuis > 5 jours. Mise en pause du parcours.`);
         const updated = store.setMemberOutForInactivity(m.id, '5 jours consécutifs d\'inactivité constatée sans action réelle');
         if (updated) {
           firebaseSyncService.saveMember(updated).catch(() => {});
@@ -7432,8 +7719,100 @@ export class PawakoBotRunner {
               await (chan as any).send({ embeds: [outEmbed] }).catch(() => {});
             }
           }
+
+          // Send alert to #staff-alerts with interactive buttons for Kick / Extend / Reactivate
+          await this.sendStaffInactivityPauseAlert(updated, Math.floor((now - lastActivityTs) / (24 * 3600 * 1000)));
         }
       }
+    }
+  }
+
+  /**
+   * Alert Staff in #staff-alerts with interactive buttons for candidates whose sessions are paused.
+   */
+  public async sendStaffInactivityPauseAlert(member: Member, daysInactive: number = 5): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+    try {
+      const guild = await this.getGuild();
+      if (!guild) return false;
+
+      const staffChan = await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff');
+      if (!staffChan) return false;
+
+      const discordUserId = (member.discordId || member.id.replace(/^mem-/, '')).replace(/[<@!>]/g, '').trim();
+      const currentMod = store.getModules().find((m) => m.id === member.currentModuleId) || store.getModules()[0];
+      const modTitle = currentMod ? currentMod.title : 'Module Initial';
+
+      const embed = new EmbedBuilder()
+        .setTitle('🚨 ALERTE STAFF — SESSION EN PAUSE (INACTIVITÉ 5 JOURS)')
+        .setDescription(
+          `📢 **Le parcours de formation de <@${discordUserId}> (${member.username}) a été mis en pause automatique.**\n\n` +
+          `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
+          `• **ID Discord :** \`${discordUserId}\`\n` +
+          `• **Dernière activité réelle :** ${member.lastActiveAt || 'Non enregistrée'}\n` +
+          `• **Étape / Module :** ${modTitle}\n` +
+          `• **Durée d'inactivité :** **${daysInactive >= 5 ? daysInactive : 5} jours consécutifs sans avancement**\n` +
+          `• **Statut actuel :** ⏸️ En pause / Statut OUT (Règle 3)\n\n` +
+          `👉 **Actions Staff directes disponibles ci-dessous :**\n` +
+          `• 🚨 **Kick Inactivité** : Expulsion Discord pour inactivité de 5 jours.\n` +
+          `• ⚠️ **Simu Non Confirmée** : Expulsion si créneau non confirmé avant la session.\n` +
+          `• ⏳ **Simu Manquée** : Expulsion suite à absence non justifiée au test pratique.\n` +
+          `• 💥 **Simu Catastrophique** : Refus direct pour niveau éliminatoire en simulation.\n` +
+          `• 🛑 **Refus 5x Échecs** : Refus pour 5 échecs consécutifs aux évaluations.\n` +
+          `• ⏱️ **+3j Prolongation** : Accorder un délai de grâce supplémentaire.\n` +
+          `• 🔄 **Réactiver** : Relancer le parcours et débloquer les accès du candidat.`
+        )
+        .setColor(0xdc2626)
+        .setFooter({ text: 'PAWAKO FORMATION • Modération & Inactivité Staff' })
+        .setTimestamp();
+
+      const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_kick_inact_${member.id}`)
+          .setLabel('🚨 Inactivité 5j')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`staff_kick_noconf_${member.id}`)
+          .setLabel('⚠️ Simu Non Confirmée')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`staff_kick_simu_${member.id}`)
+          .setLabel('⏳ Simu Manquée')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_kick_catas_${member.id}`)
+          .setLabel('💥 Simu Catastrophique')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`staff_kick_refus_${member.id}`)
+          .setLabel('🛑 Refus 5x Échecs')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_extend_inact_${member.id}`)
+          .setLabel('⏱️ +3j Prolongation')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`staff_reactivate_${member.id}`)
+          .setLabel('🔄 Réactiver le Candidat')
+          .setStyle(ButtonStyle.Success)
+      );
+
+      await staffChan.send({
+        content: `🚨 **[INACTIVITÉ 5 JOURS — CANDIDAT EN PAUSE]** <@${discordUserId}>`,
+        embeds: [embed],
+        components: [row1, row2, row3],
+      });
+
+      return true;
+    } catch (e) {
+      console.warn('[sendStaffInactivityPauseAlert Error]', e);
+      return false;
     }
   }
 
@@ -8851,43 +9230,128 @@ export class PawakoBotRunner {
   /**
    * Kick member from Discord guild + notify private channel & staff log channel + update DB state
    */
-  public async kickMemberAndNotify(memberInput: Member, reason: string = 'Inactivité sans action (3 jours)'): Promise<boolean> {
+  /**
+   * Kick member from Discord guild + notify private channel & staff log channel + update DB state
+   * Supports 3 distinct kick reasons:
+   * 1. 'inactivite_formation' (5 days of consecutive inactivity)
+   * 2. 'simulation_manquee' (scheduled simulation test not attended/unresponsive)
+   * 3. 'refus_niveau_insuffisant' (failed 5 quiz attempts or failed practical evaluation)
+   */
+  public async kickMemberAndNotify(
+    memberInput: Member,
+    customReason?: string,
+    reasonType: KickReasonType = 'inactivite_formation',
+    staffExecutor: string = 'Staff'
+  ): Promise<boolean> {
     const member = store.getMember(memberInput.id) || memberInput;
     const discordUserId = (member.discordId || member.id.replace(/^mem-/, '')).replace(/[<@!>]/g, '').trim();
+
+    const defaultReasons: Record<KickReasonType, string> = {
+      inactivite_formation: "5 jours consécutifs d'inactivité constatée sans avancement ni validation",
+      simulation_non_confirmee: "Créneau de simulation non confirmé dans les délais impartis",
+      simulation_manquee: "Simulation non honorée / Absence prolongée non justifiée au test pratique",
+      refus_simu_catastrophique: "Refus suite à un niveau de simulation jugé catastrophique et non conforme aux standards",
+      refus_niveau_insuffisant: "Refus de candidature — Niveau insuffisant / Échecs cumulés aux évaluations (Règle 3)",
+    };
+
+    const finalReason = customReason?.trim() || defaultReasons[reasonType];
 
     try {
       const guild = await this.getGuild();
 
-      // 1. Send final notification message to candidate's private channel and direct DM
+      // 1. Prepare tailored message for candidate
+      let candTitle = '🚨 NOTIFICATION DE DÉPART — EXPULSION POUR INACTIVITÉ (5 JOURS)';
+      let candContent = `🚨 **[AVIS DE CLÔTURE DU PARCOURS — INACTIVITÉ]** <@${discordUserId}>`;
+      let candDesc =
+        `📢 <@${discordUserId}>,\n\n` +
+        `Conformément au règlement officiel de formation Pawako (Règle 3), ton parcours a été clôturé suite à **5 jours consécutifs d'inactivité constatée** sans validation ni action.\n\n` +
+        `❌ **Clôture du dossier & retrait des accès Discord.**\n\n` +
+        `_Motif officiel :_ ${finalReason}\n\n` +
+        `📚 Ton historique, tes quiz et tes données restent archivés. Si tu souhaites réintégrer une session future, contacte le Staff.`;
+      let candColor = 0xdc2626;
+
+      if (reasonType === 'simulation_non_confirmee') {
+        candTitle = '⚠️ CLÔTURE DU DOSSIER — SIMULATION NON CONFIRMÉE';
+        candContent = `⚠️ **[AVIS DE CLÔTURE — SIMULATION NON CONFIRMÉE]** <@${discordUserId}>`;
+        candDesc =
+          `📢 <@${discordUserId}>,\n\n` +
+          `Conformément au protocole de réservation de simulation pratique, aucune confirmation n'a été reçue dans le délai imparti suite à nos relances.\n\n` +
+          `❌ **Ta candidature a été clôturée et ton créneau libéré.**\n\n` +
+          `_Motif :_ ${finalReason}\n\n` +
+          `Nous te remercions pour ton parcours et te souhaitons une bonne continuation.`;
+        candColor = 0xf59e0b;
+      } else if (reasonType === 'simulation_manquee') {
+        candTitle = '⏳ CLÔTURE DU DOSSIER — SIMULATION NON HONORÉE';
+        candContent = `⏳ **[AVIS DE CLÔTURE — SIMULATION NON HONORÉE]** <@${discordUserId}>`;
+        candDesc =
+          `📢 <@${discordUserId}>,\n\n` +
+          `Tu étais qualifié(e) pour le test pratique de simulation mais ton créneau n'a pas été honoré et aucune réponse n'a été reçue malgré nos relances.\n\n` +
+          `❌ **Conformément aux règles des sessions, ta place a été libérée et tes accès Discord révoqués.**\n\n` +
+          `_Motif :_ ${finalReason}\n\n` +
+          `Nous te souhaitons une bonne continuation dans tes projets professionnels.`;
+        candColor = 0xf97316;
+      } else if (reasonType === 'refus_simu_catastrophique') {
+        candTitle = '💥 DÉCISION DU JURY — REFUS SUITE À SIMULATION CATASTROPHIQUE';
+        candContent = `💥 **[NOTIFICATION OFFICIELLE DE REFUS — NIVEAU NON CONFORME]** <@${discordUserId}>`;
+        candDesc =
+          `📢 <@${discordUserId}>,\n\n` +
+          `Le jury pédagogique a évalué ton test de simulation en situation réelle. Les réflexes observés ont été jugés bien trop en dessous des exigences minimales requises pour le rôle de Chatter Pawako.\n\n` +
+          `❌ **Refus immédiat et clôture définitive de ton parcours.**\n\n` +
+          `_Motif officiel :_ ${finalReason}\n\n` +
+          `L'équipe te remercie pour le temps accordé et ton implication.`;
+        candColor = 0xb91c1c;
+      } else if (reasonType === 'refus_niveau_insuffisant') {
+        candTitle = '🛑 DÉCISION DU JURY — REFUS DE CANDIDATURE (NIVEAU INSUFFISANT)';
+        candContent = `🛑 **[NOTIFICATION OFFICIELLE DE REFUS — NIVEAU INSUFFISANT]** <@${discordUserId}>`;
+        candDesc =
+          `📢 <@${discordUserId}>,\n\n` +
+          `Suite à l'évaluation pédagogique de ton parcours (Règle 3 — cumul de 5 échecs ou niveau pratique insuffisant lors de la simulation), l'équipe d'encadrement a décidé de ne pas retenir ta candidature pour le poste de Chatter Pawako.\n\n` +
+          `❌ **Clôture définitive du parcours de formation.**\n\n` +
+          `_Motif :_ ${finalReason}\n\n` +
+          `L'équipe te remercie pour le temps accordé et ton investissement.`;
+        candColor = 0x991b1b;
+      }
+
       try {
-        const resolved = resolveActionMessage('kick_inactivity', member, { customReason: reason });
         const embed = new EmbedBuilder()
-          .setTitle(resolved.title)
-          .setDescription(resolved.description)
-          .setColor(resolved.color)
-          .setFooter({ text: resolved.footer })
+          .setTitle(candTitle)
+          .setDescription(candDesc)
+          .setColor(candColor)
+          .setFooter({ text: 'PAWAKO FORMATION • Modération & Clôture Parcours' })
           .setTimestamp();
 
-        await this.sendCandidateActionMessage(member, resolved.content, embed);
+        await this.sendCandidateActionMessage(member, candContent, embed);
       } catch (e) {
         console.warn('[Kick Notification Channel Error]', e);
       }
 
-      // 2. Notify Staff Log Channel (#log-formation or #salon-staff)
+      // 2. Notify Staff Log Channel (#staff-alerts / #log-formation)
       try {
-        const logChan = guild ? await this.getOrCreateStaffOnlyChannel(guild, 'log-formation', 'Logs & Modération Formation') : null;
+        const logChan = guild ? await this.getOrCreateStaffOnlyChannel(guild, 'staff-alerts', 'Alertes Staff') : null;
         if (logChan) {
+          const reasonLabel =
+            reasonType === 'inactivite_formation'
+              ? '🚨 Inactivité 5 Jours'
+              : reasonType === 'simulation_non_confirmee'
+              ? '⚠️ Simu Non Confirmée'
+              : reasonType === 'simulation_manquee'
+              ? '⏳ Simulation Manquée'
+              : reasonType === 'refus_simu_catastrophique'
+              ? '💥 Refus Simu Catastrophique'
+              : '🛑 Refus Niveau Insuffisant';
+
           const logEmbed = new EmbedBuilder()
-            .setTitle('🚨 MODÉRATION — EXPULSION KICK-OFF')
+            .setTitle(`🚨 MODÉRATION — EXPULSION KICK-OUT (${reasonLabel})`)
             .setDescription(
-              `⚡ **Expulsion exécutée par le staff**\n\n` +
+              `⚡ **Expulsion exécutée par ${staffExecutor}**\n\n` +
               `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
               `• **ID Discord :** \`${discordUserId}\`\n` +
+              `• **Catégorie :** \`${reasonType}\` (${reasonLabel})\n` +
               `• **Dernière activité :** ${member.lastActiveAt || 'Inconnue'}\n` +
-              `• **Motif :** ${reason}\n\n` +
-              ` Le profil du candidat a été désactivé dans la base de données.`
+              `• **Motif officiel :** ${finalReason}\n\n` +
+              `🔒 Le profil du candidat a été désactivé dans la base de données.`
             )
-            .setColor(0xDC2626)
+            .setColor(candColor)
             .setTimestamp();
 
           await logChan.send({ embeds: [logEmbed] }).catch(() => {});
@@ -8901,7 +9365,7 @@ export class PawakoBotRunner {
         try {
           const guildMember = await guild.members.fetch(discordUserId).catch(() => null);
           if (guildMember && guildMember.kickable) {
-            await guildMember.kick(`[Auto Kick-off 3j] ${reason}`);
+            await guildMember.kick(`[${reasonType}] ${finalReason}`);
             console.log(`[PAWAKO BOT] ✅ Membre ${member.username} (${discordUserId}) expulsé du serveur Discord.`);
           } else {
             console.warn(`[PAWAKO BOT] Impossible d'expulser ${member.username} de la guilde (permissions bot insuffisantes ou membre parti).`);
@@ -8912,11 +9376,49 @@ export class PawakoBotRunner {
       }
 
       // 4. Update store and Firebase
-      store.kickMemberForInactivity(member.id, reason);
+      store.kickMember(member.id, reasonType, finalReason, staffExecutor);
       return true;
     } catch (err) {
       console.warn('[kickMemberAndNotify Global Error]', err);
-      store.kickMemberForInactivity(member.id, reason);
+      store.kickMember(member.id, reasonType, finalReason, staffExecutor);
+      return false;
+    }
+  }
+
+  /**
+   * Reactivate a candidate whose session was paused or set OUT.
+   */
+  public async reactivateCandidateAndNotify(memberInput: Member, staffExecutor: string = 'Staff'): Promise<boolean> {
+    const member = store.getMember(memberInput.id) || memberInput;
+    const discordUserId = (member.discordId || member.id.replace(/^mem-/, '')).replace(/[<@!>]/g, '').trim();
+
+    store.reactivateMember(member.id, staffExecutor);
+
+    try {
+      if (member.personalChannelId && this.client) {
+        const chan = await this.client.channels.fetch(member.personalChannelId).catch(() => null);
+        if (chan && 'send' in chan) {
+          const reactivateEmbed = new EmbedBuilder()
+            .setTitle('🟢 PARCOURS RÉACTIVÉ — REPRISE DE LA FORMATION')
+            .setDescription(
+              `📢 <@${discordUserId}>, **ton parcours de formation a été réactivé par l'équipe Staff (${staffExecutor}) !** 🚀\n\n` +
+              `Tes accès aux modules et aux quiz ont été entièrement restaurés.\n` +
+              `Tu peux reprendre ton parcours là où tu t'étais arrêté(e).\n\n` +
+              `💪 *Bon courage pour tes révisions et la suite des validations ! L'équipe reste disponible si tu as des questions.*`
+            )
+            .setColor(0x10b981)
+            .setFooter({ text: 'PAWAKO FORMATION • Reprise de Session' })
+            .setTimestamp();
+
+          await (chan as any).send({
+            content: `🟢 **[REPRISE DE FORMATION]** <@${discordUserId}>`,
+            embeds: [reactivateEmbed],
+          }).catch(() => {});
+        }
+      }
+      return true;
+    } catch (e) {
+      console.warn('[reactivateCandidateAndNotify Error]', e);
       return false;
     }
   }

@@ -32,6 +32,8 @@ import {
   BookOpen,
   ArrowRight,
   Bot,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { Member, KickReasonType } from '../types';
 import { memberService } from '../services/memberService';
@@ -58,6 +60,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
   const [isPurging, setIsPurging] = useState<boolean>(false);
+  const [isRemindingIntegration, setIsRemindingIntegration] = useState<boolean>(false);
 
   // Selected candidate drawer / modal
   const [selectedCandidate, setSelectedCandidate] = useState<Member | null>(null);
@@ -156,6 +159,101 @@ export const MembersView: React.FC<MembersViewProps> = ({
     } catch (err: any) {
       setIsPurging(false);
       onShowToast('Erreur Purge', err.message || 'Erreur inconnue', 'info');
+    }
+  };
+
+  const handleExportRecruitsCsv = () => {
+    try {
+      const allMembers = memberService.getMembers();
+      // Recruits with completed integration (or if filtered, prioritize those)
+      const recruits = allMembers.filter(
+        (m) =>
+          m.candidateState === 'formation_terminee' ||
+          (m.shift && m.email) ||
+          m.toolsFormationValidatedAt
+      );
+
+      const targetList = recruits.length > 0 ? recruits : allMembers;
+
+      const headers = [
+        'Pseudo Discord',
+        'ID Discord',
+        'Statut Candidat',
+        'Shift Retenu',
+        'Date Disponibilité (Démarrage Prod)',
+        'E-mail Professionnel',
+        'Numéro WhatsApp',
+        'Note Simulation',
+        'Date Validation Outils',
+        'Date Validation Simulation',
+        'Date Arrivée',
+      ];
+
+      const rows = targetList.map((m) => [
+        `"${(m.username || '').replace(/"/g, '""')}"`,
+        `"${(m.discordId || m.id).replace(/"/g, '""')}"`,
+        `"${(m.candidateState || 'Nouveau').replace(/"/g, '""')}"`,
+        `"${(m.shift || 'Non spécifié').replace(/"/g, '""')}"`,
+        `"${(m.availableStartDate || 'Non précisée').replace(/"/g, '""')}"`,
+        `"${(m.email || '').replace(/"/g, '""')}"`,
+        `"${(m.whatsapp || '').replace(/"/g, '""')}"`,
+        `"${m.averageScore ? `${m.averageScore}/20` : 'N/A'}"`,
+        `"${(m.toolsFormationValidatedAt || '').replace(/"/g, '""')}"`,
+        `"${(m.simulationValidatedAt || '').replace(/"/g, '""')}"`,
+        `"${(m.joinedAt || '').replace(/"/g, '""')}"`,
+      ]);
+
+      const csvContent =
+        '\uFEFF' +
+        headers.join(';') +
+        '\n' +
+        rows.map((r) => r.join(';')).join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().split('T')[0];
+      link.setAttribute('href', url);
+      link.setAttribute('download', `pawako_recrues_prod_${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      onShowToast(
+        'Export CSV Réussi 📥',
+        `${targetList.length} dossier(s) de recrue(s) exporté(s) vers Excel / CSV.`,
+        'success'
+      );
+    } catch (err: any) {
+      onShowToast('Erreur Export', err?.message || 'Impossible d\'exporter les données', 'error');
+    }
+  };
+
+  const handleTriggerIntegrationReminders = async () => {
+    setIsRemindingIntegration(true);
+    try {
+      const res = await fetch('/api/candidates/remind-integration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceAll: false }),
+      });
+      const data = await res.json();
+      setIsRemindingIntegration(false);
+      onRefresh();
+      if (data.success) {
+        onShowToast(
+          'Relances Intégration Envoyées ⏰',
+          data.remindedCount > 0
+            ? `${data.remindedCount} relance(s) envoyée(s) dans les salons privés (${data.remindedCandidates.join(', ')}) !`
+            : 'Tous les candidats sont à jour : aucune relance nécessaire pour l\'instant.',
+          data.remindedCount > 0 ? 'success' : 'info'
+        );
+      } else {
+        onShowToast('Info Relances', data.error || 'Erreur lors de l\'envoi des relances', 'error');
+      }
+    } catch (err: any) {
+      setIsRemindingIntegration(false);
+      onShowToast('Erreur Relance', err?.message || 'Impossible de joindre le serveur', 'error');
     }
   };
 
@@ -364,6 +462,25 @@ export const MembersView: React.FC<MembersViewProps> = ({
               <span>Table Détaillée</span>
             </button>
           </div>
+
+          <button
+            onClick={handleExportRecruitsCsv}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-xs border border-emerald-500/30 shadow-md flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+            title="Exporter la liste consolidée des recrues prêtes pour la production (Excel / CSV)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span>Exporter CSV (Recrues)</span>
+          </button>
+
+          <button
+            onClick={handleTriggerIntegrationReminders}
+            disabled={isRemindingIntegration}
+            className="px-3.5 py-2 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-white font-semibold text-xs shadow-md shadow-amber-600/20 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+            title="Relancer sur Discord les candidats qui n'ont pas encore finalisé leur shift et leurs coordonnées"
+          >
+            <Clock className={`w-4 h-4 ${isRemindingIntegration ? 'animate-spin text-amber-200' : 'text-amber-200'}`} />
+            <span>{isRemindingIntegration ? 'Relances...' : 'Relancer Inactifs (Shift)'}</span>
+          </button>
 
           <button
             onClick={handleRunInactivityWorker}
@@ -964,6 +1081,14 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         <span className="text-slate-400 block text-[10px] uppercase font-bold">📅 Disponibilité Démarrage Prod</span>
                         <span className="text-emerald-300 font-bold">{selectedCandidate.availableStartDate || 'Immédiate / Non précisée'}</span>
                       </div>
+                      {selectedCandidate.integrationReminderSentAt && (
+                        <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-500/30 col-span-1 sm:col-span-2">
+                          <span className="text-amber-400 block text-[10px] uppercase font-bold">⏰ Dernière Relance Discord Envoyée</span>
+                          <span className="text-amber-200 font-mono text-[11px]">
+                            {new Date(selectedCandidate.integrationReminderSentAt).toLocaleString('fr-FR')}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

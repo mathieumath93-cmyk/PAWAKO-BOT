@@ -226,6 +226,7 @@ export interface Member {
   whatsapp?: string;
   shift?: string;
   availableStartDate?: string;
+  integrationReminderSentAt?: string;
   badges?: MemberBadge[];
   xp?: number;
   level?: number;
@@ -534,6 +535,7 @@ export interface OnboardingFlowConfig {
   sarcasticSpamMessages?: string[];
   toolsFormationMeetUrl?: string; // Google Meet link for Tools Formation
   availableShifts?: string[]; // Configurable shifts for candidate integration selection
+  shiftQuotas?: Record<string, number>; // Max recruits per shift (0 or missing = unlimited)
   mahsaDiscordId?: string; // Discord ID or tag for Mahsa
   mathieuDiscordId?: string; // Discord ID or tag for Mathieu
 }

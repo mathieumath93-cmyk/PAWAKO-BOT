@@ -2096,6 +2096,47 @@ async function startServer() {
     }
   });
 
+  // Candidates Integration Reminders
+  app.post('/api/candidates/remind-integration', async (req: Request, res: Response) => {
+    try {
+      const { forceAll } = req.body || {};
+      const result = await pawakoBot.checkAndSendIntegrationReminders(Boolean(forceAll));
+      res.json({
+        success: true,
+        ...result,
+        message:
+          result.remindedCount > 0
+            ? `${result.remindedCount} relance(s) envoyée(s) avec succès dans les salons privés.`
+            : 'Aucun candidat en attente de relance pour le moment.',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "Erreur lors de l'envoi des relances" });
+    }
+  });
+
+  // Shifts Stats & Quotas
+  app.get('/api/shifts/stats', (req: Request, res: Response) => {
+    try {
+      const stats = onboardingService.getShiftStats();
+      res.json({ success: true, stats });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur calcul des statistiques de shifts' });
+    }
+  });
+
+  app.post('/api/shifts/quota', (req: Request, res: Response) => {
+    try {
+      const { shiftLabel, quota } = req.body || {};
+      if (!shiftLabel) {
+        return res.status(400).json({ success: false, error: 'Libellé de shift requis' });
+      }
+      const updatedConfig = onboardingService.setShiftQuota(shiftLabel, quota !== undefined ? Number(quota) : null);
+      res.json({ success: true, config: updatedConfig, message: 'Quota mis à jour avec succès' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur mise à jour quota' });
+    }
+  });
+
   // System Health & Diagnostics
   app.get('/api/health', (req: Request, res: Response) => {
     res.json(store.getHealth());

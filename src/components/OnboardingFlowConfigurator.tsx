@@ -108,6 +108,20 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     onShowToast('Shifts Réinitialisés 🔄', 'Les 4 créneaux de shifts standards ont été restaurés.', 'info');
   };
 
+  const handleUpdateQuota = (shiftLabel: string, rawVal: string) => {
+    const val = parseInt(rawVal, 10);
+    const quotaVal = isNaN(val) || val <= 0 ? 0 : val;
+    const currentQuotas = { ...(config.shiftQuotas || {}) };
+    if (quotaVal <= 0) {
+      delete currentQuotas[shiftLabel];
+    } else {
+      currentQuotas[shiftLabel] = quotaVal;
+    }
+    const newCfg = { ...config, shiftQuotas: currentQuotas };
+    setConfig(newCfg);
+    onboardingService.updateConfig(newCfg);
+  };
+
   const refreshModulesState = () => {
     const updated = store.getModules();
     setLocalModules([...updated]);
@@ -825,25 +839,93 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
               Créneaux de Shift Actuellement Proposés aux Candidats ({currentShifts.length})
             </label>
-            <div className="flex flex-wrap gap-2.5">
-              {currentShifts.map((shiftLabel) => (
-                <div
-                  key={shiftLabel}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 text-xs font-medium shadow-sm"
-                >
-                  <span className="font-semibold text-white">{shiftLabel}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveShift(shiftLabel)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
-                    title={`Retirer le créneau "${shiftLabel}"`}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {currentShifts.map((shiftLabel) => {
+                const count = onboardingService.getShiftRecruitCount(shiftLabel);
+                const quotas = config.shiftQuotas || {};
+                const quota = quotas[shiftLabel] || 0;
+                const isFull = quota > 0 && count >= quota;
+                const pct = quota > 0 ? Math.min(100, Math.round((count / quota) * 100)) : 0;
+
+                return (
+                  <div
+                    key={shiftLabel}
+                    className={`flex flex-col justify-between p-3.5 rounded-xl bg-slate-950 border transition-all ${
+                      isFull
+                        ? 'border-rose-500/50 bg-rose-950/10 shadow-rose-950/20'
+                        : 'border-slate-800 hover:border-emerald-500/40'
+                    }`}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs text-white truncate flex items-center gap-1.5">
+                          <span>⏰</span>
+                          <span title={shiftLabel}>{shiftLabel}</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isFull
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                : quota > 0
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {isFull
+                              ? '🔴 COMPLET'
+                              : quota > 0
+                              ? `🟢 ${count} / ${quota} places`
+                              : `👥 ${count} recruté(s)`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveShift(shiftLabel)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
+                        title={`Supprimer le créneau "${shiftLabel}"`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Progress Bar if Quota set */}
+                    {quota > 0 && (
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                        <div
+                          className={`h-1.5 rounded-full transition-all ${
+                            isFull ? 'bg-rose-500' : pct > 75 ? 'bg-amber-400' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Quota Setting Input */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                      <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                        Places max :
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="999"
+                          placeholder="Illimité"
+                          value={quota > 0 ? quota : ''}
+                          onChange={(e) => handleUpdateQuota(shiftLabel, e.target.value)}
+                          className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white text-center font-bold focus:outline-none focus:border-indigo-500"
+                        />
+                        <span className="text-[10px] text-slate-500">max</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {currentShifts.length === 0 && (
-                <p className="text-xs text-amber-400 italic py-2">
+                <p className="text-xs text-amber-400 italic py-2 col-span-full">
                   ⚠️ Aucun shift configuré. Les candidats verront la liste standard de secours.
                 </p>
               )}

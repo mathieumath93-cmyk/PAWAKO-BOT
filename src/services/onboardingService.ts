@@ -360,6 +360,53 @@ class OnboardingService {
     const cleaned = shifts.map(s => s.trim()).filter(s => s.length > 0);
     return this.updateConfig({ availableShifts: cleaned });
   }
+
+  public getShiftQuotas(): Record<string, number> {
+    return this.config.shiftQuotas || {};
+  }
+
+  public setShiftQuota(shiftLabel: string, quota: number | null): OnboardingFlowConfig {
+    const current = { ...(this.config.shiftQuotas || {}) };
+    if (quota === null || quota <= 0) {
+      delete current[shiftLabel];
+    } else {
+      current[shiftLabel] = quota;
+    }
+    return this.updateConfig({ shiftQuotas: current });
+  }
+
+  public getShiftRecruitCount(shiftLabel: string): number {
+    try {
+      const members = store.getMembers();
+      return members.filter(
+        (m) =>
+          m.candidateState === 'formation_terminee' &&
+          m.shift &&
+          m.shift.trim().toLowerCase() === shiftLabel.trim().toLowerCase()
+      ).length;
+    } catch {
+      return 0;
+    }
+  }
+
+  public isShiftFull(shiftLabel: string): boolean {
+    const quotas = this.getShiftQuotas();
+    const quota = quotas[shiftLabel];
+    if (!quota || quota <= 0) return false;
+    const count = this.getShiftRecruitCount(shiftLabel);
+    return count >= quota;
+  }
+
+  public getShiftStats(): Array<{ shift: string; quota: number; count: number; isFull: boolean }> {
+    const shifts = this.getAvailableShifts();
+    const quotas = this.getShiftQuotas();
+    return shifts.map((shift) => {
+      const quota = quotas[shift] || 0;
+      const count = this.getShiftRecruitCount(shift);
+      const isFull = quota > 0 && count >= quota;
+      return { shift, quota, count, isFull };
+    });
+  }
 }
 
 export const onboardingService = new OnboardingService();

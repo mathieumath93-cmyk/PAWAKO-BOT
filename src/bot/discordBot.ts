@@ -2409,6 +2409,17 @@ export class PawakoBotRunner {
             : ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
           const chosenShift = validShifts[shiftIdx] || validShifts[0] || '08h - 14h';
 
+          // Quota Check
+          if (onboardingService.isShiftFull(chosenShift) && member?.shift !== chosenShift) {
+            const recruitCount = onboardingService.getShiftRecruitCount(chosenShift);
+            const quota = onboardingService.getShiftQuotas()[chosenShift];
+            await interaction.reply({
+              content: `⚠️ **Le créneau "${chosenShift}" est complet !** (${recruitCount}/${quota} places déjà attribuées)\nMerci de sélectionner un autre créneau horaire disponible.`,
+              ephemeral: true,
+            }).catch(() => {});
+            return;
+          }
+
           if (member) {
             member.shift = chosenShift;
             store.saveMembers();
@@ -2418,6 +2429,54 @@ export class PawakoBotRunner {
           const modal = new ModalBuilder()
             .setCustomId(`modal_shift_form_${member ? member.id : targetId}_${shiftIdx}`)
             .setTitle(`Shift : ${chosenShift.slice(0, 30)}`);
+
+          const emailInput = new TextInputBuilder()
+            .setCustomId('integration_email')
+            .setLabel('📧 Adresse E-mail Professionnelle')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('exemple@gmail.com')
+            .setRequired(true);
+
+          if (member?.email) emailInput.setValue(member.email);
+
+          const whatsappInput = new TextInputBuilder()
+            .setCustomId('integration_whatsapp')
+            .setLabel('📱 Numéro WhatsApp')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('+33 6 12 34 56 78')
+            .setRequired(true);
+
+          if (member?.whatsapp) whatsappInput.setValue(member.whatsapp);
+
+          const startDateInput = new TextInputBuilder()
+            .setCustomId('integration_start_date')
+            .setLabel('📅 Disponibilité (Quand peux-tu démarrer ?)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: Immédiate, Dès lundi prochain, 10/11/2026...')
+            .setRequired(true);
+
+          if (member?.availableStartDate) startDateInput.setValue(member.availableStartDate);
+
+          modal.addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(emailInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(whatsappInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(startDateInput)
+          );
+
+          await interaction.showModal(modal).catch((e) => console.warn('[ShowModal Error]', e));
+          return;
+        }
+
+        // --- HANDLER FOR CANDIDATE CLICKING "✏️ Modifier mes coordonnées / Shift" ---
+        if (interaction.isButton() && customId.startsWith('edit_integration_info_')) {
+          const targetId = customId.replace('edit_integration_info_', '');
+          const member =
+            store.getMember(targetId) ||
+            store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
+
+          const modal = new ModalBuilder()
+            .setCustomId(`modal_shift_form_${member ? member.id : targetId}_-1`)
+            .setTitle('Modifier mes Coordonnées');
 
           const emailInput = new TextInputBuilder()
             .setCustomId('integration_email')
@@ -2640,20 +2699,33 @@ export class PawakoBotRunner {
             console.warn('[Edit Original Integration Message Error]', e);
           }
 
-          // Send confirmation note to candidate personal channel
+          // Send confirmation note to candidate personal channel with edit button
           if (member.personalChannelId && this.client) {
             this.client.channels.fetch(member.personalChannelId).then((chan) => {
               if (chan && 'send' in chan) {
+                const editRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`edit_integration_info_${member.id}`)
+                    .setLabel('✏️ Modifier mes coordonnées')
+                    .setStyle(ButtonStyle.Secondary)
+                );
+
                 const publicEmbed = new EmbedBuilder()
                   .setTitle('✅ DOSSIER D\'INTÉGRATION FINALISÉ')
                   .setDescription(
                     `🎉 Bravo <@${user.id}> ! Tu as complété ton dossier d'intégration avec succès :\n` +
                     `• **Shift choisi :** \`${member.shift || validShifts[0]}\`\n` +
-                    `• **Disponibilité :** \`${member.availableStartDate || 'Immédiate'}\`\n\n` +
-                    `Le dossier a été notifié à la Direction (@Mahsa).`
+                    `• **Disponibilité :** \`${member.availableStartDate || 'Immédiate'}\`\n` +
+                    `• **E-mail :** \`${member.email || email}\`\n` +
+                    `• **WhatsApp :** \`${member.whatsapp || whatsapp}\`\n\n` +
+                    `Le dossier a été notifié à la Direction (@Mahsa).\n` +
+                    `💡 *Une faute de frappe dans ton email ou numéro ? Clique sur le bouton ci-dessous pour rectifier tes coordonnées à tout moment.*`
                   )
-                  .setColor(0x10b981);
-                (chan as any).send({ embeds: [publicEmbed] }).catch(() => {});
+                  .setColor(0x10b981)
+                  .setFooter({ text: 'PAWAKO FORMATION • Dossier Validé' })
+                  .setTimestamp();
+
+                (chan as any).send({ embeds: [publicEmbed], components: [editRow] }).catch(() => {});
               }
             }).catch(() => {});
           }
@@ -9195,7 +9267,17 @@ export class PawakoBotRunner {
       const validShifts = activeShifts.length > 0
         ? activeShifts
         : ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
-      const shiftsListFormatted = validShifts.map((s) => `• \`${s}\``).join('\n');
+      const shiftQuotas = onboardingService.getShiftQuotas();
+
+      const shiftsListFormatted = validShifts.map((s) => {
+        const quota = shiftQuotas[s] || 0;
+        const recruitCount = onboardingService.getShiftRecruitCount(s);
+        if (quota > 0) {
+          const isFull = recruitCount >= quota;
+          return `• \`${s}\` — ${isFull ? '🔴 **COMPLET**' : `🟢 *${recruitCount}/${quota} places*`}`;
+        }
+        return `• \`${s}\` — 🟢 *Places ouvertes*`;
+      }).join('\n');
 
       const currentShiftInfo = member.shift ? `\`${member.shift}\`` : '*À sélectionner ci-dessous*';
       const currentAvailInfo = member.availableStartDate ? `\`${member.availableStartDate}\`` : '*À renseigner via le formulaire*';
@@ -9219,11 +9301,26 @@ export class PawakoBotRunner {
         }
 
         const isChosen = member.shift === shiftLabel;
-        const prefix = isChosen ? '✅ ' : `${emoji} `;
-        return new ButtonBuilder()
+        const quota = shiftQuotas[shiftLabel] || 0;
+        const recruitCount = onboardingService.getShiftRecruitCount(shiftLabel);
+        const isFull = quota > 0 && recruitCount >= quota && !isChosen;
+
+        const countSuffix = quota > 0 ? ` (${recruitCount}/${quota})` : '';
+        const prefix = isChosen ? '✅ ' : isFull ? '🛑 ' : `${emoji} `;
+        const labelText = isFull
+          ? `[COMPLET] ${shiftLabel}${countSuffix}`
+          : `${prefix}${shiftLabel}${countSuffix}`;
+
+        const btn = new ButtonBuilder()
           .setCustomId(`shift_btn_${member.id}_${idx}`)
-          .setLabel(`${prefix}${shiftLabel}`.slice(0, 80))
-          .setStyle(isChosen ? ButtonStyle.Success : style);
+          .setLabel(labelText.slice(0, 80))
+          .setStyle(isChosen ? ButtonStyle.Success : isFull ? ButtonStyle.Secondary : style);
+
+        if (isFull) {
+          btn.setDisabled(true);
+        }
+
+        return btn;
       });
 
       const shiftRows: ActionRowBuilder<ButtonBuilder>[] = [];
@@ -9236,7 +9333,7 @@ export class PawakoBotRunner {
         .setDescription(
           `Félicitations ${candMention} ! Tu as validé la **Formation Outils** en visio ! 👏\n\n` +
           `Pour finaliser ton dossier d'intégration et recevoir tes accès officiels de travail, **sélectionne ton shift en cliquant sur l'un des boutons ci-dessous** :\n\n` +
-          `🕒 **Shifts disponibles actuellement :**\n${shiftsListFormatted}\n\n` +
+          `🕒 **Shifts et places actuellement disponibles :**\n${shiftsListFormatted}\n\n` +
           `📋 **Informations demandées au clic sur ton shift :**\n` +
           `• 📧 **Adresse E-mail professionnelle** (pour recevoir tes accès)\n` +
           `• 📱 **Numéro WhatsApp** (pour ton groupe d'équipe et contact urgent)\n` +
@@ -9753,6 +9850,99 @@ export class PawakoBotRunner {
       console.warn('[publishAnnouncement Error]', err);
       return { success: false, error: err?.message || 'Erreur lors de la publication sur Discord.' };
     }
+  }
+
+  /**
+   * Automatically remind candidates who validated their tools formation but haven't submitted their integration shift & contact form.
+   */
+  public async checkAndSendIntegrationReminders(forceAll: boolean = false): Promise<{ remindedCount: number; remindedCandidates: string[] }> {
+    if (!this.client || !this.isConnected) {
+      return { remindedCount: 0, remindedCandidates: [] };
+    }
+
+    const members = store.getMembers();
+    const now = Date.now();
+    const remindedCandidates: string[] = [];
+
+    const pendingCandidates = members.filter((m) => {
+      // Must not be kicked / out
+      if (
+        m.candidateState === 'expulse_inactivite' ||
+        m.candidateState === 'expulse_simulation_non_confirmee' ||
+        m.candidateState === 'expulse_simulation_manquee' ||
+        m.candidateState === 'refus_simu_catastrophique' ||
+        m.candidateState === 'refus_candidature_5_echecs' ||
+        m.candidateState === 'out'
+      ) {
+        return false;
+      }
+
+      // Must have validated tools formation or be in formation_outils
+      const hasToolsValidated = !!m.toolsFormationValidatedAt;
+      const isToolsOrPending = m.candidateState === 'formation_outils' || hasToolsValidated;
+      if (!isToolsOrPending) return false;
+
+      // Must NOT be completely finished with Step 3
+      const isAlreadyFinished = m.candidateState === 'formation_terminee' && !!m.email && !!m.whatsapp && !!m.shift;
+      if (isAlreadyFinished) return false;
+
+      // Must have personal channel
+      if (!m.personalChannelId) return false;
+
+      if (forceAll) return true;
+
+      // Rate limit reminders: at least 20 hours between reminders
+      if (m.integrationReminderSentAt) {
+        const lastSent = new Date(m.integrationReminderSentAt).getTime();
+        if (now - lastSent < 20 * 3600 * 1000) return false;
+      }
+
+      return true;
+    });
+
+    for (const member of pendingCandidates) {
+      try {
+        const chan = await this.client.channels.fetch(member.personalChannelId!).catch(() => null);
+        if (chan && 'send' in chan) {
+          const candDiscordId = member.discordId || member.id.replace('mem-', '');
+          const candMention = `<@${candDiscordId}>`;
+
+          const reminderEmbed = new EmbedBuilder()
+            .setTitle('⏰ RAPPEL : FINALISATION DE TON DOSSIER D\'INTÉGRATION')
+            .setDescription(
+              `Bonjour ${candMention} ! 👋\n\n` +
+              `Tu as validé la **Formation Outils** en visio ! 🎉👏\n\n` +
+              `Pour recevoir tes accès de travail officiels et commencer la production, il ne te reste plus qu'à finaliser ton inscription :\n\n` +
+              `👉 **Clique sur le bouton de ton Shift** ci-dessus dans ce salon et valide tes coordonnées (E-mail, WhatsApp, Disponibilité).\n\n` +
+              `Dès réception, la Direction (@Mahsa) créera tes identifiants. Merci et à très vite en production ! 🚀`
+            )
+            .setColor(0xf59e0b)
+            .setFooter({ text: 'PAWAKO FORMATION • Étape 3 Intégration' })
+            .setTimestamp();
+
+          await (chan as any).send({
+            content: `🔔 ${candMention}`,
+            embeds: [reminderEmbed],
+          }).catch(() => {});
+
+          member.integrationReminderSentAt = new Date().toISOString();
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+
+          remindedCandidates.push(member.username);
+          store.addLog(
+            'System Bot',
+            `Relance automatique Étape 3 (Shift & Intégration) envoyée à ${member.username}`,
+            'member',
+            member.username
+          );
+        }
+      } catch (err) {
+        console.warn(`[Integration Reminder Error for ${member.username}]`, err);
+      }
+    }
+
+    return { remindedCount: remindedCandidates.length, remindedCandidates };
   }
 
   public getIsConnected(): boolean {

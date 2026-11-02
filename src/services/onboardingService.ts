@@ -42,6 +42,12 @@ const defaultConfig: OnboardingFlowConfig = {
   randomizeQuestions: true,
   hideQuizSolutions: true,
   toolsFormationMeetUrl: 'https://meet.google.com/pawako-tools-formation',
+  availableShifts: [
+    '08h - 14h (Matin)',
+    '14h - 20h (Après-midi)',
+    '20h - 02h (Soir)',
+    '02h - 08h (Nuit)',
+  ],
   mahsaDiscordId: '',
   mathieuDiscordId: '',
   stepConfigs: defaultStepConfigs,
@@ -342,6 +348,17 @@ class OnboardingService {
     } catch {
       // Ignore
     }
+  }
+
+  public getAvailableShifts(): string[] {
+    const shifts = this.config.availableShifts;
+    if (shifts && Array.isArray(shifts) && shifts.length > 0) return shifts;
+    return ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+  }
+
+  public setAvailableShifts(shifts: string[]): OnboardingFlowConfig {
+    const cleaned = shifts.map(s => s.trim()).filter(s => s.length > 0);
+    return this.updateConfig({ availableShifts: cleaned });
   }
 }
 

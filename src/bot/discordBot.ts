@@ -13,6 +13,8 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   MessageFlags,
   ActivityType,
   Guild,
@@ -2327,7 +2329,7 @@ export class PawakoBotRunner {
 
       // Handle button & modal interactions via Gateway
       this.client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+        if (!interaction.isButton() && !interaction.isModalSubmit() && !interaction.isStringSelectMenu()) return;
 
         const customId = interaction.customId;
         const user = interaction.user;
@@ -2403,7 +2405,7 @@ export class PawakoBotRunner {
 
           const emailInput = new TextInputBuilder()
             .setCustomId('integration_email')
-            .setLabel('📧 Adresse E-mail')
+            .setLabel('📧 Adresse E-mail Professionnelle')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('exemple@gmail.com')
             .setRequired(true);
@@ -2419,19 +2421,19 @@ export class PawakoBotRunner {
 
           if (member?.whatsapp) whatsappInput.setValue(member.whatsapp);
 
-          const shiftInput = new TextInputBuilder()
-            .setCustomId('integration_shift')
-            .setLabel('⏰ Shift / Horaires souhaités')
-            .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Ex: Shift du soir (18h-00h), 5 jours / 7')
+          const startDateInput = new TextInputBuilder()
+            .setCustomId('integration_start_date')
+            .setLabel('📅 Date début disponible (Démarrage Prod)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: Immédiate, Dès lundi prochain, 10/11/2026...')
             .setRequired(true);
 
-          if (member?.shift) shiftInput.setValue(member.shift);
+          if (member?.availableStartDate) startDateInput.setValue(member.availableStartDate);
 
           modal.addComponents(
             new ActionRowBuilder<TextInputBuilder>().addComponents(emailInput),
             new ActionRowBuilder<TextInputBuilder>().addComponents(whatsappInput),
-            new ActionRowBuilder<TextInputBuilder>().addComponents(shiftInput)
+            new ActionRowBuilder<TextInputBuilder>().addComponents(startDateInput)
           );
 
           await interaction.showModal(modal).catch((e) => console.warn('[ShowModal Error]', e));
@@ -2454,7 +2456,7 @@ export class PawakoBotRunner {
 
           const email = interaction.fields.getTextInputValue('integration_email').trim();
           const whatsapp = interaction.fields.getTextInputValue('integration_whatsapp').trim();
-          const shift = interaction.fields.getTextInputValue('integration_shift').trim();
+          const startDate = interaction.fields.getTextInputValue('integration_start_date').trim();
 
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(email)) {
@@ -2474,7 +2476,69 @@ export class PawakoBotRunner {
 
           member.email = email;
           member.whatsapp = whatsapp;
-          member.shift = shift;
+          member.availableStartDate = startDate;
+
+          store.saveMembers();
+          firebaseSyncService.saveMember(member).catch(() => {});
+
+          // Fetch active configurable shifts defined by supervisors
+          const activeShifts = onboardingService.getAvailableShifts();
+          const validShifts = activeShifts.length > 0
+            ? activeShifts
+            : ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+
+          const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`select_candidate_shift_${member.id}`)
+            .setPlaceholder('🕒 Sélectionne ton Shift de travail...')
+            .setMinValues(1)
+            .setMaxValues(1);
+
+          validShifts.forEach((shiftLabel, idx) => {
+            selectMenu.addOptions(
+              new StringSelectMenuOptionBuilder()
+                .setLabel(shiftLabel.slice(0, 100))
+                .setValue(shiftLabel.slice(0, 100))
+                .setDescription(`Créneau horaire de production proposé`)
+                .setDefault(member.shift === shiftLabel)
+            );
+          });
+
+          const shiftRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+          const stepEmbed = new EmbedBuilder()
+            .setTitle("🕒 ÉTAPE FINALE : SÉLECTION DU SHIFT DE PRODUCTION")
+            .setDescription(
+              `Merci <@${user.id}> ! Tes coordonnées et ta disponibilité ont été enregistrées avec succès :\n\n` +
+              `• 📧 **E-mail :** \`${email}\`\n` +
+              `• 📱 **WhatsApp :** \`${whatsapp}\`\n` +
+              `• 📅 **Date de Démarrage Prod :** \`${startDate}\`\n\n` +
+              `👉 **Dernière étape obligatoire :**\n` +
+              `Sélectionne ton **Shift / Horaires souhaités** dans le menu déroulant ci-dessous parmi les créneaux disponibles configurés par le Staff :`
+            )
+            .setColor(0x3b82f6)
+            .setFooter({ text: 'PAWAKO FORMATION • Créneaux de production en direct' })
+            .setTimestamp();
+
+          await interaction.editReply({ embeds: [stepEmbed], components: [shiftRow] }).catch(() => {});
+          return;
+        }
+
+        // --- HANDLER FOR CANDIDATE SELECTING THEIR SHIFT FROM THE DROPDOWN MENU ---
+        if (interaction.isStringSelectMenu() && customId.startsWith('select_candidate_shift_')) {
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
+          const targetId = customId.replace('select_candidate_shift_', '');
+          const member =
+            store.getMember(targetId) ||
+            store.getMembers().find((m) => m.discordId === user.id || m.id === user.id || m.id === `mem-${user.id}`);
+
+          if (!member) {
+            await interaction.editReply({ content: '⚠️ Candidat introuvable dans la base de données.' }).catch(() => {});
+            return;
+          }
+
+          const chosenShift = interaction.values[0] || 'Non spécifié';
+          member.shift = chosenShift;
           member.candidateState = 'formation_terminee';
           if (!member.toolsFormationValidatedAt) {
             member.toolsFormationValidatedAt = new Date().toLocaleString('fr-FR');
@@ -2483,28 +2547,33 @@ export class PawakoBotRunner {
           store.saveMembers();
           firebaseSyncService.saveMember(member).catch(() => {});
 
-          const confirmEmbed = new EmbedBuilder()
-            .setTitle("🏆 Formulaire d'Intégration Transmis avec Succès !")
+          const finalConfirmEmbed = new EmbedBuilder()
+            .setTitle("🏆 DOSSIER D'INTÉGRATION VALIDÉ AVEC SUCCÈS !")
             .setDescription(
-              `Merci <@${user.id}> ! Tes informations d'intégration ont été enregistrées et transmises à l'équipe de Direction (@Mahsa).\n\n` +
-              `• 📧 **E-mail :** \`${email}\`\n` +
-              `• 📱 **WhatsApp :** \`${whatsapp}\`\n` +
-              `• ⏰ **Shift :** \`${shift}\`\n\n` +
-              `Félicitations pour ton parcours et bienvenue officiellement dans l'équipe PAWAKO ! 🎉`
+              `Félicitations <@${user.id}> ! Ton dossier d'intégration complet est désormais finalisé et transmis à l'équipe de Direction (@Mahsa) :\n\n` +
+              `• 📧 **E-mail :** \`${member.email || 'Non renseigné'}\`\n` +
+              `• 📱 **WhatsApp :** \`${member.whatsapp || 'Non renseigné'}\`\n` +
+              `• 📅 **Disponibilité Démarrage Prod :** \`${member.availableStartDate || 'Immédiate'}\`\n` +
+              `• ⏰ **Shift Officiel Sélectionné :** \`${chosenShift}\`\n\n` +
+              `Tes accès officiels vont être générés. Bienvenue dans l'équipe PAWAKO ! 🎉🚀`
             )
             .setColor(0x10b981)
-            .setFooter({ text: 'PAWAKO FORMATION • Dossier d\'Intégration Complété' });
+            .setFooter({ text: 'PAWAKO FORMATION • Intégration Finalisée' })
+            .setTimestamp();
 
-          await interaction.editReply({ embeds: [confirmEmbed] }).catch(() => {});
+          await interaction.editReply({ embeds: [finalConfirmEmbed], components: [] }).catch(() => {});
 
-          // Send confirmation note to candidate personal channel
+          // Send confirmation note in candidate's personal channel
           if (member.personalChannelId && this.client) {
             this.client.channels.fetch(member.personalChannelId).then((chan) => {
               if (chan && 'send' in chan) {
                 const publicEmbed = new EmbedBuilder()
-                  .setTitle('✅ FORMULAIRE D\'INTÉGRATION COMPLÉTÉ')
+                  .setTitle('✅ DOSSIER D\'INTÉGRATION FINALISÉ')
                   .setDescription(
-                    ` Bravo <@${user.id}> ! Tu as rempli tes coordonnées d'intégration. Le dossier a été transmis à @Mahsa.`
+                    `🎉 Bravo <@${user.id}> ! Tu as complété ton dossier d'intégration avec succès :\n` +
+                    `• **Shift choisi :** \`${chosenShift}\`\n` +
+                    `• **Disponibilité :** \`${member.availableStartDate || 'Immédiate'}\`\n\n` +
+                    `Le dossier a été notifié à la Direction (@Mahsa).`
                   )
                   .setColor(0x10b981);
                 (chan as any).send({ embeds: [publicEmbed] }).catch(() => {});
@@ -3932,18 +4001,22 @@ export class PawakoBotRunner {
               quiz = store.getQuiz('quiz-1') || defaultQuizzes[0];
             }
 
-            // 3-0a. Check 5 Failures Refusal: Candidate disqualified
+            // 3-0a. Check 5 Failures on Module or 10 Failures Overall: Candidate disqualified
+            const totalFailsOverall = store.getTotalFailedQuizAttemptsForMember(member.id);
+            const has5FailsOnModule = Object.values(member.progress || {}).some((p) => p.attemptsCount >= 5 && !p.quizPassed);
             if (
               member.candidateState === 'refus_candidature_5_echecs' ||
-              Object.values(member.progress || {}).some((p) => p.attemptsCount >= 5 && !p.quizPassed)
+              has5FailsOnModule ||
+              totalFailsOverall >= 10
             ) {
+              const isGlobal10 = totalFailsOverall >= 10 && !has5FailsOnModule;
               const refusedEmbed = new EmbedBuilder()
-                .setTitle('🛑 CANDIDATURE REFUSÉE — 5 ÉCHECS CUMULÉS AUX QUIZ')
+                .setTitle(isGlobal10 ? '🛑 CANDIDATURE REFUSÉE — 10 ÉCHECS CUMULÉS SUR LE PARCOURS' : '🛑 CANDIDATURE REFUSÉE — 5 ÉCHECS CUMULÉS SUR CE MODULE')
                 .setDescription(
-                  `📢 <@${user.id}>, **tu as atteint 5 échecs aux quiz de formation.**\n\n` +
+                  `📢 <@${user.id}>, **tu as atteint le seuil éliminatoire (${isGlobal10 ? '10 échecs cumulés sur l\'ensemble des cours' : '5 échecs au quiz de ce module'}).**\n\n` +
                   `⚖️ **Application stricte du Règlement Officiel (Règle 3) :**\n` +
                   `• Votre formation est arrêtée et votre candidature non retenue.\n` +
-                  `• L'accès aux quiz est définitivement clôturé.\n\n` +
+                  `• L'accès aux questionnaires et aux épreuves est définitivement suspendu.\n\n` +
                   `*Conformément aux règles du serveur, le bannissement requiert une confirmation expresse du Staff.*`
                 )
                 .setColor(0xef4444)
@@ -8292,38 +8365,34 @@ export class PawakoBotRunner {
         new ButtonBuilder().setCustomId('btn_profile').setLabel('👤 Mon profil').setStyle(ButtonStyle.Secondary)
       );
     } else {
-      // Quiz Failed: calculate cumulative failed attempts across all sessions, even on separate days
-      const unblockedAt = member.progress[quiz.moduleId]?.unblockedAt || 0;
+      // Quiz Failed: calculate cumulative failed attempts across all sessions (never wiped after unblock)
       const pastFailedAttempts = store.getQuizAttempts().filter((att) => {
         const isTarget =
           (att.memberId === member.id || att.memberId === discordUserId) &&
           (att.quizId === quiz.id || att.quizTitle === quiz.title) &&
           !att.passed;
-        if (!isTarget) return false;
-        if (unblockedAt > 0) {
-          const tsMatch = att.id.match(/\d{10,}/);
-          if (tsMatch && parseInt(tsMatch[0], 10) <= unblockedAt) {
-            return false;
-          }
-        }
-        return true;
+        return isTarget;
       }).length;
 
       const prevAttempts = member.progress[quiz.moduleId]?.attemptsCount || 0;
       const currentAttempts = Math.max(prevAttempts + 1, pastFailedAttempts);
+      const totalGlobalFailures = Math.max(store.getTotalFailedQuizAttemptsForMember(member.id), currentAttempts);
       const mod = store.getModule(quiz.moduleId);
       const modTitle = mod?.title || quiz.title;
       const stepCfg = onboardingService.getStepConfigForModule(quiz.moduleId);
       const externalLink = (mod?.url && mod.url.trim() !== '' ? mod.url : (stepCfg?.externalLinkUrl && stepCfg.externalLinkUrl.trim() !== '' ? stepCfg.externalLinkUrl : (mod?.resources && mod?.resources[0]?.url))) || '';
 
-      if (currentAttempts >= 5) {
-        // --- 5 OR MORE CUMULATIVE FAILURES: PERMANENT DISQUALIFICATION & STOP TRAINING ---
+      if (currentAttempts >= 5 || totalGlobalFailures >= 10) {
+        // --- 5 FAILURES ON MODULE OR 10 FAILURES GLOBALLY: PERMANENT DISQUALIFICATION & STOP TRAINING ---
+        const isGlobalElimination = totalGlobalFailures >= 10 && currentAttempts < 5;
         member.cooldownUntilTimestamp = null;
         member.currentQuizAvailableAtTimestamp = null;
         member.candidateState = 'refus_candidature_5_echecs';
         member.isActive = false;
         member.kickedAt = store.getFormattedNow();
-        member.kickedReason = `Arrêt de la formation suite à ${currentAttempts} échecs cumulés au quiz (${modTitle})`;
+        member.kickedReason = isGlobalElimination
+          ? `Arrêt de la formation suite à ${totalGlobalFailures} échecs cumulés sur l'ensemble des cours (Règle 3)`
+          : `Arrêt de la formation suite à ${currentAttempts} échecs cumulés au quiz (${modTitle})`;
         member.progress[quiz.moduleId] = {
           ...(member.progress[quiz.moduleId] || { moduleId: quiz.moduleId, status: 'en_cours' }),
           attemptsCount: currentAttempts,
@@ -8337,14 +8406,25 @@ export class PawakoBotRunner {
         firebaseSyncService.saveMember(member).catch(() => {});
 
         resultEmbed = new EmbedBuilder()
-          .setTitle(`🛑 CANDIDATURE REFUSÉE — 5 ÉCHECS CUMULÉS SUR ${modTitle.toUpperCase()}`)
+          .setTitle(
+            isGlobalElimination
+              ? `🛑 CANDIDATURE REFUSÉE — 10 ÉCHECS CUMULÉS SUR L'ENSEMBLE DU PARCOURS`
+              : `🛑 CANDIDATURE REFUSÉE — 5 ÉCHECS CUMULÉS SUR ${modTitle.toUpperCase()}`
+          )
           .setDescription(
-            `📢 <@${discordUserId}>, **tu as atteint la limite de 5 échecs cumulés au quiz de ce module (${modTitle}).**\n\n` +
-            `⚖️ **Application stricte du Règlement Officiel (Règle 3) :**\n` +
-            `• 5 échecs aux quiz entraînent automatiquement le **refus de votre candidature** et l'**arrêt immédiat de votre formation**.\n` +
-            `• Vos accès aux questionnaires et aux épreuves sont suspendus.\n` +
-            `• L'équipe administrative et les formateurs ont été informés de la clôture de votre parcours.\n\n` +
-            `*Rappel réglementaire : Tout bannissement éventuel du serveur requiert une confirmation expresse du Staff.*`
+            isGlobalElimination
+              ? `📢 <@${discordUserId}>, **tu as atteint la limite réglementaire de 10 échecs cumulés sur l'ensemble des modules de cours (${totalGlobalFailures} échecs au total).**\n\n` +
+                `⚖️ **Application stricte du Règlement Officiel (Règle 3) :**\n` +
+                `• 10 échecs cumulés sur l'ensemble des cours entraînent automatiquement le **refus de votre candidature** et l'**arrêt immédiat de votre formation**.\n` +
+                `• Vos accès aux questionnaires et aux épreuves sont définitivement suspendus.\n` +
+                `• L'équipe administrative et les formateurs ont été informés de la clôture de votre dossier.\n\n` +
+                `*Rappel réglementaire : Tout bannissement éventuel du serveur requiert une confirmation expresse du Staff.*`
+              : `📢 <@${discordUserId}>, **tu as atteint la limite de 5 échecs cumulés au quiz de ce module (${modTitle}).**\n\n` +
+                `⚖️ **Application stricte du Règlement Officiel (Règle 3) :**\n` +
+                `• 5 échecs aux quiz d'un même module entraînent automatiquement le **refus de votre candidature** et l'**arrêt immédiat de votre formation**.\n` +
+                `• Vos accès aux questionnaires et aux épreuves sont suspendus.\n` +
+                `• L'équipe administrative et les formateurs ont été informés de la clôture de votre parcours.\n\n` +
+                `*Rappel réglementaire : Tout bannissement éventuel du serveur requiert une confirmation expresse du Staff.*`
           )
           .setColor(0xef4444)
           .setFooter({ text: 'PAWAKO FORMATION • Décision Officielle Règlement' })
@@ -8365,13 +8445,18 @@ export class PawakoBotRunner {
               if (staffChan) {
                 const chanLink = member.personalChannelId ? `<#${member.personalChannelId}>` : 'Salon Privé';
                 const staffDisqualifyEmbed = new EmbedBuilder()
-                  .setTitle(`🚨 ALERTE STAFF — REFUS CANDIDATURE (5 ÉCHECS CUMULÉS)`)
+                  .setTitle(
+                    isGlobalElimination
+                      ? `🚨 ALERTE STAFF — REFUS CANDIDATURE (10 ÉCHECS CUMULÉS SUR LE PARCOURS)`
+                      : `🚨 ALERTE STAFF — REFUS CANDIDATURE (5 ÉCHECS CUMULÉS SUR MODULE)`
+                  )
                   .setDescription(
-                    `📢 **Un candidat a atteint la limite des 5 échecs aux quiz :**\n\n` +
+                    `📢 **Un candidat a atteint la limite éliminatoire de la Règle 3 :**\n\n` +
                     `• **Candidat :** <@${discordUserId}> (**${member.username}**)\n` +
-                    `• **Module en échec :** **${modTitle}** (${quiz.title})\n` +
+                    (isGlobalElimination
+                      ? `• **Total échecs sur l'ensemble des cours :** **${totalGlobalFailures} échecs cumulés** (Plafond: 10)\n• **Dernier module testé :** **${modTitle}** (${quiz.title})\n`
+                      : `• **Module en échec :** **${modTitle}** (${quiz.title})\n• **Échecs sur ce module :** **${currentAttempts}/5**\n`) +
                     `• **Dernier score :** **${finalScore}/${totalQuestions}** (Requis: ${minScore}/${totalQuestions})\n` +
-                    `• **Nombre d'échecs cumulés :** **${currentAttempts}**\n` +
                     `• **Statut :** 🛑 Formation arrêtée & Candidature refusée\n` +
                     `• **Salon du candidat :** ${chanLink}\n\n` +
                     `⚖️ *Règle 3 du règlement : Le bannissement nécessite une confirmation explicite du Staff ci-dessous :*`
@@ -8396,7 +8481,9 @@ export class PawakoBotRunner {
                 );
 
                 await staffChan.send({
-                  content: `🚨 **[5 ÉCHECS QUIZ - REFUS CANDIDATURE]** <@${discordUserId}> (**${member.username}**) éliminé(e) sur **${modTitle}**`,
+                  content: isGlobalElimination
+                    ? `🚨 **[10 ÉCHECS PARCOURS - REFUS CANDIDATURE]** <@${discordUserId}> (**${member.username}**) éliminé(e) (${totalGlobalFailures} échecs cumulés)`
+                    : `🚨 **[5 ÉCHECS QUIZ - REFUS CANDIDATURE]** <@${discordUserId}> (**${member.username}**) éliminé(e) sur **${modTitle}**`,
                   embeds: [staffDisqualifyEmbed],
                   components: [staffRow],
                 }).catch((err: any) => console.warn('[Send Staff 5 Fails Error]', err));
@@ -8407,7 +8494,9 @@ export class PawakoBotRunner {
 
         store.addLog(
           'System',
-          `🛑 [REFUS_5_ECHECS] ${member.username} éliminé(e) sur le quiz "${quiz.title}" après ${currentAttempts} échecs cumulés. Staff alerté pour confirmation de bannissement.`,
+          isGlobalElimination
+            ? `🛑 [REFUS_10_ECHECS_GLOBAL] ${member.username} éliminé(e) suite à ${totalGlobalFailures} échecs cumulés sur l'ensemble du parcours. Staff alerté pour confirmation de bannissement.`
+            : `🛑 [REFUS_5_ECHECS] ${member.username} éliminé(e) sur le quiz "${quiz.title}" après ${currentAttempts} échecs cumulés. Staff alerté pour confirmation de bannissement.`,
           'quiz',
           member.username,
           quiz.title,
@@ -9029,18 +9118,19 @@ export class PawakoBotRunner {
     const toolsDate = member.toolsFormationValidatedAt || new Date().toLocaleString('fr-FR');
 
     const staffEmbed = new EmbedBuilder()
-      .setTitle("📋 DOSSIER D'INTÉGRATION CANDIDAT SOUMIS")
+      .setTitle("📋 DOSSIER D'INTÉGRATION CANDIDAT FINALISÉ")
       .setColor(0x10b981)
       .setDescription(
         `👤 **Candidat :** ${candMention} (**${member.username}**)\n\n` +
         `📧 **E-mail :** \`${member.email || 'Non renseigné'}\`\n` +
         `📱 **WhatsApp :** \`${member.whatsapp || 'Non renseigné'}\`\n` +
-        `⏰ **Shift / Horaires :** \`${member.shift || 'Non renseigné'}\`\n\n` +
+        `⏰ **Shift Sélectionné :** \`${member.shift || 'Non renseigné'}\`\n` +
+        `📅 **Disponibilité Démarrage Prod :** \`${member.availableStartDate || 'Immédiate / Non précisée'}\`\n\n` +
         `📅 **Date Validation Simulation :** ${simuDate}\n` +
         `📅 **Date Validation Formation Outils :** ${toolsDate}\n\n` +
         `🔗 **Salon privé candidat :** ${channelLinkStr}`
       )
-      .setFooter({ text: 'PAWAKO FORMATION • Notification Intégration' })
+      .setFooter({ text: 'PAWAKO FORMATION • Notification Intégration Finalisée' })
       .setTimestamp();
 
     // 1. Direct Message MP to Staff / @Mahsa

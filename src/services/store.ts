@@ -2046,16 +2046,17 @@ ${statusText}
 
     if (targetModId && member.progress && member.progress[targetModId]) {
       member.progress[targetModId].quizBlockedByFailures = false;
-      member.progress[targetModId].attemptsCount = 0;
+      // Note: attemptsCount is preserved cumulatively (never reset to 0) as per Rule 3
       member.progress[targetModId].cooldownUntilTimestamp = null;
       member.progress[targetModId].unblockedAt = Date.now();
     }
 
-    // Clear any blocked flags across modules
+    // Clear any blocked flags across modules without wiping cumulative fail count
     for (const prog of Object.values(member.progress || {})) {
       if (prog.quizBlockedByFailures) {
         prog.quizBlockedByFailures = false;
-        prog.attemptsCount = 0;
+        // Keep prog.attemptsCount intact so cumulative failures remain counted
+        prog.cooldownUntilTimestamp = null;
         prog.unblockedAt = Date.now();
       }
     }
@@ -2068,16 +2069,45 @@ ${statusText}
 
     const mod = this.getModule(targetModId || '');
     const modTitle = mod?.title || targetModId || 'Module';
+    const currentModuleAttempts = targetModId && member.progress && member.progress[targetModId] ? member.progress[targetModId].attemptsCount : 3;
 
     this.saveMembers();
     this.addLog(
       adminName,
-      `🔓 [DEBLOCAGE_QUIZ] Quiz du module "${modTitle}" débloqué pour ${member.username} par ${adminName}. Tentatives réinitialisées.`,
+      `🔓 [DEBLOCAGE_QUIZ] Quiz du module "${modTitle}" débloqué pour ${member.username} par ${adminName} (${currentModuleAttempts} échec(s) conservé(s) au dossier — nouvelle tentative autorisée).`,
       'member',
       member.username
     );
 
     return member;
+  }
+
+  /**
+   * Get total failed quiz attempts across all modules for a candidate (cumulative across entire training)
+   */
+  public getTotalFailedQuizAttemptsForMember(memberId: string): number {
+    if (!memberId) return 0;
+    const cleanId = memberId.replace('mem-', '');
+    const member = this.getMember(memberId);
+
+    // Count from quizAttempts history
+    const failedFromHistory = this.quizAttempts.filter(
+      (att) => (att.memberId === memberId || att.memberId.replace('mem-', '') === cleanId) && !att.passed
+    ).length;
+
+    // Also calculate from member.progress attemptsCount if history is partial
+    let failedFromProgress = 0;
+    if (member && member.progress) {
+      for (const prog of Object.values(member.progress)) {
+        if (prog.quizPassed) {
+          failedFromProgress += Math.max(0, (prog.attemptsCount || 1) - 1);
+        } else {
+          failedFromProgress += (prog.attemptsCount || 0);
+        }
+      }
+    }
+
+    return Math.max(failedFromHistory, failedFromProgress);
   }
 
   /**

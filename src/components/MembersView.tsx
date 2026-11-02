@@ -933,6 +933,41 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   </div>
                 )}
 
+                {/* Dossier d'Intégration & Disponibilité */}
+                {(selectedCandidate.email || selectedCandidate.whatsapp || selectedCandidate.shift || selectedCandidate.availableStartDate || selectedCandidate.candidateState === 'formation_terminee' || selectedCandidate.candidateState === 'formation_outils') && (
+                  <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 space-y-2 text-xs">
+                    <div className="font-bold text-emerald-300 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Award className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Dossier d'Intégration PAWAKO</span>
+                      </span>
+                      {selectedCandidate.candidateState === 'formation_terminee' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                          Diplômé Prod
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">📧 E-mail</span>
+                        <span className="text-white font-mono font-semibold">{selectedCandidate.email || 'Non renseigné'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">📱 WhatsApp</span>
+                        <span className="text-white font-mono font-semibold">{selectedCandidate.whatsapp || 'Non renseigné'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">⏰ Shift Sélectionné</span>
+                        <span className="text-indigo-300 font-bold">{selectedCandidate.shift || 'Non renseigné'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">📅 Disponibilité Démarrage Prod</span>
+                        <span className="text-emerald-300 font-bold">{selectedCandidate.availableStartDate || 'Immédiate / Non précisée'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 3 FAILURES BLOCKED QUIZ BANNER */}
                 {(() => {
                   const isBlocked =

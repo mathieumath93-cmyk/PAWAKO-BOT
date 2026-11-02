@@ -71,6 +71,42 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
   const [isRunningWorker, setIsRunningWorker] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [newShiftInput, setNewShiftInput] = useState('');
+
+  const currentShifts = config.availableShifts && config.availableShifts.length > 0
+    ? config.availableShifts
+    : ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+
+  const handleAddShift = () => {
+    if (!newShiftInput.trim()) return;
+    const trimmed = newShiftInput.trim();
+    if (currentShifts.includes(trimmed)) {
+      onShowToast('Shift Déjà Présent ⚠️', 'Ce créneau existe déjà dans la liste.', 'info');
+      return;
+    }
+    const updated = [...currentShifts, trimmed];
+    const newCfg = { ...config, availableShifts: updated };
+    setConfig(newCfg);
+    onboardingService.updateConfig(newCfg);
+    setNewShiftInput('');
+    onShowToast('Shift Ajouté ✅', `Le shift "${trimmed}" est désormais sélectionnable par les candidats.`, 'success');
+  };
+
+  const handleRemoveShift = (shiftToRemove: string) => {
+    const updated = currentShifts.filter((s) => s !== shiftToRemove);
+    const newCfg = { ...config, availableShifts: updated };
+    setConfig(newCfg);
+    onboardingService.updateConfig(newCfg);
+    onShowToast('Shift Retiré 🗑️', `Le shift "${shiftToRemove}" a été retiré du formulaire d'intégration.`, 'info');
+  };
+
+  const handleResetDefaultShifts = () => {
+    const defaults = ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+    const newCfg = { ...config, availableShifts: defaults };
+    setConfig(newCfg);
+    onboardingService.updateConfig(newCfg);
+    onShowToast('Shifts Réinitialisés 🔄', 'Les 4 créneaux de shifts standards ont été restaurés.', 'info');
+  };
 
   const refreshModulesState = () => {
     const updated = store.getModules();
@@ -757,6 +793,87 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
               onChange={(e) => setConfig({ ...config, welcomeRulesMessage: e.target.value })}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed"
             />
+          </div>
+        </div>
+
+        {/* Section 1b: Shifts d'Intégration Disponibles (Personnalisable par les Superviseurs) */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-emerald-400" />
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Shifts & Horaires de Production Disponibles (Formulaire Candidat)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Les candidats ne tapent plus leur shift en texte libre : ils choisissent obligatoirement parmi cette sélection sur Discord. Si un shift est complet (ex: 20h - 02h), retirez-le ici d'un simple clic.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleResetDefaultShifts}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Rétablir Shifts par Défaut</span>
+            </button>
+          </div>
+
+          {/* Active shifts list */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+              Créneaux de Shift Actuellement Proposés aux Candidats ({currentShifts.length})
+            </label>
+            <div className="flex flex-wrap gap-2.5">
+              {currentShifts.map((shiftLabel) => (
+                <div
+                  key={shiftLabel}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 text-xs font-medium shadow-sm"
+                >
+                  <span className="font-semibold text-white">{shiftLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveShift(shiftLabel)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    title={`Retirer le créneau "${shiftLabel}"`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {currentShifts.length === 0 && (
+                <p className="text-xs text-amber-400 italic py-2">
+                  ⚠️ Aucun shift configuré. Les candidats verront la liste standard de secours.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Add new shift input */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
+            <input
+              type="text"
+              value={newShiftInput}
+              onChange={(e) => setNewShiftInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddShift();
+                }
+              }}
+              placeholder="Ex: 20h - 02h (Soir), 16h - 22h (Mi-temps)..."
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
+            />
+            <button
+              type="button"
+              onClick={handleAddShift}
+              disabled={!newShiftInput.trim()}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajouter ce Créneau</span>
+            </button>
           </div>
         </div>
 

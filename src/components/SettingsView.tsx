@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send, Trash2, RefreshCw, Zap } from 'lucide-react';
+import { Settings, Save, Eye, EyeOff, ShieldCheck, Database, Server, ExternalLink, Copy, Check, Sparkles, HelpCircle, AlertCircle, Bot, Send, Trash2, RefreshCw, Zap, Clock, Plus } from 'lucide-react';
 import { discordService } from '../services/discordService';
 import { onboardingService } from '../services/onboardingService';
 import { firebaseSyncService } from '../services/firebaseSyncService';
@@ -11,6 +11,37 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
   const currentConfig = discordService.getConfig();
   const onboardingCfg = onboardingService.getConfig();
+
+  const [shiftsList, setShiftsList] = useState<string[]>(onboardingService.getAvailableShifts());
+  const [newShiftText, setNewShiftText] = useState('');
+
+  const handleAddShiftInSettings = () => {
+    if (!newShiftText.trim()) return;
+    const trimmed = newShiftText.trim();
+    if (shiftsList.includes(trimmed)) {
+      onShowToast('Shift Déjà Présent ⚠️', 'Ce créneau existe déjà dans la liste.', 'info');
+      return;
+    }
+    const updated = [...shiftsList, trimmed];
+    setShiftsList(updated);
+    onboardingService.setAvailableShifts(updated);
+    setNewShiftText('');
+    onShowToast('Shift Ajouté ✅', `Le créneau "${trimmed}" est désormais proposé aux candidats.`, 'success');
+  };
+
+  const handleRemoveShiftInSettings = (s: string) => {
+    const updated = shiftsList.filter((item) => item !== s);
+    setShiftsList(updated);
+    onboardingService.setAvailableShifts(updated);
+    onShowToast('Shift Retiré 🗑️', `Le créneau "${s}" a été retiré.`, 'info');
+  };
+
+  const handleResetShiftsInSettings = () => {
+    const defaults = ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+    setShiftsList(defaults);
+    onboardingService.setAvailableShifts(defaults);
+    onShowToast('Shifts Réinitialisés 🔄', 'Les créneaux par défaut ont été restaurés.', 'info');
+  };
 
   const defaultSarcastic = [
     "🤖 *Doucement sur les clics ! Le bouton n'a rien fait de mal et mes circuits imprimés commencent à fumer.*",
@@ -245,6 +276,85 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onShowToast }) => {
               }`}
             >
               <span className="w-4 h-4 bg-white rounded-full shadow-md"></span>
+            </button>
+          </div>
+        </div>
+
+        {/* Section Shifts d'Intégration Disponibles */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-emerald-400" />
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Shifts & Horaires de Production Disponibles (Formulaire Candidat)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Gérez la liste des shifts sélectionnables par les candidats sur Discord. Retirez un créneau s'il est complet (ex: 20h - 02h).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleResetShiftsInSettings}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Rétablir Shifts par Défaut</span>
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+              Créneaux Actuellement Proposés sur Discord ({shiftsList.length})
+            </label>
+            <div className="flex flex-wrap gap-2.5">
+              {shiftsList.map((shiftLabel) => (
+                <div
+                  key={shiftLabel}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 text-xs font-medium shadow-sm"
+                >
+                  <span className="font-semibold text-white">{shiftLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveShiftInSettings(shiftLabel)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    title={`Retirer le créneau "${shiftLabel}"`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {shiftsList.length === 0 && (
+                <p className="text-xs text-amber-400 italic py-2">
+                  ⚠️ Aucun shift configuré. Les candidats verront la liste standard.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
+            <input
+              type="text"
+              value={newShiftText}
+              onChange={(e) => setNewShiftText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddShiftInSettings();
+                }
+              }}
+              placeholder="Ex: 20h - 02h (Soir), 16h - 22h (Mi-temps)..."
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
+            />
+            <button
+              type="button"
+              onClick={handleAddShiftInSettings}
+              disabled={!newShiftText.trim()}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajouter ce Créneau</span>
             </button>
           </div>
         </div>

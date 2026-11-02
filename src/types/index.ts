@@ -225,6 +225,7 @@ export interface Member {
   email?: string;
   whatsapp?: string;
   shift?: string;
+  availableStartDate?: string;
   badges?: MemberBadge[];
   xp?: number;
   level?: number;
@@ -532,6 +533,7 @@ export interface OnboardingFlowConfig {
   cooldownSpamPool?: string[]; // Sarcastic messages sent when candidate clicks during active cooldown
   sarcasticSpamMessages?: string[];
   toolsFormationMeetUrl?: string; // Google Meet link for Tools Formation
+  availableShifts?: string[]; // Configurable shifts for candidate integration selection
   mahsaDiscordId?: string; // Discord ID or tag for Mahsa
   mathieuDiscordId?: string; // Discord ID or tag for Mathieu
 }

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "buildpm2": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && (pm2 restart all || pm2 restart pawako-bot || pm2 start dist/server.cjs --name pawako-bot)",
+    "build:pm2": "npm run buildpm2",
     "prestart": "test -f dist/server.cjs || npm run build",
     "deploy": "bun run build && bunx wrangler pages deploy dist",
     "start": "node dist/server.cjs",

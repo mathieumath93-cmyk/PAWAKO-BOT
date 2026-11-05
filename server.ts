@@ -2131,9 +2131,30 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Libellé de shift requis' });
       }
       const updatedConfig = onboardingService.setShiftQuota(shiftLabel, quota !== undefined ? Number(quota) : null);
-      res.json({ success: true, config: updatedConfig, message: 'Quota mis à jour avec succès' });
+      
+      // Auto-broadcast update to #📅shift-dispo
+      const quotaMsg = quota && Number(quota) > 0 ? `${quota} places max` : 'Illimité (Places libres)';
+      pawakoBot.announceShiftAvailabilityChange(`Mise à jour du quota pour le créneau "${shiftLabel}" : **${quotaMsg}**.`).catch(() => {});
+
+      res.json({ success: true, config: updatedConfig, message: 'Quota mis à jour et annoncé sur Discord avec succès' });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Erreur mise à jour quota' });
+    }
+  });
+
+  // Manual broadcast announcement to #📅shift-dispo
+  app.post('/api/shifts/announce', async (req: Request, res: Response) => {
+    try {
+      const { reason } = req.body || {};
+      const success = await pawakoBot.announceShiftAvailabilityChange(reason || 'Mise à jour manuelle des disponibilités par le Staff');
+      res.json({
+        success,
+        message: success
+          ? 'Annonce officielle publiée avec succès dans #📅shift-dispo !'
+          : 'Impossible de publier dans #📅shift-dispo (Vérifiez la connexion du bot Discord).',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Erreur publication annonce shifts' });
     }
   });
 

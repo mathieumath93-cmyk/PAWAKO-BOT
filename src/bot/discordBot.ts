@@ -566,6 +566,17 @@ export class PawakoBotRunner {
           return;
         }
 
+        // --- COMMANDE SHIFTS DISPONIBLES ---
+        if (content === '!shifts' || content === '!shift' || content === '!dispo' || content === '!disponibilites') {
+          const success = await this.announceShiftAvailabilityChange('Consultation manuelle demandée par un membre ou le Staff.');
+          await message.reply(
+            success
+              ? '📅 **Tableau officiel des disponibilités publié et actualisé dans le salon #📅shift-dispo !**'
+              : '⚠️ Impossible de publier dans #📅shift-dispo pour le moment.'
+          ).catch(() => {});
+          return;
+        }
+
         // --- 1. RÈGLEMENT OFFICIEL DU SERVEUR ---
         if (content === '!reglement' || content === '!rules' || content === '!charte') {
           const rulesEmbed = new EmbedBuilder()
@@ -2732,6 +2743,16 @@ export class PawakoBotRunner {
 
           await this.sendIntegrationSubmittedNotificationToStaff(member);
           await this.announceCandidateProductionSuccess(member);
+
+          // Automatically announce shift availability update in #📅shift-dispo
+          const chosenShiftName = member.shift || validShifts[0];
+          const recruitCount = onboardingService.getShiftRecruitCount(chosenShiftName);
+          const quota = onboardingService.getShiftQuotas()[chosenShiftName] || 0;
+          const isNowFull = quota > 0 && recruitCount >= quota;
+          const shiftReason = isNowFull
+            ? `Le créneau **${chosenShiftName}** est désormais **COMPLET** suite à l'intégration de <@${user.id}> !`
+            : `Nouvelle place attribuée sur le créneau **${chosenShiftName}** (<@${user.id}>).`;
+          this.announceShiftAvailabilityChange(shiftReason).catch(() => {});
           return;
         }
 
@@ -2793,9 +2814,17 @@ export class PawakoBotRunner {
             }).catch(() => {});
           }
 
-          // Trigger automatic Staff MP & Salon Intégration notification
           await this.sendIntegrationSubmittedNotificationToStaff(member);
           await this.announceCandidateProductionSuccess(member);
+
+          // Automatically announce shift availability update in #📅shift-dispo
+          const recruitCount = onboardingService.getShiftRecruitCount(chosenShift);
+          const quota = onboardingService.getShiftQuotas()[chosenShift] || 0;
+          const isNowFull = quota > 0 && recruitCount >= quota;
+          const shiftReason = isNowFull
+            ? `Le créneau **${chosenShift}** est désormais **COMPLET** suite à l'intégration de <@${user.id}> !`
+            : `Nouvelle place attribuée sur le créneau **${chosenShift}** (<@${user.id}>).`;
+          this.announceShiftAvailabilityChange(shiftReason).catch(() => {});
           return;
         }
 
@@ -9488,6 +9517,147 @@ export class PawakoBotRunner {
     } catch (err) {
       console.warn('[PawakoBot] Erreur création salon #🎉-recrues-prod:', err);
       return null;
+    }
+  }
+
+  /**
+   * Finds or automatically creates the announcement channel #📅shift-dispo
+   */
+  public async getOrCreateShiftDispoChannel(guild: Guild): Promise<TextChannel | null> {
+    try {
+      const channels = await guild.channels.fetch().catch(() => null);
+      if (channels) {
+        const found = channels.find(
+          (c: any) =>
+            c &&
+            c.isTextBased() &&
+            (c.name === '📅shift-dispo' ||
+              c.name === '📅-shift-dispo' ||
+              c.name === 'shift-dispo' ||
+              (c.name.includes('shift') && c.name.includes('dispo')))
+        );
+        if (found && 'send' in found) return found as TextChannel;
+      }
+
+      // Try creating '📅shift-dispo', fallback to 'shift-dispo'
+      let created: any = null;
+      try {
+        created = await guild.channels.create({
+          name: '📅shift-dispo',
+          type: ChannelType.GuildText,
+          topic: '📅 Tableau officiel des disponibilités et places par Shift en temps réel chez PAWAKO',
+          permissionOverwrites: [
+            {
+              id: guild.roles.everyone.id,
+              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+              deny: [PermissionFlagsBits.SendMessages],
+            },
+            ...(this.client?.user
+              ? [
+                  {
+                    id: this.client.user.id,
+                    allow: [
+                      PermissionFlagsBits.ViewChannel,
+                      PermissionFlagsBits.SendMessages,
+                      PermissionFlagsBits.EmbedLinks,
+                      PermissionFlagsBits.AttachFiles,
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        });
+      } catch {
+        created = await guild.channels.create({
+          name: 'shift-dispo',
+          type: ChannelType.GuildText,
+          topic: 'Disponibilités et places par Shift en temps réel chez PAWAKO',
+        }).catch(() => null);
+      }
+
+      if (created) {
+        console.log(`[PawakoBot] Salon #${created.name} créé avec succès.`);
+      }
+      return created as TextChannel;
+    } catch (err) {
+      console.warn('[PawakoBot] Erreur création salon #📅shift-dispo:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Posts an official announcement in #📅shift-dispo whenever shift availability changes
+   */
+  public async announceShiftAvailabilityChange(reason?: string): Promise<boolean> {
+    if (!this.client || !this.isConnected) return false;
+
+    try {
+      const guild = await this.getGuild();
+      if (!guild) return false;
+
+      const channel = await this.getOrCreateShiftDispoChannel(guild);
+      if (!channel) return false;
+
+      const activeShifts = onboardingService.getAvailableShifts();
+      const validShifts = activeShifts.length > 0
+        ? activeShifts
+        : ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+      const shiftQuotas = onboardingService.getShiftQuotas();
+
+      let hasFullShift = false;
+
+      const shiftCards = validShifts.map((shiftLabel) => {
+        const recruitCount = onboardingService.getShiftRecruitCount(shiftLabel);
+        const quota = shiftQuotas[shiftLabel] || 0;
+        const isFull = quota > 0 && recruitCount >= quota;
+
+        let emoji = '⏰';
+        const lower = shiftLabel.toLowerCase();
+        if (lower.includes('matin') || lower.includes('08h') || lower.includes('06h')) emoji = '🌅';
+        else if (lower.includes('midi') || lower.includes('14h') || lower.includes('après')) emoji = '☀️';
+        else if (lower.includes('soir') || lower.includes('20h') || lower.includes('18h')) emoji = '🌙';
+        else if (lower.includes('nuit') || lower.includes('02h') || lower.includes('00h')) emoji = '🦉';
+
+        if (quota > 0) {
+          const remaining = Math.max(0, quota - recruitCount);
+          if (isFull) {
+            hasFullShift = true;
+            return `### ${emoji} **${shiftLabel}**\n🔴 **STATUT : COMPLET (0 place disponible)**\n👥 Inscrits : \`${recruitCount} / ${quota} places max\`\n━━━━━━━━━━━━━━━━━━━━`;
+          }
+          return `### ${emoji} **${shiftLabel}**\n🟢 **STATUT : DISPONIBLE** — **${remaining} place${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''}**\n👥 Inscrits : \`${recruitCount} / ${quota} places\`\n━━━━━━━━━━━━━━━━━━━━`;
+        } else {
+          return `### ${emoji} **${shiftLabel}**\n🟢 **STATUT : DISPONIBLE (Places Ouvertes)**\n👥 Inscrits actuels : \`${recruitCount} recrue${recruitCount > 1 ? 's' : ''}\`\n━━━━━━━━━━━━━━━━━━━━`;
+        }
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle('📅 TABLEAU OFFICIEL DES DISPONIBILITÉS — SHIFTS DE PRODUCTION')
+        .setDescription(
+          (reason ? `📢 **Mise à jour :** ${reason}\n\n` : '') +
+          `Voici l'état des créneaux de travail en temps réel chez **PAWAKO** :\n\n` +
+          shiftCards.join('\n\n') +
+          `\n\n📌 **Pour les candidats en cours d'intégration :**\n` +
+          `Sélectionnez votre shift directement dans votre salon privé à l'issue de la formation outils. Les créneaux marqués **COMPLET** ne peuvent plus recevoir de nouvelles candidatures.`
+        )
+        .setColor(hasFullShift ? 0xf59e0b : 0x10b981)
+        .setFooter({ text: 'PAWAKO PRODUCTION • Disponibilité des Shifts 24/7' })
+        .setTimestamp();
+
+      await channel.send({
+        content: `📢 **[DISPONIBILITÉ DES SHIFTS]** ${reason ? `_${reason}_` : ''}`,
+        embeds: [embed],
+      }).catch((e: any) => console.warn('[Send Shift Dispo Announcement Error]', e));
+
+      store.addLog(
+        'Bot System',
+        `Mise à jour des shifts publiée dans #${channel.name}${reason ? ` (${reason})` : ''}`,
+        'system'
+      );
+
+      return true;
+    } catch (err) {
+      console.warn('[announceShiftAvailabilityChange Error]', err);
+      return false;
     }
   }
 

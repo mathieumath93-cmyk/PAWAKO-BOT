@@ -73,9 +73,32 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [newShiftInput, setNewShiftInput] = useState('');
 
+  const [isBroadcastingShifts, setIsBroadcastingShifts] = useState(false);
+
   const currentShifts = config.availableShifts && config.availableShifts.length > 0
     ? config.availableShifts
     : ['08h - 14h (Matin)', '14h - 20h (Après-midi)', '20h - 02h (Soir)', '02h - 08h (Nuit)'];
+
+  const handleBroadcastShiftsAnnouncement = async (customReason?: string) => {
+    setIsBroadcastingShifts(true);
+    try {
+      const res = await fetch('/api/shifts/announce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: customReason || 'Actualisation officielle des disponibilités de shifts' }),
+      });
+      const data = await res.json();
+      setIsBroadcastingShifts(false);
+      if (data.success) {
+        onShowToast('Tableau des Shifts Publié 📢', 'Le tableau officiel a été posté dans le salon #📅shift-dispo sur Discord !', 'success');
+      } else {
+        onShowToast('Info Publication', data.message || 'Impossible de publier sur Discord', 'error');
+      }
+    } catch (err: any) {
+      setIsBroadcastingShifts(false);
+      onShowToast('Erreur Publication', err?.message || 'Erreur réseau', 'error');
+    }
+  };
 
   const handleAddShift = () => {
     if (!newShiftInput.trim()) return;
@@ -90,6 +113,9 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     onboardingService.updateConfig(newCfg);
     setNewShiftInput('');
     onShowToast('Shift Ajouté ✅', `Le shift "${trimmed}" est désormais sélectionnable par les candidats.`, 'success');
+
+    // Auto-broadcast update to #📅shift-dispo
+    handleBroadcastShiftsAnnouncement(`Nouveau créneau horaire ouvert au recrutement : "${trimmed}".`);
   };
 
   const handleRemoveShift = (shiftToRemove: string) => {
@@ -98,6 +124,9 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     setConfig(newCfg);
     onboardingService.updateConfig(newCfg);
     onShowToast('Shift Retiré 🗑️', `Le shift "${shiftToRemove}" a été retiré du formulaire d'intégration.`, 'info');
+
+    // Auto-broadcast update to #📅shift-dispo
+    handleBroadcastShiftsAnnouncement(`Fermeture du créneau horaire : "${shiftToRemove}".`);
   };
 
   const handleResetDefaultShifts = () => {
@@ -106,6 +135,9 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     setConfig(newCfg);
     onboardingService.updateConfig(newCfg);
     onShowToast('Shifts Réinitialisés 🔄', 'Les 4 créneaux de shifts standards ont été restaurés.', 'info');
+
+    // Auto-broadcast update to #📅shift-dispo
+    handleBroadcastShiftsAnnouncement('Rétablissement des 4 créneaux de shifts standards.');
   };
 
   const handleUpdateQuota = (shiftLabel: string, rawVal: string) => {
@@ -120,6 +152,13 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
     const newCfg = { ...config, shiftQuotas: currentQuotas };
     setConfig(newCfg);
     onboardingService.updateConfig(newCfg);
+
+    // Broadcast to server API
+    fetch('/api/shifts/quota', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shiftLabel, quota: quotaVal }),
+    }).catch(() => {});
   };
 
   const refreshModulesState = () => {
@@ -824,14 +863,27 @@ export const OnboardingFlowConfigurator: React.FC<OnboardingFlowConfiguratorProp
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleResetDefaultShifts}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Rétablir Shifts par Défaut</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => handleBroadcastShiftsAnnouncement()}
+                disabled={isBroadcastingShifts}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-950 flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Publier ou actualiser le tableau officiel des disponibilités dans le salon Discord #📅shift-dispo"
+              >
+                <Bell className={`w-3.5 h-3.5 ${isBroadcastingShifts ? 'animate-spin' : ''}`} />
+                <span>{isBroadcastingShifts ? 'Publication...' : '📢 Publier dans #📅shift-dispo'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetDefaultShifts}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Rétablir Défaut</span>
+              </button>
+            </div>
           </div>
 
           {/* Active shifts list */}

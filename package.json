@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "buildpm2": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && (pm2 restart all || pm2 restart pawako-bot || pm2 start dist/server.cjs --name pawako-bot)",
+    "buildpm2": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && (npx pm2 restart all || npx pm2 start dist/server.cjs --name pawako-bot || pm2 restart all || pm2 start dist/server.cjs --name pawako-bot)",
     "build:pm2": "npm run buildpm2",
     "prestart": "test -f dist/server.cjs || npm run build",
     "deploy": "bun run build && bunx wrangler pages deploy dist",
@@ -46,6 +46,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "pm2": "^5.4.3"
   }
 }

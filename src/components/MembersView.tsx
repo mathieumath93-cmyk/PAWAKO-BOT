@@ -661,7 +661,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                             {/* Status Tags & Auto-Reminders */}
                             <div className="flex flex-wrap items-center gap-1 pt-1">
-                              {(member.candidateState === 'bloque_quiz_3_echecs' || Object.values(member.progress || {}).some(p => p.quizBlockedByFailures || (p.attemptsCount >= 3 && !p.quizPassed && p.status === 'en_cours'))) && (
+                              {(member.candidateState === 'bloque_quiz_3_echecs' || Object.values(member.progress || {}).some(p => p.quizBlockedByFailures === true)) && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse flex items-center gap-1">
                                   <AlertTriangle className="w-2.5 h-2.5" />
                                   <span>Quiz Bloqué (3 échecs)</span>
@@ -1098,13 +1098,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   const isBlocked =
                     selectedCandidate.candidateState === 'bloque_quiz_3_echecs' ||
                     Object.values(selectedCandidate.progress || {}).some(
-                      (p: any) => p?.quizBlockedByFailures || (p?.attemptsCount >= 3 && !p?.quizPassed)
+                      (p: any) => p?.quizBlockedByFailures === true
                     );
                   if (!isBlocked) return null;
 
                   let targetModId: string | null = null;
                   for (const [mId, prog] of Object.entries(selectedCandidate.progress || {}) as [string, any][]) {
-                    if (prog?.quizBlockedByFailures || (prog?.attemptsCount >= 3 && !prog?.quizPassed)) {
+                    if (prog?.quizBlockedByFailures === true) {
                       targetModId = mId;
                       break;
                     }

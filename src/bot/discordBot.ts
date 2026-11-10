@@ -232,7 +232,7 @@ function buildQuizButton(member: Member, quiz: Quiz | undefined, defaultTitle: s
   const isAnyQuizBlocked =
     member.candidateState === 'bloque_quiz_3_echecs' ||
     Object.values(member.progress || {}).some(
-      (p) => p.quizBlockedByFailures || (p.attemptsCount >= 3 && !p.quizPassed)
+      (p) => p.quizBlockedByFailures === true
     );
 
   if (isAnyQuizBlocked) {
@@ -4271,12 +4271,12 @@ export class PawakoBotRunner {
               return;
             }
 
-            // 3-0b. Strict Block Check: 3 failures accumulated on ANY module
+            // 3-0b. Strict Block Check: check if any module is currently blocked by failures (flagged by system upon 3rd failure)
             let blockedModId: string | null = null;
             let blockedModProgress: MemberProgress | null = null;
 
             for (const [mId, prog] of Object.entries(member.progress || {})) {
-              if (prog.quizBlockedByFailures || (prog.attemptsCount >= 3 && !prog.quizPassed)) {
+              if (prog.quizBlockedByFailures === true) {
                 blockedModId = mId;
                 blockedModProgress = prog;
                 break;
@@ -6479,12 +6479,14 @@ export class PawakoBotRunner {
       const quiz = store.getQuiz(mod?.quizId || targetModId || '') || store.getQuizzes().find((q) => q.moduleId === targetModId);
 
       const discordUserId = member.discordId || member.id.replace('mem-', '');
+      const currentAttempts = targetModId && member.progress?.[targetModId] ? member.progress[targetModId].attemptsCount : 3;
       const unblockEmbed = new EmbedBuilder()
         .setTitle('🎉 TON QUIZ A ÉTÉ DÉBLOQUÉ PAR LE STAFF !')
         .setDescription(
-          `Bonne nouvelle <@${discordUserId}> ! L'équipe Staff (**${adminName}**) a validé tes révisions et vient de **débloquer ton quiz** pour le **${mod?.title || 'Module'}** ! 🚀\n\n` +
-          `Tes tentatives ont été réinitialisées. Prends une grande inspiration, relis bien chaque question, et donne le meilleur de toi-même !\n\n` +
-          `👉 *Clique sur le bouton vert ci-dessous pour lancer ton quiz dès maintenant :*`
+          `Bonne nouvelle <@${discordUserId}> ! L'équipe Staff (**${adminName}**) a validé tes révisions et vient de **débloquer ton accès au quiz** pour le **${mod?.title || 'Module'}** ! 🚀\n\n` +
+          `Une nouvelle tentative t'est immédiatement accordée (tentative n°**${currentAttempts + 1}**). Prends une grande inspiration, relis bien chaque question, et donne le meilleur de toi-même !\n\n` +
+          `⚠️ *Rappel : au bout de 5 échecs sur ce module ou 10 échecs cumulés sur l'ensemble de la formation, la candidature est définitivement arrêtée.*\n\n` +
+          `👉 *Clique sur le bouton vert ci-dessous pour démarrer ton épreuve dès maintenant :*`
         )
         .setColor(0x10b981)
         .setFooter({ text: 'PAWAKO FORMATION • Quiz Débloqué par le Staff' })

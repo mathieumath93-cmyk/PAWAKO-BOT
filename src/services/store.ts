@@ -2046,26 +2046,28 @@ ${statusText}
 
     if (targetModId && member.progress && member.progress[targetModId]) {
       member.progress[targetModId].quizBlockedByFailures = false;
-      // Note: attemptsCount is preserved cumulatively (never reset to 0) as per Rule 3
       member.progress[targetModId].cooldownUntilTimestamp = null;
       member.progress[targetModId].unblockedAt = Date.now();
+      if (member.progress[targetModId].status !== 'valide') {
+        member.progress[targetModId].status = 'en_cours';
+      }
     }
 
     // Clear any blocked flags across modules without wiping cumulative fail count
     for (const prog of Object.values(member.progress || {})) {
       if (prog.quizBlockedByFailures) {
         prog.quizBlockedByFailures = false;
-        // Keep prog.attemptsCount intact so cumulative failures remain counted
         prog.cooldownUntilTimestamp = null;
         prog.unblockedAt = Date.now();
+        if (prog.status !== 'valide') {
+          prog.status = 'en_cours';
+        }
       }
     }
 
     member.cooldownUntilTimestamp = null;
     member.currentQuizAvailableAtTimestamp = 0;
-    if (member.candidateState === 'bloque_quiz_3_echecs' || member.candidateState === 'cooldown_actif') {
-      member.candidateState = 'module_en_cours';
-    }
+    member.candidateState = 'module_en_cours';
 
     const mod = this.getModule(targetModId || '');
     const modTitle = mod?.title || targetModId || 'Module';
